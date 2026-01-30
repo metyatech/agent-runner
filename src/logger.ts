@@ -1,5 +1,19 @@
 export type LogLevel = "info" | "warn" | "error";
 
+function safeWrite(line: string): void {
+  try {
+    process.stdout.write(line);
+  } catch (error) {
+    if (error instanceof Error && "code" in error) {
+      const code = (error as { code?: string }).code;
+      if (code === "EPIPE") {
+        return;
+      }
+    }
+    throw error;
+  }
+}
+
 export function log(level: LogLevel, message: string, json: boolean, data?: Record<string, unknown>): void {
   if (json) {
     const payload = {
@@ -8,10 +22,10 @@ export function log(level: LogLevel, message: string, json: boolean, data?: Reco
       ...data,
       timestamp: new Date().toISOString()
     };
-    process.stdout.write(`${JSON.stringify(payload)}\n`);
+    safeWrite(`${JSON.stringify(payload)}\n`);
     return;
   }
 
   const details = data ? ` ${JSON.stringify(data)}` : "";
-  process.stdout.write(`[${level.toUpperCase()}] ${message}${details}\n`);
+  safeWrite(`[${level.toUpperCase()}] ${message}${details}\n`);
 }
