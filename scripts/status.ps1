@@ -11,16 +11,18 @@ $labelTask = Get-ScheduledTask -TaskName $LabelTaskName -ErrorAction SilentlyCon
 
 if ($runnerTask) {
   $info = Get-ScheduledTaskInfo -TaskName $RunnerTaskName
-  Write-Host "$RunnerTaskName:`t$($runnerTask.State)`tLastRun: $($info.LastRunTime)`tNextRun: $($info.NextRunTime)`tLastResult: $($info.LastTaskResult)"
+  Write-Host "${RunnerTaskName}:`t$($runnerTask.State)`tLastRun: $($info.LastRunTime)`tNextRun: $($info.NextRunTime)`tLastResult: $($info.LastTaskResult)"
+  Write-Host "  LastResult codes: 0=Success, 267011=Not run yet, 2147942667=Task skipped/no instances."
 } else {
-  Write-Host "$RunnerTaskName:`tNot found"
+  Write-Host "${RunnerTaskName}:`tNot found"
 }
 
 if ($labelTask) {
   $info = Get-ScheduledTaskInfo -TaskName $LabelTaskName
-  Write-Host "$LabelTaskName:`t$($labelTask.State)`tLastRun: $($info.LastRunTime)`tNextRun: $($info.NextRunTime)`tLastResult: $($info.LastTaskResult)"
+  Write-Host "${LabelTaskName}:`t$($labelTask.State)`tLastRun: $($info.LastRunTime)`tNextRun: $($info.NextRunTime)`tLastResult: $($info.LastTaskResult)"
+  Write-Host "  LastResult codes: 0=Success, 267011=Not run yet, 2147942667=Task skipped/no instances."
 } else {
-  Write-Host "$LabelTaskName:`tNot found"
+  Write-Host "${LabelTaskName}:`tNot found"
 }
 
 Write-Host ""
