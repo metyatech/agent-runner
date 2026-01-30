@@ -37,6 +37,16 @@ setx AGENT_GITHUB_TOKEN "<token>"
 - `npm run build`
 - `npm run dev -- run --once --yes`
 
+## E2E (GitHub API)
+
+The E2E suite runs against a real GitHub repository.
+Set these environment variables before running `npm run test:e2e`:
+
+- `E2E_GH_OWNER`: GitHub owner/org
+- `E2E_GH_REPO`: Repository name
+- `E2E_WORKDIR_ROOT`: Local workspace root containing the repo (optional)
+- `AGENT_GITHUB_TOKEN` (or `GITHUB_TOKEN`/`GH_TOKEN`): Token with repo access
+
 ## Configuration
 
 Config file: `agent-runner.config.json`
@@ -47,7 +57,10 @@ Config file: `agent-runner.config.json`
 - `pollIntervalSeconds`: Polling interval
 - `concurrency`: Max concurrent requests
 - `labels`: Workflow labels
+- `labels.needsUser`: Label for requests awaiting user reply after a failure
 - `codex`: Codex CLI command and prompt template
+- `codex.args`: Default config runs with full access (`--dangerously-bypass-approvals-and-sandbox`); change this if you want approvals or sandboxing.
+- `codex.promptTemplate`: The runner expects a summary block in the output to post to the issue thread.
 
 ## Running
 
@@ -71,6 +84,15 @@ Ensure required agent labels exist in all repositories:
 node dist/cli.js labels sync --yes
 ```
 
+## Failure replies
+
+When a run fails, the runner adds `agent:needs-user` and comments with a reply request.
+Reply on the issue with any fixes or details; the runner will detect your response,
+remove the failure labels, and re-queue the request automatically.
+
+If a request is labeled `agent:running` but the tracked process exits,
+the runner marks it as failed + needs-user and asks for a reply.
+
 ## Windows Task Scheduler
 
 Register a scheduled task that runs every minute:
@@ -83,6 +105,23 @@ Unregister the task:
 
 ```powershell
 .\scripts\unregister-task.ps1
+```
+
+Task run logs are written to `logs/task-run-*.log`.
+
+Issue logs (e.g. `*-issue-*.log`) are appended as output is produced.
+
+### Summary block
+
+At the end of each run, include a summary block so the runner can post it to GitHub:
+
+```
+AGENT_RUNNER_SUMMARY_START
+- Change 1
+- Change 2
+Tests: npm run test
+Commits: abc1234
+AGENT_RUNNER_SUMMARY_END
 ```
 
 ## Label sync scheduling

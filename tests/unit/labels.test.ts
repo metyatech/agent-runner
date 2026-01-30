@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { buildAgentLabels } from "../../src/labels.js";
 
 describe("buildAgentLabels", () => {
-  it("returns five labeled definitions", () => {
+  it("returns six labeled definitions", () => {
     const labels = buildAgentLabels({
       owner: "metyatech",
       repos: "all",
@@ -14,7 +14,8 @@ describe("buildAgentLabels", () => {
         queued: "agent:queued",
         running: "agent:running",
         done: "agent:done",
-        failed: "agent:failed"
+        failed: "agent:failed",
+        needsUser: "agent:needs-user"
       },
       codex: {
         command: "codex",
@@ -28,7 +29,8 @@ describe("buildAgentLabels", () => {
       "agent:queued",
       "agent:running",
       "agent:done",
-      "agent:failed"
+      "agent:failed",
+      "agent:needs-user"
     ]);
   });
 });

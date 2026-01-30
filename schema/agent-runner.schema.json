@@ -35,13 +35,14 @@
     },
     "labels": {
       "type": "object",
-      "required": ["request", "queued", "running", "done", "failed"],
+      "required": ["request", "queued", "running", "done", "failed", "needsUser"],
       "properties": {
         "request": { "type": "string", "minLength": 1 },
         "queued": { "type": "string", "minLength": 1 },
         "running": { "type": "string", "minLength": 1 },
         "done": { "type": "string", "minLength": 1 },
-        "failed": { "type": "string", "minLength": 1 }
+        "failed": { "type": "string", "minLength": 1 },
+        "needsUser": { "type": "string", "minLength": 1 }
       },
       "additionalProperties": false
     },

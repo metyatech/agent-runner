@@ -35,6 +35,14 @@ describe("parseRepoList", () => {
     expect(parseRepoList("")).toEqual([]);
   });
 
+  it("ignores template placeholders", () => {
+    expect(parseRepoList("_No response_")).toEqual([]);
+    expect(parseRepoList("No response")).toEqual([]);
+    expect(parseRepoList("N/A")).toEqual([]);
+    expect(parseRepoList("none")).toEqual([]);
+    expect(parseRepoList("-")).toEqual([]);
+  });
+
   it("deduplicates entries", () => {
     expect(parseRepoList("a, b\na")).toEqual(["a", "b"]);
   });

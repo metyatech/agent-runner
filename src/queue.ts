@@ -22,7 +22,8 @@ export async function queueNewRequests(
       issue.labels.includes(config.labels.queued) ||
       issue.labels.includes(config.labels.running) ||
       issue.labels.includes(config.labels.done) ||
-      issue.labels.includes(config.labels.failed)
+      issue.labels.includes(config.labels.failed) ||
+      issue.labels.includes(config.labels.needsUser)
     ) {
       continue;
     }
@@ -39,7 +40,11 @@ export async function listQueuedIssues(
   config: AgentRunnerConfig
 ): Promise<IssueInfo[]> {
   const queuedIssues = await client.listIssuesByLabel(repo, config.labels.queued);
-  return queuedIssues.filter((issue) => !issue.labels.includes(config.labels.running));
+  return queuedIssues.filter(
+    (issue) =>
+      !issue.labels.includes(config.labels.running) &&
+      !issue.labels.includes(config.labels.needsUser)
+  );
 }
 
 export function pickNextIssues(issues: IssueInfo[], limit: number): IssueInfo[] {

@@ -15,6 +15,7 @@ export type AgentRunnerConfig = {
     running: string;
     done: string;
     failed: string;
+    needsUser: string;
   };
   codex: {
     command: string;

@@ -4,11 +4,23 @@ import { spawn } from "node:child_process";
 import type { AgentRunnerConfig } from "./config.js";
 import type { GitHubClient, IssueInfo, RepoInfo } from "./github.js";
 import { parseIssueBody } from "./issue.js";
+import { recordRunningIssue, removeRunningIssue, resolveRunnerStatePath } from "./runner-state.js";
 
 export type RunResult = {
   success: boolean;
   logPath: string;
   repos: RepoInfo[];
+  summary: string | null;
+};
+
+export type CodexInvocation = {
+  command: string;
+  args: string[];
+  options: {
+    cwd: string;
+    shell: boolean;
+    env: NodeJS.ProcessEnv;
+  };
 };
 
 function resolveRepoPath(root: string, repo: RepoInfo): string {
@@ -68,6 +80,112 @@ function renderPrompt(template: string, repos: RepoInfo[], issue: IssueInfo): st
     .replace("{{task}}", `Issue: ${issue.title}\nURL: ${issue.url}\n\n${issueBody}`);
 }
 
+function resolveWindowsCommand(command: string, pathValue: string | undefined): string {
+  if (process.platform !== "win32") {
+    return command;
+  }
+
+  if (path.extname(command) || command.includes("\\") || command.includes("/")) {
+    return command;
+  }
+
+  const pathEntries = (pathValue ?? "").split(";");
+  const fallbackEntries: string[] = [];
+  const appData = process.env.APPDATA;
+  const localAppData = process.env.LOCALAPPDATA;
+  const userProfile = process.env.USERPROFILE;
+  const npmPrefix = process.env.npm_config_prefix ?? process.env.NPM_CONFIG_PREFIX;
+
+  if (npmPrefix) {
+    fallbackEntries.push(npmPrefix);
+  }
+
+  if (appData) {
+    fallbackEntries.push(path.join(appData, "npm"));
+  }
+
+  if (localAppData) {
+    fallbackEntries.push(path.join(localAppData, "npm"));
+  }
+
+  if (userProfile) {
+    fallbackEntries.push(path.join(userProfile, "AppData", "Roaming", "npm"));
+  }
+
+  const searchEntries = Array.from(new Set([...pathEntries, ...fallbackEntries]));
+  const cmdName = `${command}.cmd`;
+  const exeName = `${command}.exe`;
+
+  for (const entry of searchEntries) {
+    if (!entry) {
+      continue;
+    }
+    const cmdPath = path.join(entry, cmdName);
+    if (fs.existsSync(cmdPath)) {
+      return cmdPath;
+    }
+    const exePath = path.join(entry, exeName);
+    if (fs.existsSync(exePath)) {
+      return exePath;
+    }
+  }
+
+  return command;
+}
+
+function resolveCodexCommand(
+  command: string,
+  pathValue: string | undefined
+): { command: string; prefixArgs: string[] } {
+  const resolved = resolveWindowsCommand(command, pathValue);
+
+  if (process.platform === "win32") {
+    const base = path.basename(resolved).toLowerCase();
+    if (base === "codex.cmd" || base === "codex.ps1") {
+      const codexJs = path.join(
+        path.dirname(resolved),
+        "node_modules",
+        "@openai",
+        "codex",
+        "bin",
+        "codex.js"
+      );
+      if (fs.existsSync(codexJs)) {
+        return { command: process.execPath, prefixArgs: [codexJs] };
+      }
+    }
+  }
+
+  return { command: resolved, prefixArgs: [] };
+}
+
+export function buildCodexInvocation(
+  config: AgentRunnerConfig,
+  primaryPath: string,
+  prompt: string
+): CodexInvocation {
+  const resolved = resolveCodexCommand(config.codex.command, process.env.PATH);
+  const args = [
+    ...resolved.prefixArgs,
+    ...config.codex.args,
+    "-C",
+    primaryPath,
+    "--add-dir",
+    config.workdirRoot,
+    prompt
+  ];
+
+  return {
+    command: resolved.command,
+    args,
+    options: {
+      cwd: primaryPath,
+      shell: false,
+      env: process.env
+    }
+  };
+}
+
 export async function runIssue(
   client: GitHubClient,
   config: AgentRunnerConfig,
@@ -91,43 +209,82 @@ export async function runIssue(
     `${issue.repo.repo}-issue-${issue.number}-${Date.now()}.log`
   );
 
-  const logStream = fs.createWriteStream(logPath, { flags: "a" });
+  const appendLog = (chunk: Buffer | string): void => {
+    fs.appendFileSync(logPath, chunk);
+  };
+  const statePath = resolveRunnerStatePath(config.workdirRoot);
 
-  const args = [
-    ...config.codex.args,
-    "-C",
-    primaryPath,
-    "--add-dir",
-    config.workdirRoot,
-    prompt
-  ];
+  const invocation = buildCodexInvocation(config, primaryPath, prompt);
 
-  const exitCode = await new Promise<number>((resolve, reject) => {
-    const child = spawn(config.codex.command, args, {
-      cwd: primaryPath,
-      shell: true,
-      env: process.env
+  let recordWritten = false;
+  let exitCode = 1;
+
+  try {
+    exitCode = await new Promise<number>((resolve, reject) => {
+      const child = spawn(invocation.command, invocation.args, invocation.options);
+
+      if (typeof child.pid === "number") {
+        recordRunningIssue(statePath, {
+          issueId: issue.id,
+          issueNumber: issue.number,
+          repo: issue.repo,
+          startedAt: new Date().toISOString(),
+          pid: child.pid,
+          logPath
+        });
+        recordWritten = true;
+      }
+
+      child.stdout.on("data", (chunk) => {
+        appendLog(chunk);
+        process.stdout.write(chunk);
+      });
+
+      child.stderr.on("data", (chunk) => {
+        appendLog(chunk);
+        process.stderr.write(chunk);
+      });
+
+      child.on("error", (error) => reject(error));
+      child.on("close", (code) => resolve(code ?? 1));
     });
+  } finally {
+    if (recordWritten) {
+      removeRunningIssue(statePath, issue.id);
+    }
+  }
 
-    child.stdout.on("data", (chunk) => {
-      logStream.write(chunk);
-      process.stdout.write(chunk);
-    });
-
-    child.stderr.on("data", (chunk) => {
-      logStream.write(chunk);
-      process.stderr.write(chunk);
-    });
-
-    child.on("error", (error) => reject(error));
-    child.on("close", (code) => resolve(code ?? 1));
-  });
-
-  logStream.end();
+  const summary = extractSummaryFromLog(logPath);
 
   return {
     success: exitCode === 0,
     logPath,
-    repos
+    repos,
+    summary
   };
+}
+
+const summaryStart = "AGENT_RUNNER_SUMMARY_START";
+const summaryEnd = "AGENT_RUNNER_SUMMARY_END";
+
+export function extractSummaryFromLog(logPath: string): string | null {
+  if (!fs.existsSync(logPath)) {
+    return null;
+  }
+
+  const raw = fs.readFileSync(logPath, "utf8");
+  const startIndex = raw.lastIndexOf(summaryStart);
+  if (startIndex === -1) {
+    return null;
+  }
+  const endIndex = raw.indexOf(summaryEnd, startIndex);
+  if (endIndex === -1) {
+    return null;
+  }
+
+  const summary = raw
+    .slice(startIndex + summaryStart.length, endIndex)
+    .trim();
+
+  return summary.length > 0 ? summary : null;
 }

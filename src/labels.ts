@@ -32,6 +32,11 @@ export function buildAgentLabels(config: AgentRunnerConfig): LabelDefinition[] {
       name: config.labels.failed,
       color: "B60205",
       description: "Agent failed to complete the request."
+    },
+    {
+      name: config.labels.needsUser,
+      color: "F9D0C4",
+      description: "Agent awaiting user response."
     }
   ];
 }

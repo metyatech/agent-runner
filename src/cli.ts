@@ -4,12 +4,19 @@ import process from "node:process";
 import { Command } from "commander";
 import pLimit from "p-limit";
 import { loadConfig } from "./config.js";
-import { GitHubClient, type IssueInfo, type LabelInfo } from "./github.js";
+import { GitHubClient, type IssueInfo, type LabelInfo, type RepoInfo } from "./github.js";
 import { buildAgentLabels } from "./labels.js";
 import { log } from "./logger.js";
 import { acquireLock, releaseLock } from "./lock.js";
+import { buildAgentComment, hasUserReplySince, NEEDS_USER_MARKER } from "./notifications.js";
 import { listTargetRepos, listQueuedIssues, pickNextIssues, queueNewRequests } from "./queue.js";
 import { runIssue } from "./runner.js";
+import {
+  evaluateRunningIssues,
+  isProcessAlive,
+  loadRunnerState,
+  resolveRunnerStatePath
+} from "./runner-state.js";
 
 const program = new Command();
 
@@ -65,9 +72,107 @@ program
       }
     };
 
+    const formatMention = (issue: IssueInfo): string =>
+      issue.author ? `@${issue.author} ` : "";
+
+    const resumeAwaitingUser = async (repos: RepoInfo[]): Promise<number> => {
+      let resumed = 0;
+      for (const repo of repos) {
+        const awaiting = await client.listIssuesByLabel(repo, config.labels.needsUser);
+        for (const issue of awaiting) {
+          const comments = await client.listIssueComments(issue);
+          if (!hasUserReplySince(comments, NEEDS_USER_MARKER)) {
+            continue;
+          }
+
+          if (dryRun) {
+            log("info", `Dry-run: would re-queue ${issue.url}`, json);
+            resumed += 1;
+            continue;
+          }
+
+          await client.addLabels(issue, [config.labels.request]);
+          await tryRemoveLabel(issue, config.labels.needsUser);
+          await tryRemoveLabel(issue, config.labels.failed);
+          await tryRemoveLabel(issue, config.labels.running);
+          await tryRemoveLabel(issue, config.labels.queued);
+          await client.comment(
+            issue,
+            buildAgentComment(
+              `${formatMention(issue)}Reply received. Re-queued for execution.`,
+              []
+            )
+          );
+          resumed += 1;
+        }
+      }
+      return resumed;
+    };
+
     const runCycle = async (): Promise<void> => {
       const repos = await listTargetRepos(client, config);
       log("info", `Discovered ${repos.length} repositories.`, json);
+
+      const statePath = resolveRunnerStatePath(config.workdirRoot);
+      let state;
+      try {
+        state = loadRunnerState(statePath);
+      } catch (error) {
+        log("warn", "Failed to read runner state; skipping running issue checks.", json, {
+          error: error instanceof Error ? error.message : String(error)
+        });
+      }
+
+      if (state) {
+        for (const repo of repos) {
+          const runningIssues = await client.listIssuesByLabel(repo, config.labels.running);
+          if (runningIssues.length === 0) {
+            continue;
+          }
+          const evaluation = evaluateRunningIssues(runningIssues, state, isProcessAlive);
+
+          for (const issue of evaluation.deadProcess) {
+            if (dryRun) {
+              log("info", `Dry-run: would mark ${issue.issue.url} failed (process exited).`, json);
+              continue;
+            }
+
+            await client.addLabels(issue.issue, [config.labels.failed, config.labels.needsUser]);
+            await tryRemoveLabel(issue.issue, config.labels.running);
+            await client.comment(
+              issue.issue,
+              buildAgentComment(
+                `${formatMention(issue.issue)}Detected runner process exit (pid ${issue.record.pid}). ` +
+                  "Please reply with details or requeue instructions.",
+                [NEEDS_USER_MARKER]
+              )
+            );
+          }
+
+          for (const issue of evaluation.missingRecord) {
+            if (dryRun) {
+              log("info", `Dry-run: would mark ${issue.url} needs-user (missing state).`, json);
+              continue;
+            }
+
+            await client.addLabels(issue, [config.labels.failed, config.labels.needsUser]);
+            await tryRemoveLabel(issue, config.labels.running);
+            await client.comment(
+              issue,
+              buildAgentComment(
+                `${formatMention(issue)}Runner state was missing for this request. ` +
+                  "Please reply to re-queue the request.",
+                [NEEDS_USER_MARKER]
+              )
+            );
+          }
+        }
+      }
+
+      const resumed = await resumeAwaitingUser(repos);
+      if (resumed > 0) {
+        log("info", `Re-queued ${resumed} request(s) after user reply.`, json);
+      }
 
       for (const repo of repos) {
         const queued = await queueNewRequests(client, repo, config);
@@ -100,7 +205,9 @@ program
         await tryRemoveLabel(issue, config.labels.queued);
         await client.comment(
           issue,
-          `Agent runner started on ${new Date().toISOString()}. Concurrency ${config.concurrency}.`
+          buildAgentComment(
+            `${formatMention(issue)}Agent runner started on ${new Date().toISOString()}. Concurrency ${config.concurrency}.`
+          )
         );
       }
 
@@ -116,20 +223,37 @@ program
                 await tryRemoveLabel(issue, config.labels.running);
                 await client.comment(
                   issue,
-                  `Agent runner completed successfully. Log: ${result.logPath}`
+                  buildAgentComment(
+                    `${formatMention(issue)}Agent runner completed successfully.` +
+                      `${result.summary ? `\n\nSummary:\n${result.summary}` : ""}` +
+                      `\n\nLog: ${result.logPath}`
+                  )
                 );
                 return;
               }
 
-              await client.addLabels(issue, [config.labels.failed]);
-              await tryRemoveLabel(issue, config.labels.running);
-              await client.comment(issue, `Agent runner failed. Log: ${result.logPath}`);
-            } catch (error) {
-              await client.addLabels(issue, [config.labels.failed]);
+              await client.addLabels(issue, [config.labels.failed, config.labels.needsUser]);
               await tryRemoveLabel(issue, config.labels.running);
               await client.comment(
                 issue,
-                `Agent runner failed with error: ${error instanceof Error ? error.message : String(error)}`
+                buildAgentComment(
+                  `${formatMention(issue)}Agent runner failed.` +
+                    `${result.summary ? `\n\nSummary:\n${result.summary}` : ""}` +
+                    `\n\nLog: ${result.logPath}\n\nPlease reply with any details or fixes; the runner will re-queue after detecting your response.`,
+                  [NEEDS_USER_MARKER]
+                )
+              );
+            } catch (error) {
+              await client.addLabels(issue, [config.labels.failed, config.labels.needsUser]);
+              await tryRemoveLabel(issue, config.labels.running);
+              await client.comment(
+                issue,
+                buildAgentComment(
+                  `${formatMention(issue)}Agent runner failed with error: ${
+                    error instanceof Error ? error.message : String(error)
+                  }\n\nPlease reply with any details or fixes; the runner will re-queue after detecting your response.`,
+                  [NEEDS_USER_MARKER]
+                )
               );
             }
           })

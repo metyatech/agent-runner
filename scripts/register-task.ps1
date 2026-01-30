@@ -5,10 +5,10 @@ param(
   [int]$IntervalMinutes = 1
 )
 
-$node = (Get-Command node -ErrorAction Stop).Source
-$script = Join-Path $RepoPath "dist\\cli.js"
+$powershell = (Get-Command powershell -ErrorAction Stop).Source
+$script = Join-Path $RepoPath "scripts\\run-task.ps1"
 
-$action = New-ScheduledTaskAction -Execute $node -Argument "\"$script\" run --once --yes --config \"$ConfigPath\""
+$action = New-ScheduledTaskAction -Execute $powershell -Argument "-NoProfile -ExecutionPolicy Bypass -File `"$script`" -RepoPath `"$RepoPath`" -ConfigPath `"$ConfigPath`""
 $trigger = New-ScheduledTaskTrigger -Once -At (Get-Date).AddMinutes(1) -RepetitionInterval (New-TimeSpan -Minutes $IntervalMinutes) -RepetitionDuration (New-TimeSpan -Days 3650)
 $principal = New-ScheduledTaskPrincipal -UserId $env:USERNAME -LogonType S4U -RunLevel Limited
 

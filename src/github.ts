@@ -10,9 +10,16 @@ export type IssueInfo = {
   number: number;
   title: string;
   body: string | null;
+  author: string | null;
   repo: RepoInfo;
   labels: string[];
   url: string;
+};
+
+export type IssueComment = {
+  id: number;
+  body: string;
+  createdAt: string;
 };
 
 export type LabelInfo = {
@@ -69,6 +76,7 @@ export class GitHubClient {
           number: issue.number,
           title: issue.title,
           body: issue.body ?? null,
+          author: issue.user?.login ?? null,
           repo,
           labels: issue.labels.map((item) => (typeof item === "string" ? item : item.name ?? "")),
           url: issue.html_url
@@ -107,6 +115,32 @@ export class GitHubClient {
       issue_number: issue.number,
       body
     });
+  }
+
+  async listIssueComments(issue: IssueInfo): Promise<IssueComment[]> {
+    const comments: IssueComment[] = [];
+    let page = 1;
+    while (true) {
+      const response = await this.octokit.issues.listComments({
+        owner: issue.repo.owner,
+        repo: issue.repo.repo,
+        issue_number: issue.number,
+        per_page: 100,
+        page
+      });
+      for (const comment of response.data) {
+        comments.push({
+          id: comment.id,
+          body: comment.body ?? "",
+          createdAt: comment.created_at
+        });
+      }
+      if (response.data.length < 100) {
+        break;
+      }
+      page += 1;
+    }
+    return comments;
   }
 
   async getLabel(repo: RepoInfo, name: string): Promise<LabelInfo | null> {
