@@ -1,0 +1,41 @@
+{
+  "name": "agent-runner",
+  "version": "0.1.0",
+  "description": "Local agent runner that queues and executes GitHub Agent requests using Codex.",
+  "license": "MIT",
+  "type": "module",
+  "bin": {
+    "agent-runner": "dist/cli.js"
+  },
+  "scripts": {
+    "build": "tsup",
+    "lint": "eslint . && tsc -p tsconfig.json --noEmit && tsc -p tsconfig.test.json --noEmit",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run",
+    "test:unit": "vitest run tests/unit",
+    "test:e2e": "vitest run tests/e2e",
+    "dev": "tsx src/cli.ts",
+    "prepare": "simple-git-hooks"
+  },
+  "dependencies": {
+    "@octokit/rest": "^21.0.0",
+    "ajv": "^8.12.0",
+    "ajv-formats": "^3.0.1",
+    "commander": "^12.1.0",
+    "p-limit": "^5.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "@typescript-eslint/eslint-plugin": "^8.17.0",
+    "@typescript-eslint/parser": "^8.17.0",
+    "eslint": "^9.13.0",
+    "simple-git-hooks": "^2.11.1",
+    "tsup": "^8.3.0",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.0",
+    "vitest": "^1.6.0"
+  },
+  "simple-git-hooks": {
+    "pre-commit": "npm run lint && npm run test && npm run build"
+  }
+}

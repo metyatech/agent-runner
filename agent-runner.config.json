@@ -1,0 +1,19 @@
+{
+  "owner": "metyatech",
+  "repos": "all",
+  "workdirRoot": "D:\\ghws",
+  "pollIntervalSeconds": 60,
+  "concurrency": 8,
+  "labels": {
+    "request": "agent:request",
+    "queued": "agent:queued",
+    "running": "agent:running",
+    "done": "agent:done",
+    "failed": "agent:failed"
+  },
+  "codex": {
+    "command": "codex",
+    "args": ["exec", "--full-auto"],
+    "promptTemplate": "You are running an autonomous task. Follow AGENTS.md rules. Use repo(s): {{repos}}. Task:\n{{task}}"
+  }
+}

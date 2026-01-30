@@ -1,0 +1,63 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/metyatech/agent-runner/schema/agent-runner.schema.json",
+  "title": "Agent Runner Configuration",
+  "type": "object",
+  "required": ["owner", "workdirRoot", "pollIntervalSeconds", "concurrency", "labels", "codex"],
+  "properties": {
+    "owner": {
+      "type": "string",
+      "minLength": 1
+    },
+    "repos": {
+      "oneOf": [
+        { "type": "string", "enum": ["all"] },
+        {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 },
+          "minItems": 1
+        }
+      ]
+    },
+    "workdirRoot": {
+      "type": "string",
+      "minLength": 1
+    },
+    "pollIntervalSeconds": {
+      "type": "integer",
+      "minimum": 10,
+      "maximum": 3600
+    },
+    "concurrency": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 16
+    },
+    "labels": {
+      "type": "object",
+      "required": ["request", "queued", "running", "done", "failed"],
+      "properties": {
+        "request": { "type": "string", "minLength": 1 },
+        "queued": { "type": "string", "minLength": 1 },
+        "running": { "type": "string", "minLength": 1 },
+        "done": { "type": "string", "minLength": 1 },
+        "failed": { "type": "string", "minLength": 1 }
+      },
+      "additionalProperties": false
+    },
+    "codex": {
+      "type": "object",
+      "required": ["command", "args", "promptTemplate"],
+      "properties": {
+        "command": { "type": "string", "minLength": 1 },
+        "args": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "promptTemplate": { "type": "string", "minLength": 1 }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false
+}
