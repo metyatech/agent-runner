@@ -99,6 +99,14 @@ Unregister the label sync task:
 .\scripts\unregister-label-sync-task.ps1
 ```
 
+## Status check
+
+Quick status summary (tasks + recent logs):
+
+```powershell
+.\scripts\status.ps1
+```
+
 ## Release / deploy
 
 Not applicable. This repository is intended to run locally.
