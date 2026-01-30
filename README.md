@@ -85,6 +85,20 @@ Unregister the task:
 .\scripts\unregister-task.ps1
 ```
 
+## Label sync scheduling
+
+Register a daily label sync task:
+
+```powershell
+.\scripts\register-label-sync-task.ps1 -RepoPath "C:\\path\\to\\agent-runner" -ConfigPath "C:\\path\\to\\agent-runner\\agent-runner.config.json"
+```
+
+Unregister the label sync task:
+
+```powershell
+.\scripts\unregister-label-sync-task.ps1
+```
+
 ## Release / deploy
 
 Not applicable. This repository is intended to run locally.
