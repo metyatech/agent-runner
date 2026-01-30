@@ -4,7 +4,8 @@ import process from "node:process";
 import { Command } from "commander";
 import pLimit from "p-limit";
 import { loadConfig } from "./config.js";
-import { GitHubClient, type IssueInfo } from "./github.js";
+import { GitHubClient, type IssueInfo, type LabelInfo } from "./github.js";
+import { buildAgentLabels } from "./labels.js";
 import { log } from "./logger.js";
 import { acquireLock, releaseLock } from "./lock.js";
 import { listTargetRepos, listQueuedIssues, pickNextIssues, queueNewRequests } from "./queue.js";
@@ -150,6 +151,79 @@ program
       }
     } finally {
       releaseLock(lock);
+    }
+  });
+
+program
+  .command("labels")
+  .description("Manage agent labels across repositories.")
+  .command("sync")
+  .description("Ensure agent labels exist with expected colors and descriptions.")
+  .option("-c, --config <path>", "Path to config file", "agent-runner.config.json")
+  .option("--json", "Output JSON logs", false)
+  .option("--dry-run", "List actions without mutating GitHub", false)
+  .option("--yes", "Bypass confirmation prompts", false)
+  .action(async (options) => {
+    const json = Boolean(options.json);
+    const dryRun = Boolean(options.dryRun);
+    const requireYes = !dryRun && !options.yes;
+
+    if (requireYes) {
+      throw new Error("Refusing to mutate GitHub without --yes. Use --dry-run to preview.");
+    }
+
+    const configPath = path.resolve(process.cwd(), options.config);
+    const config = loadConfig(configPath);
+
+    const token =
+      process.env.AGENT_GITHUB_TOKEN ||
+      process.env.GITHUB_TOKEN ||
+      process.env.GH_TOKEN;
+
+    if (!token) {
+      throw new Error("Missing GitHub token. Set AGENT_GITHUB_TOKEN or GITHUB_TOKEN.");
+    }
+
+    const client = new GitHubClient(token);
+    const repos = await listTargetRepos(client, config);
+    const labels = buildAgentLabels(config);
+
+    log("info", `Syncing labels across ${repos.length} repositories.`, json);
+
+    for (const repo of repos) {
+      for (const label of labels) {
+        const existing = await client.getLabel(repo, label.name);
+        if (!existing) {
+          if (dryRun) {
+            log("info", `Would create label ${label.name} in ${repo.repo}.`, json);
+            continue;
+          }
+          await client.createLabel(repo, label);
+          log("info", `Created label ${label.name} in ${repo.repo}.`, json);
+          continue;
+        }
+
+        const needsUpdate =
+          existing.color.toLowerCase() !== label.color.toLowerCase() ||
+          (existing.description ?? "") !== label.description;
+
+        if (!needsUpdate) {
+          continue;
+        }
+
+        if (dryRun) {
+          log("info", `Would update label ${label.name} in ${repo.repo}.`, json);
+          continue;
+        }
+
+        const payload: LabelInfo = {
+          name: label.name,
+          color: label.color,
+          description: label.description
+        };
+        await client.updateLabel(repo, payload);
+        log("info", `Updated label ${label.name} in ${repo.repo}.`, json);
+      }
     }
   });
 

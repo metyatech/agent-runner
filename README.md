@@ -63,6 +63,14 @@ Looping daemon:
 node dist/cli.js run --yes
 ```
 
+## Label sync
+
+Ensure required agent labels exist in all repositories:
+
+```bash
+node dist/cli.js labels sync --yes
+```
+
 ## Windows Task Scheduler
 
 Register a scheduled task that runs every minute:

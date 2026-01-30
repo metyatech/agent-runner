@@ -15,6 +15,12 @@ export type IssueInfo = {
   url: string;
 };
 
+export type LabelInfo = {
+  name: string;
+  color: string;
+  description: string | null;
+};
+
 export class GitHubClient {
   private octokit: Octokit;
 
@@ -100,6 +106,49 @@ export class GitHubClient {
       repo: issue.repo.repo,
       issue_number: issue.number,
       body
+    });
+  }
+
+  async getLabel(repo: RepoInfo, name: string): Promise<LabelInfo | null> {
+    try {
+      const response = await this.octokit.issues.getLabel({
+        owner: repo.owner,
+        repo: repo.repo,
+        name
+      });
+      return {
+        name: response.data.name,
+        color: response.data.color,
+        description: response.data.description ?? null
+      };
+    } catch (error) {
+      if (error instanceof Error && "status" in error) {
+        const status = (error as { status?: number }).status;
+        if (status === 404) {
+          return null;
+        }
+      }
+      throw error;
+    }
+  }
+
+  async createLabel(repo: RepoInfo, label: LabelInfo): Promise<void> {
+    await this.octokit.issues.createLabel({
+      owner: repo.owner,
+      repo: repo.repo,
+      name: label.name,
+      color: label.color,
+      description: label.description ?? ""
+    });
+  }
+
+  async updateLabel(repo: RepoInfo, label: LabelInfo): Promise<void> {
+    await this.octokit.issues.updateLabel({
+      owner: repo.owner,
+      repo: repo.repo,
+      name: label.name,
+      color: label.color,
+      description: label.description ?? ""
     });
   }
 }
