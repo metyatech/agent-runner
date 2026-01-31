@@ -11,7 +11,7 @@
     "build": "tsup",
     "lint": "eslint . && tsc -p tsconfig.json --noEmit && tsc -p tsconfig.test.json --noEmit",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "test": "vitest run",
+    "test": "vitest run tests/unit tests/e2e/cli.test.ts",
     "test:unit": "vitest run tests/unit",
     "test:e2e": "vitest run tests/e2e",
     "dev": "tsx src/cli.ts",

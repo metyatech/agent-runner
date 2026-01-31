@@ -33,13 +33,13 @@ setx AGENT_GITHUB_TOKEN "<token>"
 ## Development commands
 
 - `npm run lint`
-- `npm run test`
+- `npm run test` (unit tests + local CLI checks; does not call GitHub API)
 - `npm run build`
 - `npm run dev -- run --once --yes`
 
 ## E2E (GitHub API)
 
-The E2E suite runs against a real GitHub repository.
+The GitHub-flow E2E suite runs against a real GitHub repository and requires environment variables.
 Recommended: authenticate once with GitHub CLI and use the helper script:
 
 ```powershell
@@ -81,6 +81,7 @@ Config file: `agent-runner.config.json`
 - `codex`: Codex CLI command and prompt template
 - `codex.args`: Default config runs with full access (`--dangerously-bypass-approvals-and-sandbox`); change this if you want approvals or sandboxing.
 - `codex.promptTemplate`: The runner expects a summary block in the output to post to the issue thread.
+  - The default template allows GitHub operations (issues/PRs/commits/pushes) but forbids sending/posting outside GitHub unless the user explicitly approves in the issue.
 
 ## Running
 
@@ -109,6 +110,10 @@ node dist/cli.js labels sync --yes
 When a run fails, the runner adds `agent:needs-user` and comments with a reply request.
 Reply on the issue with any fixes or details; the runner will detect your response,
 remove the failure labels, and re-queue the request automatically.
+
+The runner also includes recent user replies from the issue comments in the next prompt
+(limited and truncated to avoid prompt bloat), so you typically do not need to edit the
+original issue body when providing additional details.
 
 If a request is labeled `agent:running` but the tracked process exits,
 the runner marks it as failed + needs-user and asks for a reply.

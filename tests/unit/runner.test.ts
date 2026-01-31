@@ -1,8 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { buildCodexInvocation } from "../../src/runner.js";
+import { buildCodexInvocation, buildIssueTaskText } from "../../src/runner.js";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { buildAgentComment, NEEDS_USER_MARKER } from "../../src/notifications.js";
+import type { IssueComment, IssueInfo } from "../../src/github.js";
 
 describe("buildCodexInvocation", () => {
   it("builds args without shell splitting", () => {
@@ -127,5 +129,86 @@ describe("buildCodexInvocation", () => {
       process.env.APPDATA = originalAppData;
       fs.rmSync(tempDir, { recursive: true, force: true });
     }
+  });
+});
+
+describe("buildIssueTaskText", () => {
+  const baseIssue: IssueInfo = {
+    id: 1,
+    number: 123,
+    title: "Test issue",
+    body: "Hello from issue body.",
+    author: "metyatech",
+    repo: { owner: "metyatech", repo: "agent-runner" },
+    labels: [],
+    url: "https://github.com/metyatech/agent-runner/issues/123"
+  };
+
+  it("includes issue title/body and omits agent-runner comments", () => {
+    const comments: IssueComment[] = [
+      {
+        id: 1,
+        body: buildAgentComment("failed", [NEEDS_USER_MARKER]),
+        createdAt: "2026-01-30T10:00:00Z",
+        author: "agent-runner-bot"
+      },
+      {
+        id: 2,
+        body: "I'll fix the env.",
+        createdAt: "2026-01-30T10:05:00Z",
+        author: "metyatech"
+      }
+    ];
+
+    const text = buildIssueTaskText(baseIssue, comments);
+
+    expect(text).toContain("Issue: Test issue");
+    expect(text).toContain("Hello from issue body.");
+    expect(text).toContain("I'll fix the env.");
+    expect(text).not.toContain("failed");
+    expect(text).toContain("Note: only user comments after the last needs-user marker");
+  });
+
+  it("ignores user comments before the last needs-user marker", () => {
+    const comments: IssueComment[] = [
+      {
+        id: 1,
+        body: "Earlier note.",
+        createdAt: "2026-01-30T09:55:00Z",
+        author: "metyatech"
+      },
+      {
+        id: 2,
+        body: buildAgentComment("failed", [NEEDS_USER_MARKER]),
+        createdAt: "2026-01-30T10:00:00Z",
+        author: "agent-runner-bot"
+      },
+      {
+        id: 3,
+        body: "New details after failure.",
+        createdAt: "2026-01-30T10:05:00Z",
+        author: "metyatech"
+      }
+    ];
+
+    const text = buildIssueTaskText(baseIssue, comments);
+
+    expect(text).toContain("New details after failure.");
+    expect(text).not.toContain("Earlier note.");
+  });
+
+  it("truncates very large user comments", () => {
+    const longBody = "a".repeat(10_000);
+    const comments: IssueComment[] = [
+      {
+        id: 1,
+        body: longBody,
+        createdAt: "2026-01-30T10:05:00Z",
+        author: "metyatech"
+      }
+    ];
+
+    const text = buildIssueTaskText(baseIssue, comments);
+    expect(text).toContain("…[truncated]");
   });
 });

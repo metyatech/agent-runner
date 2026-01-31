@@ -2,9 +2,10 @@ import fs from "node:fs";
 import path from "node:path";
 import { spawn } from "node:child_process";
 import type { AgentRunnerConfig } from "./config.js";
-import type { GitHubClient, IssueInfo, RepoInfo } from "./github.js";
+import type { GitHubClient, IssueComment, IssueInfo, RepoInfo } from "./github.js";
 import { parseIssueBody } from "./issue.js";
 import { recordRunningIssue, removeRunningIssue, resolveRunnerStatePath } from "./runner-state.js";
+import { AGENT_RUNNER_MARKER, findLastMarkerComment, NEEDS_USER_MARKER } from "./notifications.js";
 
 export type RunResult = {
   success: boolean;
@@ -72,12 +73,85 @@ function resolveTargetRepos(issue: IssueInfo, parsed: ReturnType<typeof parseIss
   return Array.from(unique.values());
 }
 
-function renderPrompt(template: string, repos: RepoInfo[], issue: IssueInfo): string {
-  const repoList = repos.map((repo) => `${repo.owner}/${repo.repo}`).join(", ");
+const MAX_ISSUE_COMMENT_CHARS = 4_000;
+const MAX_ISSUE_COMMENTS_BLOCK_CHARS = 12_000;
+const MAX_ISSUE_COMMENTS_COUNT = 8;
+
+function truncateForPrompt(value: string, maxChars: number): string {
+  if (value.length <= maxChars) {
+    return value;
+  }
+  return `${value.slice(0, maxChars)}\n…[truncated]`;
+}
+
+function isAgentRunnerComment(comment: IssueComment): boolean {
+  return comment.body.includes(AGENT_RUNNER_MARKER);
+}
+
+function selectRelevantUserComments(comments: IssueComment[]): IssueComment[] {
+  const userComments = comments.filter((comment) => !isAgentRunnerComment(comment));
+  const anchor = findLastMarkerComment(comments, NEEDS_USER_MARKER);
+
+  const filtered =
+    anchor === null
+      ? userComments
+      : userComments.filter((comment) => Date.parse(comment.createdAt) > Date.parse(anchor.createdAt));
+
+  return filtered.slice(-MAX_ISSUE_COMMENTS_COUNT);
+}
+
+function formatCommentsForPrompt(comments: IssueComment[]): string {
+  const selected = selectRelevantUserComments(comments);
+  if (selected.length === 0) {
+    return "";
+  }
+
+  let remaining = MAX_ISSUE_COMMENTS_BLOCK_CHARS;
+  const chunks: string[] = [];
+
+  for (const comment of selected) {
+    const headerParts = [`comment ${comment.id}`, comment.createdAt];
+    if (comment.author) {
+      headerParts.push(`@${comment.author}`);
+    }
+    const header = `--- ${headerParts.join(" ")} ---`;
+    const body = truncateForPrompt(comment.body.trim(), MAX_ISSUE_COMMENT_CHARS);
+    const chunk = `${header}\n${body}\n`;
+    if (chunk.length > remaining) {
+      break;
+    }
+    chunks.push(chunk);
+    remaining -= chunk.length;
+  }
+
+  if (chunks.length === 0) {
+    return "";
+  }
+
+  const hasNeedsUserMarker = comments.some((comment) => comment.body.includes(NEEDS_USER_MARKER));
+  const note = hasNeedsUserMarker
+    ? "Note: only user comments after the last needs-user marker are included.\n"
+    : "";
+
+  return `${note}${chunks.join("\n")}`.trim();
+}
+
+export function buildIssueTaskText(issue: IssueInfo, comments: IssueComment[]): string {
   const issueBody = issue.body ?? "";
-  return template
-    .replace("{{repos}}", repoList)
-    .replace("{{task}}", `Issue: ${issue.title}\nURL: ${issue.url}\n\n${issueBody}`);
+  const base = `Issue: ${issue.title}\nURL: ${issue.url}\n\n${issueBody}`.trim();
+  const commentBlock = formatCommentsForPrompt(comments);
+
+  if (!commentBlock) {
+    return base;
+  }
+
+  return `${base}\n\nRecent user replies (issue comments):\n${commentBlock}`;
+}
+
+function renderPrompt(template: string, repos: RepoInfo[], issue: IssueInfo, comments: IssueComment[]): string {
+  const repoList = repos.map((repo) => `${repo.owner}/${repo.repo}`).join(", ");
+  const taskText = buildIssueTaskText(issue, comments);
+  return template.replace("{{repos}}", repoList).replace("{{task}}", taskText);
 }
 
 function resolveWindowsCommand(command: string, pathValue: string | undefined): string {
@@ -198,9 +272,11 @@ export async function runIssue(
     await cloneRepo(config.workdirRoot, repo);
   }
 
+  const comments = await client.listIssueComments(issue);
+
   const primaryRepo = repos[0];
   const primaryPath = resolveRepoPath(config.workdirRoot, primaryRepo);
-  const prompt = renderPrompt(config.codex.promptTemplate, repos, issue);
+  const prompt = renderPrompt(config.codex.promptTemplate, repos, issue, comments);
 
   const logDir = path.resolve(config.workdirRoot, "agent-runner", "logs");
   fs.mkdirSync(logDir, { recursive: true });

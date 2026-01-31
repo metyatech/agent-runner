@@ -1,5 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 import Ajv from "ajv";
 import addFormats from "ajv-formats";
 
@@ -24,7 +25,9 @@ export type AgentRunnerConfig = {
   };
 };
 
-const schemaPath = path.resolve("schema", "agent-runner.schema.json");
+const schemaPath = fileURLToPath(
+  new URL("../schema/agent-runner.schema.json", import.meta.url)
+);
 
 export function loadConfig(configPath: string): AgentRunnerConfig {
   const raw = fs.readFileSync(configPath, "utf8");

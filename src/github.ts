@@ -20,6 +20,7 @@ export type IssueComment = {
   id: number;
   body: string;
   createdAt: string;
+  author?: string | null;
 };
 
 export type LabelInfo = {
@@ -132,7 +133,8 @@ export class GitHubClient {
         comments.push({
           id: comment.id,
           body: comment.body ?? "",
-          createdAt: comment.created_at
+          createdAt: comment.created_at,
+          author: comment.user?.login ?? null
         });
       }
       if (response.data.length < 100) {
