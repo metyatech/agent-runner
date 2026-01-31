@@ -174,17 +174,31 @@ program
         log("info", `Re-queued ${resumed} request(s) after user reply.`, json);
       }
 
+      const queuedIssues: IssueInfo[] = [];
+      const queuedIds = new Set<number>();
       for (const repo of repos) {
         const queued = await queueNewRequests(client, repo, config);
         if (queued.length > 0) {
           log("info", `Queued ${queued.length} requests in ${repo.repo}.`, json);
         }
+        for (const issue of queued) {
+          if (queuedIds.has(issue.id)) {
+            continue;
+          }
+          queuedIds.add(issue.id);
+          queuedIssues.push(issue);
+        }
       }
 
-      const queuedIssues: IssueInfo[] = [];
       for (const repo of repos) {
         const repoQueued = await listQueuedIssues(client, repo, config);
-        queuedIssues.push(...repoQueued);
+        for (const issue of repoQueued) {
+          if (queuedIds.has(issue.id)) {
+            continue;
+          }
+          queuedIds.add(issue.id);
+          queuedIssues.push(issue);
+        }
       }
 
       const picked = pickNextIssues(queuedIssues, config.concurrency);
