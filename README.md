@@ -40,11 +40,31 @@ setx AGENT_GITHUB_TOKEN "<token>"
 ## E2E (GitHub API)
 
 The E2E suite runs against a real GitHub repository.
-Set these environment variables before running `npm run test:e2e`:
+Recommended: authenticate once with GitHub CLI and use the helper script:
+
+```powershell
+.\scripts\run-e2e.ps1 -Owner "<owner>" -Repo "<repo>"
+```
+
+You can also set persistent environment variables (PowerShell):
+
+```powershell
+setx E2E_GH_OWNER "<owner>"
+setx E2E_GH_REPO "<repo>"
+setx E2E_WORKDIR_ROOT "<path>"
+```
+
+Then run:
+
+```bash
+npm run test:e2e
+```
+
+Environment variables used by the E2E suite:
 
 - `E2E_GH_OWNER`: GitHub owner/org
 - `E2E_GH_REPO`: Repository name
-- `E2E_WORKDIR_ROOT`: Local workspace root containing the repo (optional)
+- `E2E_WORKDIR_ROOT`: Workdir root for temporary clones/logs (optional)
 - `AGENT_GITHUB_TOKEN` (or `GITHUB_TOKEN`/`GH_TOKEN`): Token with repo access
 
 ## Configuration
