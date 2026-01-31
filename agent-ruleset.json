@@ -3,10 +3,8 @@
   "domains": [
     "cli",
     "node",
-    "release"
-  ],
-  "extra": [
-    "../agent-rules-local/ghws-workspace.md"
+    "release",
+    "ghws"
   ],
   "output": "AGENTS.md"
 }
