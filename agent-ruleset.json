@@ -3,8 +3,7 @@
   "domains": [
     "cli",
     "node",
-    "release",
-    "ghws"
+    "release"
   ],
   "output": "AGENTS.md"
 }
