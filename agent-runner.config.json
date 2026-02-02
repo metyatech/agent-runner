@@ -11,7 +11,22 @@
     "tasks": [
       "Bring the repo into compliance with AGENTS.md and project docs/standards. Identify the highest-impact gap, fix it, and update docs/tests as needed. If nothing meaningful is needed, exit."
     ],
-    "promptTemplate": "You are running an autonomous idle task.\nTarget repo: {{repo}}\nTask: {{task}}\n\nRequirements:\n- Follow AGENTS.md rules.\n- Do not push directly to main/master. Use a branch, open a PR, post a summary comment that mentions @metyatech, then merge and close the PR if there are changes.\n- If there are no safe changes, exit cleanly without opening a PR or reporting.\n- If the repo has uncommitted changes, exit without making changes.\n- Do not run lint/test/build just for a health check. Only run the smallest required checks when you actually change code.\n- Repository creation, splitting, renaming, archiving, or deletion is allowed only when clearly justified; otherwise avoid repo-level changes.\n- At the end, output a summary block delimited by:\nAGENT_RUNNER_SUMMARY_START\n<summary>\nAGENT_RUNNER_SUMMARY_END\nInclude: changes made, tests run (or 'Not run'), and commit hashes.",
+    "promptTemplate": "You are running an autonomous idle task.
+Target repo: {{repo}}
+Task: {{task}}
+
+Requirements:
+- Follow AGENTS.md rules.
+- Do not push directly to the main branch. Use a branch, open a PR, post a summary comment that mentions @metyatech, then merge and close the PR if there are changes.
+- If there are no safe changes, exit cleanly without opening a PR or reporting.
+- After merging a PR, check out the main branch and pull to sync the merge locally.
+- If the repo has uncommitted changes, exit without making changes.
+- Repository creation, splitting, renaming, archiving, or deletion is allowed when needed.
+- At the end, output a summary block delimited by:
+AGENT_RUNNER_SUMMARY_START
+<summary>
+AGENT_RUNNER_SUMMARY_END
+Include: changes made, tests run (or 'Not run'), and commit hashes.",
     "usageGate": {
       "enabled": true,
       "command": "codex",
