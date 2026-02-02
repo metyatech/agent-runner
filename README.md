@@ -262,6 +262,8 @@ Then open:
 http://127.0.0.1:4311/
 ```
 
+Paths shown in the status UI are clickable and will open the file in Explorer.
+
 ## System tray
 
 Run a background tray helper to open the status UI and pause/resume the runner:

@@ -1,4 +1,7 @@
 import http from "node:http";
+import fs from "node:fs";
+import path from "node:path";
+import { spawn } from "node:child_process";
 import type { StatusSnapshot } from "./status-snapshot.js";
 import { buildStatusSnapshot } from "./status-snapshot.js";
 
@@ -7,6 +10,30 @@ type StatusServerOptions = {
   host: string;
   port: number;
 };
+
+function resolveAllowedPath(requested: string, workdirRoot: string): string | null {
+  if (!requested) {
+    return null;
+  }
+  const resolved = path.resolve(requested);
+  const root = path.resolve(workdirRoot);
+  if (resolved === root || resolved.startsWith(`${root}${path.sep}`)) {
+    return resolved;
+  }
+  return null;
+}
+
+function openPath(resolvedPath: string): void {
+  if (!fs.existsSync(resolvedPath)) {
+    return;
+  }
+  const child = spawn("explorer.exe", [resolvedPath], {
+    detached: true,
+    stdio: "ignore",
+    windowsHide: true
+  });
+  child.unref();
+}
 
 function renderHtml(): string {
   return `<!doctype html>
@@ -206,23 +233,44 @@ function renderHtml(): string {
         return date.toLocaleString(undefined, { timeZoneName: "short" });
       };
 
+      const openPath = (pathValue) => {
+        if (!pathValue) return;
+        const url = "/open?path=" + encodeURIComponent(pathValue);
+        fetch(url, { method: "POST" }).catch(() => {});
+      };
+
+      const buildLink = (pathValue) => {
+        const link = document.createElement("a");
+        link.href = "/open?path=" + encodeURIComponent(pathValue);
+        link.textContent = pathValue;
+        link.addEventListener("click", (event) => {
+          event.preventDefault();
+          openPath(pathValue);
+        });
+        return link;
+      };
+
       const renderRows = (target, rows) => {
         target.textContent = "";
         rows.forEach((row) => {
           const tr = document.createElement("tr");
           const cells = [
-            row.kind,
-            row.repo ? row.repo.owner + "/" + row.repo.repo : "-",
-            row.issueNumber ? "#" + row.issueNumber : "-",
-            row.task || "-",
-            row.pid || "-",
-            row.ageMinutes != null ? row.ageMinutes.toFixed(1) : "-",
-            row.startedAtLocal || formatLocal(row.startedAt),
-            row.logPath || "-"
+            { value: row.kind },
+            { value: row.repo ? row.repo.owner + "/" + row.repo.repo : "-" },
+            { value: row.issueNumber ? "#" + row.issueNumber : "-" },
+            { value: row.task || "-" },
+            { value: row.pid || "-" },
+            { value: row.ageMinutes != null ? row.ageMinutes.toFixed(1) : "-" },
+            { value: row.startedAtLocal || formatLocal(row.startedAt) },
+            { value: row.logPath || "-", link: row.logPath }
           ];
-          cells.forEach((value) => {
+          cells.forEach((cell) => {
             const td = document.createElement("td");
-            td.textContent = String(value);
+            if (cell.link) {
+              td.appendChild(buildLink(cell.link));
+            } else {
+              td.textContent = String(cell.value);
+            }
             tr.appendChild(td);
           });
           target.appendChild(tr);
@@ -240,7 +288,10 @@ function renderHtml(): string {
         rows.forEach((row) => {
           const li = document.createElement("li");
           const updated = row.updatedAtLocal || formatLocal(row.updatedAt);
-          li.textContent = row.path + " (" + updated + ")";
+          li.appendChild(buildLink(row.path));
+          const time = document.createElement("span");
+          time.textContent = " (" + updated + ")";
+          li.appendChild(time);
           target.appendChild(li);
         });
       };
@@ -313,6 +364,28 @@ export function startStatusServer(options: StatusServerOptions): Promise<http.Se
     const url = new URL(req.url ?? "/", "http://localhost");
     if (url.pathname === "/api/status") {
       sendJson(res, buildStatusSnapshot(options.workdirRoot));
+      return;
+    }
+    if (url.pathname === "/open") {
+      const requested = url.searchParams.get("path") ?? "";
+      const resolved = resolveAllowedPath(requested, options.workdirRoot);
+      if (!resolved) {
+        res.statusCode = 400;
+        res.setHeader("Content-Type", "text/plain; charset=utf-8");
+        res.end("Invalid path.");
+        return;
+      }
+      if (!fs.existsSync(resolved)) {
+        res.statusCode = 404;
+        res.setHeader("Content-Type", "text/plain; charset=utf-8");
+        res.end("Not found.");
+        return;
+      }
+      openPath(resolved);
+      res.statusCode = 200;
+      res.setHeader("Content-Type", "text/plain; charset=utf-8");
+      res.setHeader("Cache-Control", "no-store");
+      res.end("Opened.");
       return;
     }
     if (url.pathname === "/") {
