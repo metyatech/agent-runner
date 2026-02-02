@@ -57,6 +57,9 @@
   },
   "copilot": {
     "command": "copilot",
-    "args": []
+    "args": [
+      "--allow-all",
+      "-p"
+    ]
   }
 }

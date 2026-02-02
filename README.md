@@ -88,6 +88,7 @@ Config file: `agent-runner.config.json`
 - `codex.promptTemplate`: The runner expects a summary block in the output to post to the issue thread.
   - The default template allows GitHub operations (issues/PRs/commits/pushes) but forbids sending/posting outside GitHub unless the user explicitly approves in the issue.
 - `copilot`: Copilot CLI command and args for idle runs (the prompt is appended as the last argument).
+  - `copilot.args`: Ensure `-p` is the final argument so the prompt is passed as the value. Use `--allow-all` for non-interactive runs.
 - `idle`: Optional idle task settings (runs when no queued issues exist)
   - `idle.enabled`: Turn idle tasks on/off
   - `idle.maxRunsPerCycle`: Max idle tasks per cycle
@@ -188,7 +189,7 @@ Example config snippet:
   },
   "copilot": {
     "command": "copilot",
-    "args": []
+    "args": ["--allow-all", "-p"]
   }
 }
 ```
