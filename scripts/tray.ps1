@@ -123,6 +123,7 @@ $menu.Items.Add("Exit", $null, {
 }) | Out-Null
 
 $notifyIcon.ContextMenuStrip = $menu
+$notifyIcon.add_DoubleClick({ Open-StatusUi })
 
 $timer = New-Object System.Windows.Forms.Timer
 $timer.Interval = 5000
