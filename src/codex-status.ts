@@ -1,4 +1,5 @@
 import { spawn } from "node:child_process";
+import readline from "node:readline";
 import { resolveCodexCommand } from "./codex-command.js";
 
 export type UsageWindowKey = "fiveHour" | "weekly";
@@ -15,6 +16,24 @@ export type CodexStatus = {
   windows: UsageWindow[];
   credits: number | null;
   raw: string;
+};
+
+export type RateLimitWindow = {
+  usedPercent?: number;
+  used_percent?: number;
+  windowDurationMins?: number | null;
+  window_minutes?: number | null;
+  windowMinutes?: number | null;
+  resetsAt?: number | null;
+  resets_at?: number | null;
+};
+
+export type RateLimitSnapshot = {
+  primary?: RateLimitWindow | null;
+  secondary?: RateLimitWindow | null;
+  credits?: unknown;
+  planType?: string | null;
+  plan_type?: string | null;
 };
 
 export type UsageGateConfig = {
@@ -37,6 +56,14 @@ export type UsageGateDecision = {
   reason: string;
   window?: UsageWindow;
   minutesToReset?: number;
+};
+
+type JsonRpcResponse = {
+  id?: number;
+  result?: unknown;
+  error?: {
+    message?: string;
+  };
 };
 
 const windowRegex =
@@ -140,6 +167,138 @@ function normalizeWindowKey(label: string): UsageWindowKey | null {
   return null;
 }
 
+function resolveWindowMinutes(window: RateLimitWindow): number | null {
+  const candidates = [
+    window.windowDurationMins,
+    window.windowMinutes,
+    window.window_minutes
+  ];
+  for (const value of candidates) {
+    if (typeof value === "number" && Number.isFinite(value)) {
+      return value;
+    }
+  }
+  return null;
+}
+
+function resolveResetsAt(window: RateLimitWindow): number | null {
+  const candidates = [window.resetsAt, window.resets_at];
+  for (const value of candidates) {
+    if (typeof value === "number" && Number.isFinite(value)) {
+      return value;
+    }
+  }
+  return null;
+}
+
+function normalizeRateLimitWindow(
+  window: RateLimitWindow,
+  now: Date
+): { usedPercent: number; windowMinutes: number | null; resetAt: Date | null } | null {
+  const usedPercent =
+    typeof window.usedPercent === "number"
+      ? window.usedPercent
+      : typeof window.used_percent === "number"
+        ? window.used_percent
+        : Number.NaN;
+
+  if (!Number.isFinite(usedPercent)) {
+    return null;
+  }
+
+  const windowMinutes = resolveWindowMinutes(window);
+  const resetsAt = resolveResetsAt(window);
+  let resetAt: Date | null = null;
+  if (typeof resetsAt === "number" && Number.isFinite(resetsAt)) {
+    resetAt = new Date(resetsAt * 1000);
+  } else if (windowMinutes !== null) {
+    resetAt = new Date(now.getTime() + windowMinutes * 60000);
+  }
+
+  return { usedPercent, windowMinutes, resetAt };
+}
+
+function clampPercent(value: number): number {
+  if (!Number.isFinite(value)) {
+    return 0;
+  }
+  return Math.min(Math.max(value, 0), 100);
+}
+
+export function rateLimitSnapshotToStatus(
+  snapshot: RateLimitSnapshot,
+  now: Date = new Date()
+): CodexStatus | null {
+  const candidates = [
+    snapshot.primary ? { source: "primary", data: normalizeRateLimitWindow(snapshot.primary, now) } : null,
+    snapshot.secondary ? { source: "secondary", data: normalizeRateLimitWindow(snapshot.secondary, now) } : null
+  ].filter((item): item is { source: "primary" | "secondary"; data: { usedPercent: number; windowMinutes: number | null; resetAt: Date | null } } =>
+    Boolean(item?.data)
+  );
+
+  if (candidates.length === 0) {
+    return null;
+  }
+
+  let fiveHourCandidate: typeof candidates[0] | null = null;
+  let weeklyCandidate: typeof candidates[0] | null = null;
+
+  if (candidates.length === 2) {
+    const [first, second] = candidates;
+    if (first.data.windowMinutes !== null && second.data.windowMinutes !== null) {
+      if (first.data.windowMinutes <= second.data.windowMinutes) {
+        fiveHourCandidate = first;
+        weeklyCandidate = second;
+      } else {
+        fiveHourCandidate = second;
+        weeklyCandidate = first;
+      }
+    } else {
+      fiveHourCandidate = first.source === "primary" ? first : second;
+      weeklyCandidate = first.source === "primary" ? second : first;
+    }
+  } else {
+    const lone = candidates[0];
+    if (lone.data.windowMinutes !== null && lone.data.windowMinutes >= 24 * 60) {
+      weeklyCandidate = lone;
+    } else {
+      fiveHourCandidate = lone;
+    }
+  }
+
+  const windows: UsageWindow[] = [];
+
+  if (fiveHourCandidate?.data.resetAt) {
+    windows.push({
+      key: "fiveHour",
+      label: "5h",
+      percentLeft: clampPercent(100 - fiveHourCandidate.data.usedPercent),
+      resetAt: fiveHourCandidate.data.resetAt,
+      resetText: fiveHourCandidate.data.resetAt.toISOString()
+    });
+  }
+
+  if (weeklyCandidate?.data.resetAt) {
+    windows.push({
+      key: "weekly",
+      label: "Weekly",
+      percentLeft: clampPercent(100 - weeklyCandidate.data.usedPercent),
+      resetAt: weeklyCandidate.data.resetAt,
+      resetText: weeklyCandidate.data.resetAt.toISOString()
+    });
+  }
+
+  if (windows.length === 0) {
+    return null;
+  }
+
+  return {
+    windows,
+    credits: null,
+    raw: JSON.stringify(snapshot)
+  };
+}
+
 export function parseCodexStatus(output: string, now: Date = new Date()): CodexStatus | null {
   const cleaned = output.replace(/\u001b\[[0-9;]*m/g, "");
   const lines = cleaned.split(/\r?\n/);
@@ -176,6 +335,144 @@ export function parseCodexStatus(output: string, now: Date = new Date()): CodexS
   }
 
   return { windows, credits, raw: cleaned };
+}
+
+export async function fetchCodexRateLimits(
+  command: string,
+  args: string[],
+  timeoutSeconds: number,
+  cwd: string
+): Promise<RateLimitSnapshot | null> {
+  const resolved = resolveCodexCommand(command, process.env.PATH);
+  const baseArgs = args ?? [];
+  const needsAppServer = !baseArgs.includes("app-server");
+  const finalArgs = [
+    ...resolved.prefixArgs,
+    ...(needsAppServer ? ["app-server", ...baseArgs] : baseArgs)
+  ];
+
+  return new Promise((resolve, reject) => {
+    const child = spawn(resolved.command, finalArgs, {
+      cwd,
+      env: process.env,
+      shell: false
+    });
+
+    const pending = new Map<number, { resolve: (value: unknown) => void; reject: (error: Error) => void }>();
+    let nextId = 1;
+    let stderr = "";
+    let settled = false;
+
+    const finish = (error?: Error, value: RateLimitSnapshot | null = null): void => {
+      if (settled) {
+        return;
+      }
+      settled = true;
+      clearTimeout(timer);
+      try {
+        rl.close();
+      } catch {
+        // ignore
+      }
+      child.kill();
+      if (error) {
+        reject(error);
+        return;
+      }
+      resolve(value);
+    };
+
+    const timer = setTimeout(() => {
+      finish(new Error("Codex app-server timeout."));
+    }, timeoutSeconds * 1000);
+
+    const rl = readline.createInterface({ input: child.stdout });
+
+    const handleMessage = (message: JsonRpcResponse): void => {
+      if (typeof message.id !== "number") {
+        return;
+      }
+      const entry = pending.get(message.id);
+      if (!entry) {
+        return;
+      }
+      pending.delete(message.id);
+      if (message.error?.message) {
+        entry.reject(new Error(message.error.message));
+      } else {
+        entry.resolve(message.result);
+      }
+    };
+
+    rl.on("line", (line) => {
+      const trimmed = line.trim();
+      if (!trimmed) {
+        return;
+      }
+      try {
+        const parsed = JSON.parse(trimmed) as JsonRpcResponse;
+        handleMessage(parsed);
+      } catch {
+        // Ignore non-JSON lines.
+      }
+    });
+
+    const send = (payload: unknown): void => {
+      try {
+        child.stdin.write(`${JSON.stringify(payload)}\n`);
+      } catch {
+        // Ignore write errors until timeout/close.
+      }
+    };
+
+    const request = (method: string, params: unknown): Promise<unknown> => {
+      const id = nextId++;
+      return new Promise((requestResolve, requestReject) => {
+        pending.set(id, {
+          resolve: requestResolve,
+          reject: requestReject
+        });
+        send({ id, method, params });
+      });
+    };
+
+    (async () => {
+      try {
+        await request("initialize", {
+          clientInfo: {
+            name: "agent-runner",
+            version: "0.1.0"
+          }
+        });
+        send({ method: "initialized" });
+        const result = await request("account/rateLimits/read", null);
+        const rateLimits =
+          typeof result === "object" && result
+            ? (result as { rateLimits?: RateLimitSnapshot; rate_limits?: RateLimitSnapshot }).rateLimits ??
+              (result as { rateLimits?: RateLimitSnapshot; rate_limits?: RateLimitSnapshot }).rate_limits ??
+              null
+            : null;
+        finish(undefined, rateLimits);
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        finish(new Error(`Codex app-server error: ${message}${stderr ? ` (${stderr.trim()})` : ""}`));
+      }
+    })();
+
+    child.stderr.on("data", (chunk) => {
+      stderr += chunk.toString();
+    });
+
+    child.on("error", (error) => {
+      finish(error);
+    });
+
+    child.on("close", () => {
+      if (!settled && pending.size === 0) {
+        finish();
+      }
+    });
+  });
 }
 
 export async function fetchCodexStatusOutput(

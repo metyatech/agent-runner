@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { evaluateUsageGate, parseCodexStatus } from "../../src/codex-status.js";
+import { evaluateUsageGate, parseCodexStatus, rateLimitSnapshotToStatus } from "../../src/codex-status.js";
 
 describe("parseCodexStatus", () => {
   it("extracts usage windows and credits", () => {
@@ -84,5 +84,31 @@ describe("evaluateUsageGate", () => {
     }, now);
 
     expect(decision.allow).toBe(false);
+  });
+});
+
+describe("rateLimitSnapshotToStatus", () => {
+  it("maps primary/secondary windows to 5h and weekly usage", () => {
+    const now = new Date("2026-02-02T10:00:00Z");
+    const snapshot = {
+      primary: {
+        usedPercent: 40,
+        windowDurationMins: 300,
+        resetsAt: 1_770_020_000
+      },
+      secondary: {
+        usedPercent: 10,
+        windowDurationMins: 10080,
+        resetsAt: 1_770_120_000
+      }
+    };
+
+    const status = rateLimitSnapshotToStatus(snapshot, now);
+    expect(status).not.toBeNull();
+    const fiveHour = status?.windows.find((window) => window.key === "fiveHour");
+    const weekly = status?.windows.find((window) => window.key === "weekly");
+
+    expect(fiveHour?.percentLeft).toBe(60);
+    expect(weekly?.percentLeft).toBe(90);
   });
 });

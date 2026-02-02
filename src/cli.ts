@@ -9,7 +9,11 @@ import { buildAgentLabels } from "./labels.js";
 import { log } from "./logger.js";
 import { acquireLock, releaseLock } from "./lock.js";
 import { buildAgentComment, hasUserReplySince, NEEDS_USER_MARKER } from "./notifications.js";
-import { evaluateUsageGate, fetchCodexStatusOutput, parseCodexStatus } from "./codex-status.js";
+import {
+  evaluateUsageGate,
+  fetchCodexRateLimits,
+  rateLimitSnapshotToStatus
+} from "./codex-status.js";
 import { evaluateCopilotUsageGate, fetchCopilotUsage } from "./copilot-usage.js";
 import { commandExists } from "./command-exists.js";
 import { listTargetRepos, listQueuedIssues, pickNextIssues, queueNewRequests } from "./queue.js";
@@ -247,15 +251,15 @@ program
         const usageGate = config.idle.usageGate;
         if (usageGate?.enabled) {
           try {
-            const output = await fetchCodexStatusOutput(
+            const rateLimits = await fetchCodexRateLimits(
               usageGate.command,
               usageGate.args,
               usageGate.timeoutSeconds,
               config.workdirRoot
             );
-            const status = parseCodexStatus(output);
+            const status = rateLimits ? rateLimitSnapshotToStatus(rateLimits, new Date()) : null;
             if (!status) {
-              log("warn", "Idle Codex usage gate: unable to parse /status output.", json);
+              log("warn", "Idle Codex usage gate: unable to read rate limits from app-server.", json);
               codexAllowed = false;
             } else {
               const decision = evaluateUsageGate(status, usageGate);
