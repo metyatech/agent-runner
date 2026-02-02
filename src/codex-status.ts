@@ -341,8 +341,10 @@ export async function fetchCodexRateLimits(
   command: string,
   args: string[],
   timeoutSeconds: number,
-  cwd: string
+  cwd: string,
+  timingSink?: (phase: string, durationMs: number) => void
 ): Promise<RateLimitSnapshot | null> {
+  const totalStart = Date.now();
   const resolved = resolveCodexCommand(command, process.env.PATH);
   const baseArgs = args ?? [];
   const needsAppServer = !baseArgs.includes("app-server");
@@ -368,6 +370,9 @@ export async function fetchCodexRateLimits(
         return;
       }
       settled = true;
+      if (timingSink) {
+        timingSink("total", Date.now() - totalStart);
+      }
       clearTimeout(timer);
       try {
         rl.close();
@@ -438,14 +443,22 @@ export async function fetchCodexRateLimits(
 
     (async () => {
       try {
+        const initStart = Date.now();
         await request("initialize", {
           clientInfo: {
             name: "agent-runner",
             version: "0.1.0"
           }
         });
+        if (timingSink) {
+          timingSink("initialize", Date.now() - initStart);
+        }
         send({ method: "initialized" });
+        const rateStart = Date.now();
         const result = await request("account/rateLimits/read", null);
+        if (timingSink) {
+          timingSink("rateLimits", Date.now() - rateStart);
+        }
         const rateLimits =
           typeof result === "object" && result
             ? (result as { rateLimits?: RateLimitSnapshot; rate_limits?: RateLimitSnapshot }).rateLimits ??

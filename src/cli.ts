@@ -247,15 +247,25 @@ program
           return;
         }
 
+        const timingEnabled = process.env.AGENT_RUNNER_USAGE_TIMING === "1";
+        const timingPrefix = timingEnabled ? "Usage gate timing" : "";
+
         let codexAllowed = true;
         const usageGate = config.idle.usageGate;
         if (usageGate?.enabled) {
           try {
+            const timingEvents: Array<{ phase: string; durationMs: number }> = [];
+            const timingSink = timingEnabled
+              ? (phase: string, durationMs: number) => {
+                  timingEvents.push({ phase, durationMs });
+                }
+              : undefined;
             const rateLimits = await fetchCodexRateLimits(
               usageGate.command,
               usageGate.args,
               usageGate.timeoutSeconds,
-              config.workdirRoot
+              config.workdirRoot,
+              timingSink
             );
             const status = rateLimits ? rateLimitSnapshotToStatus(rateLimits, new Date()) : null;
             if (!status) {
@@ -273,6 +283,15 @@ program
                 });
               }
             }
+            if (timingEnabled && timingEvents.length > 0) {
+              log(
+                "info",
+                `${timingPrefix} (Codex): ${timingEvents
+                  .map((event) => `${event.phase}=${event.durationMs}ms`)
+                  .join(", ")}`,
+                json
+              );
+            }
           } catch (error) {
             log("warn", "Idle Codex usage gate failed. Codex idle disabled.", json, {
               error: error instanceof Error ? error.message : String(error)
@@ -285,7 +304,15 @@ program
         const copilotGate = config.idle.copilotUsageGate;
         if (copilotGate?.enabled) {
           try {
+            const copilotStart = Date.now();
             const usage = await fetchCopilotUsage(token, copilotGate);
+            if (timingEnabled) {
+              log(
+                "info",
+                `${timingPrefix} (Copilot): rateLimits=${Date.now() - copilotStart}ms`,
+                json
+              );
+            }
             if (!usage) {
               log("warn", "Idle Copilot usage gate: unable to parse Copilot quota info.", json);
             } else {
