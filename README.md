@@ -157,7 +157,7 @@ Example config snippet:
       }
     },
     "report": {
-      "enabled": true,
+      "enabled": false,
       "repo": "agent-runner",
       "issueTitle": "Agent Runner Idle Reports",
       "createIfMissing": true
