@@ -494,7 +494,8 @@ program
       state = "Paused";
     }
     console.log(`Status: ${state}`);
-    console.log(`Generated: ${snapshot.generatedAt}`);
+    const generatedLocal = new Date(snapshot.generatedAt).toLocaleString();
+    console.log(`Generated: ${generatedLocal}`);
     console.log(`Workdir: ${snapshot.workdirRoot}`);
     console.log(`Running: ${snapshot.running.length}`);
     console.log(`Stale: ${snapshot.stale.length}`);
