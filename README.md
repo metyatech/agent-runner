@@ -229,6 +229,25 @@ Quick status summary (tasks + recent logs):
 .\scripts\status.ps1
 ```
 
+CLI snapshot (text):
+
+```bash
+node dist/cli.js status --config agent-runner.config.json
+```
+
+CLI snapshot (JSON):
+
+```bash
+node dist/cli.js status --config agent-runner.config.json --json
+```
+
+Pause/resume runner (graceful stop after current work):
+
+```bash
+node dist/cli.js stop --config agent-runner.config.json
+node dist/cli.js resume --config agent-runner.config.json
+```
+
 ## Status UI (GUI)
 
 Serve a local status dashboard that highlights active tasks and recent logs:
@@ -241,6 +260,14 @@ Then open:
 
 ```text
 http://127.0.0.1:4311/
+```
+
+## System tray
+
+Run a background tray helper to open the status UI and pause/resume the runner:
+
+```powershell
+.\scripts\tray.ps1 -RepoPath "." -ConfigPath ".\\agent-runner.config.json"
 ```
 
 ## Release / deploy

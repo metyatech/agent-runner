@@ -23,4 +23,12 @@ describe("cli", () => {
     expect(result.status).toBe(0);
     expect(result.stdout.trim()).toBe("0.1.0");
   });
+
+  it("shows status json", () => {
+    const result = runCli(["status", "--json"]);
+    expect(result.status).toBe(0);
+    const data = JSON.parse(result.stdout.trim());
+    expect(data).toHaveProperty("generatedAt");
+    expect(data).toHaveProperty("busy");
+  });
 });

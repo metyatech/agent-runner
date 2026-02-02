@@ -26,6 +26,7 @@ export type RunResult = {
   logPath: string;
   repos: RepoInfo[];
   summary: string | null;
+  activityId: string | null;
 };
 
 export type IdleTaskResult = {
@@ -297,12 +298,14 @@ export async function runIssue(
       child.on("error", (error) => reject(error));
       child.on("close", (code) => resolve(code ?? 1));
     });
+  } catch (error) {
+    if (activityRecorded && activityId) {
+      removeActivity(activityPath, activityId);
+    }
+    throw error;
   } finally {
     if (recordWritten) {
       removeRunningIssue(statePath, issue.id);
-    }
-    if (activityRecorded && activityId) {
-      removeActivity(activityPath, activityId);
     }
   }
 
@@ -312,7 +315,8 @@ export async function runIssue(
     success: exitCode === 0,
     logPath,
     repos,
-    summary
+    summary,
+    activityId
   };
 }
 
@@ -403,39 +407,46 @@ export async function runIdleTask(
   const startedAt = new Date().toISOString();
   const activityId = `idle:${repo.owner}/${repo.repo}:${Date.now()}`;
   let activityRecorded = false;
-  const exitCode = await new Promise<number>((resolve, reject) => {
-    const child = spawn(invocation.command, invocation.args, invocation.options);
-    if (typeof child.pid === "number") {
-      recordActivity(activityPath, {
-        id: activityId,
-        kind: "idle",
-        repo,
-        startedAt,
-        pid: child.pid,
-        logPath,
-        task
+  let exitCode: number;
+  try {
+    exitCode = await new Promise<number>((resolve, reject) => {
+      const child = spawn(invocation.command, invocation.args, invocation.options);
+      if (typeof child.pid === "number") {
+        recordActivity(activityPath, {
+          id: activityId,
+          kind: "idle",
+          repo,
+          startedAt,
+          pid: child.pid,
+          logPath,
+          task
+        });
+        activityRecorded = true;
+      }
+      child.stdout.on("data", (chunk) => {
+        appendLog(chunk);
+        process.stdout.write(chunk);
       });
-      activityRecorded = true;
-    }
-    child.stdout.on("data", (chunk) => {
-      appendLog(chunk);
-      process.stdout.write(chunk);
+      child.stderr.on("data", (chunk) => {
+        appendLog(chunk);
+        process.stderr.write(chunk);
+      });
+      child.on("error", (error) => reject(error));
+      child.on("close", (code) => resolve(code ?? 1));
     });
-    child.stderr.on("data", (chunk) => {
-      appendLog(chunk);
-      process.stderr.write(chunk);
-    });
-    child.on("error", (error) => reject(error));
-    child.on("close", (code) => resolve(code ?? 1));
-  }).finally(() => {
+  } catch (error) {
     if (activityRecorded) {
       removeActivity(activityPath, activityId);
     }
-  });
+    throw error;
+  }
 
   const summary = extractSummaryFromLog(logPath);
   const reportPath = resolveIdleReportPath(config.workdirRoot, repo);
   writeIdleReport(reportPath, repo, task, exitCode === 0, summary, logPath);
+  if (activityRecorded) {
+    removeActivity(activityPath, activityId);
+  }
 
   return {
     success: exitCode === 0,

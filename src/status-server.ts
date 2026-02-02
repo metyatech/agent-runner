@@ -62,6 +62,11 @@ function renderHtml(): string {
         color: var(--warn);
         border: 1px solid #f2c6ad;
       }
+      .badge.paused {
+        background: #efe6ff;
+        color: #4b2fa3;
+        border: 1px solid #d4c6ff;
+      }
       .meta {
         color: var(--muted);
         font-size: 13px;
@@ -239,8 +244,18 @@ function renderHtml(): string {
             throw new Error("status fetch failed");
           }
           const data = await res.json();
-          statusBadge.textContent = data.busy ? "Running" : "Idle";
-          statusBadge.className = "badge " + (data.busy ? "running" : "idle");
+          const stopRequested = Boolean(data.stopRequested);
+          let label = "Idle";
+          let style = "idle";
+          if (data.busy) {
+            label = stopRequested ? "Running (stop requested)" : "Running";
+            style = "running";
+          } else if (stopRequested) {
+            label = "Paused";
+            style = "paused";
+          }
+          statusBadge.textContent = label;
+          statusBadge.className = "badge " + style;
           generatedAt.textContent = data.generatedAt || "-";
           workdir.textContent = data.workdirRoot || "-";
 

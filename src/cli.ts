@@ -19,6 +19,9 @@ import {
   resolveRunnerStatePath
 } from "./runner-state.js";
 import { startStatusServer } from "./status-server.js";
+import { buildStatusSnapshot } from "./status-snapshot.js";
+import { removeActivity, resolveActivityStatePath } from "./activity-state.js";
+import { clearStopRequest, isStopRequested, requestStop } from "./stop-flag.js";
 
 const program = new Command();
 
@@ -48,6 +51,7 @@ program
 
     const configPath = path.resolve(process.cwd(), options.config);
     const config = loadConfig(configPath);
+    const activityPath = resolveActivityStatePath(config.workdirRoot);
 
     if (options.concurrency) {
       config.concurrency = Number.parseInt(options.concurrency, 10);
@@ -316,8 +320,10 @@ program
       await Promise.all(
         picked.map((issue) =>
           limit(async () => {
+            let activityId: string | null = null;
             try {
               const result = await runIssue(client, config, issue);
+              activityId = result.activityId;
               if (result.success) {
                 await client.addLabels(issue, [config.labels.done]);
                 await tryRemoveLabel(issue, config.labels.running);
@@ -355,6 +361,10 @@ program
                   [NEEDS_USER_MARKER]
                 )
               );
+            } finally {
+              if (activityId) {
+                removeActivity(activityPath, activityId);
+              }
             }
           })
         )
@@ -364,13 +374,26 @@ program
     try {
       const interval = Number.parseInt(options.interval, 10);
       if (options.once) {
+        if (isStopRequested(config.workdirRoot)) {
+          log("info", "Stop requested. Exiting runner loop.", json);
+          releaseLock(lock);
+          return;
+        }
         await runCycle();
         releaseLock(lock);
         return;
       }
 
       while (true) {
+        if (isStopRequested(config.workdirRoot)) {
+          log("info", "Stop requested. Exiting runner loop.", json);
+          break;
+        }
         await runCycle();
+        if (isStopRequested(config.workdirRoot)) {
+          log("info", "Stop requested. Exiting runner loop.", json);
+          break;
+        }
         await new Promise((resolve) => setTimeout(resolve, interval * 1000));
       }
     } finally {
@@ -449,6 +472,54 @@ program
         log("info", `Updated label ${label.name} in ${repo.repo}.`, json);
       }
     }
+  });
+
+program
+  .command("status")
+  .description("Show runner status snapshot.")
+  .option("-c, --config <path>", "Path to config file", "agent-runner.config.json")
+  .option("--json", "Output JSON", false)
+  .action(async (options) => {
+    const configPath = path.resolve(process.cwd(), options.config);
+    const config = loadConfig(configPath);
+    const snapshot = buildStatusSnapshot(config.workdirRoot);
+    if (options.json) {
+      console.log(JSON.stringify(snapshot, null, 2));
+      return;
+    }
+    let state = snapshot.busy ? "Running" : "Idle";
+    if (snapshot.stopRequested && snapshot.busy) {
+      state = "Running (stop requested)";
+    } else if (snapshot.stopRequested) {
+      state = "Paused";
+    }
+    console.log(`Status: ${state}`);
+    console.log(`Generated: ${snapshot.generatedAt}`);
+    console.log(`Workdir: ${snapshot.workdirRoot}`);
+    console.log(`Running: ${snapshot.running.length}`);
+    console.log(`Stale: ${snapshot.stale.length}`);
+  });
+
+program
+  .command("stop")
+  .description("Request the runner to stop after the current work completes.")
+  .option("-c, --config <path>", "Path to config file", "agent-runner.config.json")
+  .action(async (options) => {
+    const configPath = path.resolve(process.cwd(), options.config);
+    const config = loadConfig(configPath);
+    requestStop(config.workdirRoot);
+    console.log("Stop requested.");
+  });
+
+program
+  .command("resume")
+  .description("Clear a stop request so the runner can continue.")
+  .option("-c, --config <path>", "Path to config file", "agent-runner.config.json")
+  .action(async (options) => {
+    const configPath = path.resolve(process.cwd(), options.config);
+    const config = loadConfig(configPath);
+    clearStopRequest(config.workdirRoot);
+    console.log("Stop request cleared.");
   });
 
 program

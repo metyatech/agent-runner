@@ -6,6 +6,7 @@ import {
   type ActivityRecord
 } from "./activity-state.js";
 import { isProcessAlive, loadRunnerState, resolveRunnerStatePath } from "./runner-state.js";
+import { isStopRequested } from "./stop-flag.js";
 
 export type ActivitySnapshot = ActivityRecord & {
   alive: boolean;
@@ -21,6 +22,7 @@ export type StatusSnapshot = {
   generatedAt: string;
   workdirRoot: string;
   busy: boolean;
+  stopRequested: boolean;
   running: ActivitySnapshot[];
   stale: ActivitySnapshot[];
   activityUpdatedAt: string | null;
@@ -119,6 +121,7 @@ export function buildStatusSnapshot(workdirRoot: string): StatusSnapshot {
     generatedAt: now.toISOString(),
     workdirRoot,
     busy: running.length > 0,
+    stopRequested: isStopRequested(workdirRoot),
     running,
     stale,
     activityUpdatedAt,
