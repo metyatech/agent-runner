@@ -118,6 +118,8 @@ node dist/cli.js run --yes
 
 When no queued issues exist, the runner can execute idle tasks defined in the config.
 Each idle run writes a report under `reports/` and streams the Codex output to `logs/`.
+When changes are made, the idle prompt is expected to open a PR, mention @metyatech
+in a summary comment, and merge the PR.
 If `idle.usageGate.enabled` is true, idle runs only execute when the weekly reset
 window is near and unused weekly capacity remains. The weekly threshold ramps
 down as the reset approaches. The 5h window is used only to confirm that some

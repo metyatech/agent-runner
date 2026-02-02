@@ -14,7 +14,7 @@
       "Look for small, safe refactors (duplicate code, unused exports, dead comments). Apply only if tests can pass quickly.",
       "Review dependency updates (minor/patch). Apply the smallest safe update and run the relevant tests."
     ],
-    "promptTemplate": "You are running an autonomous idle task.\nTarget repo: {{repo}}\nTask: {{task}}\n\nRequirements:\n- Follow AGENTS.md rules.\n- Do not push directly to main/master. Use a branch, open a PR, merge it, and close the PR if there are changes.\n- If there are no safe changes, exit cleanly without opening a PR or reporting.\n- Repository creation, splitting, renaming, archiving, or deletion is allowed only when clearly justified; otherwise avoid repo-level changes.\n- At the end, output a summary block delimited by:\nAGENT_RUNNER_SUMMARY_START\n<summary>\nAGENT_RUNNER_SUMMARY_END\nInclude: changes made, tests run (or 'Not run'), and commit hashes.",
+    "promptTemplate": "You are running an autonomous idle task.\nTarget repo: {{repo}}\nTask: {{task}}\n\nRequirements:\n- Follow AGENTS.md rules.\n- Do not push directly to main/master. Use a branch, open a PR, post a summary comment that mentions @metyatech, then merge and close the PR if there are changes.\n- If there are no safe changes, exit cleanly without opening a PR or reporting.\n- Repository creation, splitting, renaming, archiving, or deletion is allowed only when clearly justified; otherwise avoid repo-level changes.\n- At the end, output a summary block delimited by:\nAGENT_RUNNER_SUMMARY_START\n<summary>\nAGENT_RUNNER_SUMMARY_END\nInclude: changes made, tests run (or 'Not run'), and commit hashes.",
     "usageGate": {
       "enabled": true,
       "command": "codex",
