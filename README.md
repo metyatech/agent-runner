@@ -183,7 +183,7 @@ Example config snippet:
       "apiBaseUrl": "https://api.github.com",
       "apiVersion": "2025-05-01",
       "monthlySchedule": {
-        "startMinutes": 1440,
+        "startMinutes": 10080,
         "minRemainingPercentAtStart": 100,
         "minRemainingPercentAtEnd": 0
       }
