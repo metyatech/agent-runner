@@ -18,6 +18,33 @@ describe("loadConfig", () => {
           workdirRoot: "D:\\ghws",
           pollIntervalSeconds: 60,
           concurrency: 1,
+          idle: {
+            enabled: true,
+            maxRunsPerCycle: 1,
+            cooldownMinutes: 60,
+            tasks: ["Run a lightweight health check."],
+            promptTemplate: "Idle {{repo}} {{task}}",
+            usageGate: {
+              enabled: true,
+              command: "codex",
+              args: [],
+              timeoutSeconds: 20,
+              minRemainingPercent: {
+                fiveHour: 50
+              },
+              weeklySchedule: {
+                startMinutes: 1440,
+                minRemainingPercentAtStart: 100,
+                minRemainingPercentAtEnd: 0
+              }
+            },
+            report: {
+              enabled: true,
+              repo: "agent-runner",
+              issueTitle: "Agent Runner Idle Reports",
+              createIfMissing: true
+            }
+          },
           labels: {
             request: "agent:request",
             queued: "agent:queued",

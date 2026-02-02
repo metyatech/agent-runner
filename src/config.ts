@@ -10,6 +10,33 @@ export type AgentRunnerConfig = {
   workdirRoot: string;
   pollIntervalSeconds: number;
   concurrency: number;
+  idle?: {
+    enabled: boolean;
+    maxRunsPerCycle: number;
+    cooldownMinutes: number;
+    tasks: string[];
+    promptTemplate: string;
+    usageGate?: {
+      enabled: boolean;
+      command: string;
+      args: string[];
+      timeoutSeconds: number;
+      minRemainingPercent: {
+        fiveHour: number;
+      };
+      weeklySchedule: {
+        startMinutes: number;
+        minRemainingPercentAtStart: number;
+        minRemainingPercentAtEnd: number;
+      };
+    };
+    report?: {
+      enabled: boolean;
+      repo: string;
+      issueTitle: string;
+      createIfMissing: boolean;
+    };
+  };
   labels: {
     request: string;
     queued: string;

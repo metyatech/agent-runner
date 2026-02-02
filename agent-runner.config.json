@@ -4,6 +4,38 @@
   "workdirRoot": "D:\\ghws",
   "pollIntervalSeconds": 60,
   "concurrency": 8,
+  "idle": {
+    "enabled": true,
+    "maxRunsPerCycle": 2,
+    "cooldownMinutes": 240,
+    "tasks": [
+      "Run a lightweight health check. Prefer the repo-standard lint/test/build (or the smallest relevant subset). Fix only safe, localized issues.",
+      "Scan README and docs for outdated commands or paths. Fix inconsistencies and keep examples repo-relative.",
+      "Look for small, safe refactors (duplicate code, unused exports, dead comments). Apply only if tests can pass quickly.",
+      "Review dependency updates (minor/patch). Apply the smallest safe update and run the relevant tests."
+    ],
+    "promptTemplate": "You are running an autonomous idle task.\nTarget repo: {{repo}}\nTask: {{task}}\n\nRequirements:\n- Follow AGENTS.md rules.\n- You may commit and push changes directly, or open PRs if riskier.\n- Repository creation, splitting, renaming, archiving, or deletion is allowed only when clearly justified; otherwise avoid repo-level changes.\n- If no safe change is found, produce a brief summary and exit cleanly.\n- At the end, output a summary block delimited by:\nAGENT_RUNNER_SUMMARY_START\n<summary>\nAGENT_RUNNER_SUMMARY_END\nInclude: changes made, tests run (or 'Not run'), and commit hashes.",
+    "usageGate": {
+      "enabled": true,
+      "command": "codex",
+      "args": [],
+      "timeoutSeconds": 20,
+      "minRemainingPercent": {
+        "fiveHour": 50
+      },
+      "weeklySchedule": {
+        "startMinutes": 1440,
+        "minRemainingPercentAtStart": 100,
+        "minRemainingPercentAtEnd": 0
+      }
+    },
+    "report": {
+      "enabled": true,
+      "repo": "agent-runner",
+      "issueTitle": "Agent Runner Idle Reports",
+      "createIfMissing": true
+    }
+  },
   "labels": {
     "request": "agent:request",
     "queued": "agent:queued",

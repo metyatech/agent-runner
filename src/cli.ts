@@ -9,8 +9,10 @@ import { buildAgentLabels } from "./labels.js";
 import { log } from "./logger.js";
 import { acquireLock, releaseLock } from "./lock.js";
 import { buildAgentComment, hasUserReplySince, NEEDS_USER_MARKER } from "./notifications.js";
+import { evaluateUsageGate, fetchCodexStatusOutput, parseCodexStatus } from "./codex-status.js";
 import { listTargetRepos, listQueuedIssues, pickNextIssues, queueNewRequests } from "./queue.js";
-import { runIssue } from "./runner.js";
+import { postIdleReport } from "./idle-report.js";
+import { planIdleTasks, runIdleTask, runIssue } from "./runner.js";
 import {
   evaluateRunningIssues,
   isProcessAlive,
@@ -203,7 +205,119 @@ program
 
       const picked = pickNextIssues(queuedIssues, config.concurrency);
       if (picked.length === 0) {
-        log("info", "No queued requests.", json);
+        if (!config.idle?.enabled) {
+          log("info", "No queued requests.", json);
+          return;
+        }
+
+        const usageGate = config.idle.usageGate;
+        if (usageGate?.enabled) {
+          try {
+            const output = await fetchCodexStatusOutput(
+              usageGate.command,
+              usageGate.args,
+              usageGate.timeoutSeconds,
+              config.workdirRoot
+            );
+            const status = parseCodexStatus(output);
+            if (!status) {
+              log("warn", "Idle usage gate: unable to parse /status output. Skipping idle.", json);
+              return;
+            }
+
+            const decision = evaluateUsageGate(status, usageGate);
+            if (!decision.allow) {
+              log("info", `Idle usage gate blocked. ${decision.reason}`, json);
+              return;
+            }
+
+            log("info", `Idle usage gate allowed. ${decision.reason}`, json, {
+              window: decision.window?.label,
+              minutesToReset: decision.minutesToReset
+            });
+          } catch (error) {
+            log("warn", "Idle usage gate failed. Skipping idle.", json, {
+              error: error instanceof Error ? error.message : String(error)
+            });
+            return;
+          }
+        }
+
+        const idleTasks = await planIdleTasks(config, repos);
+        if (idleTasks.length === 0) {
+          log("info", "No queued requests. Idle cooldown active or no eligible repos.", json);
+          return;
+        }
+
+        log(
+          "info",
+          `No queued requests. Scheduling ${idleTasks.length} idle task(s).`,
+          json,
+          {
+            repos: idleTasks.map((task) => `${task.repo.owner}/${task.repo.repo}`)
+          }
+        );
+
+        if (dryRun) {
+          log("info", "Dry-run: would execute idle tasks.", json, {
+            tasks: idleTasks.map((task) => ({
+              repo: `${task.repo.owner}/${task.repo.repo}`,
+              task: task.task
+            }))
+          });
+          return;
+        }
+
+        const idleLimit = pLimit(config.concurrency);
+        await Promise.all(
+          idleTasks.map((task) =>
+            idleLimit(async () => {
+              const result = await runIdleTask(config, task.repo, task.task);
+              if (result.success) {
+                log("info", "Idle task completed.", json, {
+                  repo: `${result.repo.owner}/${result.repo.repo}`,
+                  report: result.reportPath,
+                  log: result.logPath
+                });
+                try {
+                  await postIdleReport(client, config, {
+                    repo: result.repo,
+                    task: result.task,
+                    success: result.success,
+                    logPath: result.logPath,
+                    reportPath: result.reportPath,
+                    summary: result.summary
+                  });
+                } catch (error) {
+                  log("warn", "Failed to post idle report.", json, {
+                    error: error instanceof Error ? error.message : String(error)
+                  });
+                }
+                return;
+              }
+              log("warn", "Idle task failed.", json, {
+                repo: `${result.repo.owner}/${result.repo.repo}`,
+                report: result.reportPath,
+                log: result.logPath
+              });
+              try {
+                await postIdleReport(client, config, {
+                  repo: result.repo,
+                  task: result.task,
+                  success: result.success,
+                  logPath: result.logPath,
+                  reportPath: result.reportPath,
+                  summary: result.summary
+                });
+              } catch (error) {
+                log("warn", "Failed to post idle report.", json, {
+                  error: error instanceof Error ? error.message : String(error)
+                });
+              }
+            })
+          )
+        );
+
         return;
       }
 

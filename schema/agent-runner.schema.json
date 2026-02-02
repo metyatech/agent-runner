@@ -33,6 +33,76 @@
       "minimum": 1,
       "maximum": 16
     },
+    "idle": {
+      "type": "object",
+      "required": ["enabled", "maxRunsPerCycle", "cooldownMinutes", "tasks", "promptTemplate"],
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "maxRunsPerCycle": { "type": "integer", "minimum": 1, "maximum": 16 },
+        "cooldownMinutes": { "type": "integer", "minimum": 0, "maximum": 10080 },
+        "tasks": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 },
+          "minItems": 1
+        },
+        "promptTemplate": { "type": "string", "minLength": 1 },
+        "usageGate": {
+          "type": "object",
+          "required": [
+            "enabled",
+            "command",
+            "args",
+            "timeoutSeconds",
+            "minRemainingPercent",
+            "weeklySchedule"
+          ],
+          "properties": {
+            "enabled": { "type": "boolean" },
+            "command": { "type": "string", "minLength": 1 },
+            "args": {
+              "type": "array",
+              "items": { "type": "string" }
+            },
+            "timeoutSeconds": { "type": "integer", "minimum": 1, "maximum": 120 },
+            "minRemainingPercent": {
+              "type": "object",
+              "required": ["fiveHour"],
+              "properties": {
+                "fiveHour": { "type": "number", "minimum": 0, "maximum": 100 }
+              },
+              "additionalProperties": false
+            },
+            "weeklySchedule": {
+              "type": "object",
+              "required": [
+                "startMinutes",
+                "minRemainingPercentAtStart",
+                "minRemainingPercentAtEnd"
+              ],
+              "properties": {
+                "startMinutes": { "type": "integer", "minimum": 0, "maximum": 10080 },
+                "minRemainingPercentAtStart": { "type": "number", "minimum": 0, "maximum": 100 },
+                "minRemainingPercentAtEnd": { "type": "number", "minimum": 0, "maximum": 100 }
+              },
+              "additionalProperties": false
+            }
+          },
+          "additionalProperties": false
+        },
+        "report": {
+          "type": "object",
+          "required": ["enabled", "repo", "issueTitle", "createIfMissing"],
+          "properties": {
+            "enabled": { "type": "boolean" },
+            "repo": { "type": "string", "minLength": 1 },
+            "issueTitle": { "type": "string", "minLength": 1 },
+            "createIfMissing": { "type": "boolean" }
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    },
     "labels": {
       "type": "object",
       "required": ["request", "queued", "running", "done", "failed", "needsUser"],

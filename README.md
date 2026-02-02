@@ -6,6 +6,7 @@ Local agent runner that queues and executes GitHub Agent requests using Codex.
 
 - Watches GitHub Issues labeled `agent:request`.
 - Queues requests, runs up to the configured concurrency, and posts results back to GitHub.
+- Runs idle maintenance tasks when no queued issues are available.
 - Designed for a self-hosted Windows machine running Codex CLI.
 
 ## Setup
@@ -82,6 +83,27 @@ Config file: `agent-runner.config.json`
 - `codex.args`: Default config runs with full access (`--dangerously-bypass-approvals-and-sandbox`); change this if you want approvals or sandboxing.
 - `codex.promptTemplate`: The runner expects a summary block in the output to post to the issue thread.
   - The default template allows GitHub operations (issues/PRs/commits/pushes) but forbids sending/posting outside GitHub unless the user explicitly approves in the issue.
+- `idle`: Optional idle task settings (runs when no queued issues exist)
+  - `idle.enabled`: Turn idle tasks on/off
+  - `idle.maxRunsPerCycle`: Max idle tasks per cycle
+  - `idle.cooldownMinutes`: Per-repo cooldown between idle runs
+  - `idle.tasks`: List of task prompts to rotate through
+  - `idle.promptTemplate`: Prompt template for idle runs; supports `{{repo}}` and `{{task}}`
+  - `idle.usageGate`: Optional Codex usage guard (reads `/status` output)
+  - `idle.usageGate.enabled`: Turn usage gating on/off
+  - `idle.usageGate.command`: Command used to launch Codex for `/status`
+  - `idle.usageGate.args`: Arguments passed to the command
+  - `idle.usageGate.timeoutSeconds`: Timeout for `/status` collection
+    - `idle.usageGate.minRemainingPercent`: Minimum remaining percent for the 5h window
+    - `idle.usageGate.weeklySchedule`: Weekly ramp for remaining percent
+      - `idle.usageGate.weeklySchedule.startMinutes`: When to begin idle runs (minutes before weekly reset)
+      - `idle.usageGate.weeklySchedule.minRemainingPercentAtStart`: Required weekly percent left at startMinutes
+      - `idle.usageGate.weeklySchedule.minRemainingPercentAtEnd`: Required weekly percent left at reset time
+  - `idle.report`: Optional GitHub issue reporting for idle runs
+    - `idle.report.enabled`: Turn GitHub reporting on/off
+    - `idle.report.repo`: Repository that holds the report issue
+    - `idle.report.issueTitle`: Issue title for the rolling idle report
+    - `idle.report.createIfMissing`: Create the issue if it does not exist
 
 ## Running
 
@@ -95,6 +117,53 @@ Looping daemon:
 
 ```bash
 node dist/cli.js run --yes
+```
+
+## Idle runs (issue-less)
+
+When no queued issues exist, the runner can execute idle tasks defined in the config.
+Each idle run writes a report under `reports/` and streams the Codex output to `logs/`.
+If `idle.report.enabled` is true, the runner also posts a summary comment to a GitHub issue.
+If `idle.usageGate.enabled` is true, idle runs only execute when the weekly reset
+window is near and unused weekly capacity remains. The weekly threshold ramps
+down as the reset approaches. The 5h window is used only to confirm that some
+short-term capacity remains (5h reset timing is ignored).
+
+Example config snippet:
+
+```json
+{
+  "idle": {
+    "enabled": true,
+    "maxRunsPerCycle": 1,
+    "cooldownMinutes": 240,
+    "tasks": [
+      "Run a lightweight health check and fix safe issues.",
+      "Check README and docs for outdated commands."
+    ],
+    "promptTemplate": "You are running an autonomous idle task. Target repo: {{repo}}. Task: {{task}}",
+    "usageGate": {
+      "enabled": true,
+      "command": "codex",
+      "args": [],
+      "timeoutSeconds": 20,
+      "minRemainingPercent": {
+        "fiveHour": 50
+      },
+      "weeklySchedule": {
+        "startMinutes": 1440,
+        "minRemainingPercentAtStart": 100,
+        "minRemainingPercentAtEnd": 0
+      }
+    },
+    "report": {
+      "enabled": true,
+      "repo": "agent-runner",
+      "issueTitle": "Agent Runner Idle Reports",
+      "createIfMissing": true
+    }
+  }
+}
 ```
 
 ## Label sync

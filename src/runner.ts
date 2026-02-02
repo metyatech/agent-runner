@@ -3,6 +3,15 @@ import path from "node:path";
 import { spawn } from "node:child_process";
 import type { AgentRunnerConfig } from "./config.js";
 import type { GitHubClient, IssueComment, IssueInfo, RepoInfo } from "./github.js";
+import { resolveCodexCommand } from "./codex-command.js";
+import {
+  chooseIdleTask,
+  loadIdleHistory,
+  recordIdleRun,
+  resolveIdleHistoryPath,
+  saveIdleHistory,
+  selectIdleRepos
+} from "./idle.js";
 import { parseIssueBody } from "./issue.js";
 import { recordRunningIssue, removeRunningIssue, resolveRunnerStatePath } from "./runner-state.js";
 import { AGENT_RUNNER_MARKER, findLastMarkerComment, NEEDS_USER_MARKER } from "./notifications.js";
@@ -12,6 +21,15 @@ export type RunResult = {
   logPath: string;
   repos: RepoInfo[];
   summary: string | null;
+};
+
+export type IdleTaskResult = {
+  success: boolean;
+  logPath: string;
+  repo: RepoInfo;
+  task: string;
+  summary: string | null;
+  reportPath: string;
 };
 
 export type CodexInvocation = {
@@ -154,83 +172,17 @@ function renderPrompt(template: string, repos: RepoInfo[], issue: IssueInfo, com
   return template.replace("{{repos}}", repoList).replace("{{task}}", taskText);
 }
 
-function resolveWindowsCommand(command: string, pathValue: string | undefined): string {
-  if (process.platform !== "win32") {
-    return command;
-  }
-
-  if (path.extname(command) || command.includes("\\") || command.includes("/")) {
-    return command;
-  }
-
-  const pathEntries = (pathValue ?? "").split(";");
-  const fallbackEntries: string[] = [];
-  const appData = process.env.APPDATA;
-  const localAppData = process.env.LOCALAPPDATA;
-  const userProfile = process.env.USERPROFILE;
-  const npmPrefix = process.env.npm_config_prefix ?? process.env.NPM_CONFIG_PREFIX;
-
-  if (npmPrefix) {
-    fallbackEntries.push(npmPrefix);
-  }
-
-  if (appData) {
-    fallbackEntries.push(path.join(appData, "npm"));
-  }
-
-  if (localAppData) {
-    fallbackEntries.push(path.join(localAppData, "npm"));
-  }
-
-  if (userProfile) {
-    fallbackEntries.push(path.join(userProfile, "AppData", "Roaming", "npm"));
-  }
-
-  const searchEntries = Array.from(new Set([...pathEntries, ...fallbackEntries]));
-  const cmdName = `${command}.cmd`;
-  const exeName = `${command}.exe`;
-
-  for (const entry of searchEntries) {
-    if (!entry) {
-      continue;
-    }
-    const cmdPath = path.join(entry, cmdName);
-    if (fs.existsSync(cmdPath)) {
-      return cmdPath;
-    }
-    const exePath = path.join(entry, exeName);
-    if (fs.existsSync(exePath)) {
-      return exePath;
-    }
-  }
-
-  return command;
-}
-
-function resolveCodexCommand(
-  command: string,
-  pathValue: string | undefined
-): { command: string; prefixArgs: string[] } {
-  const resolved = resolveWindowsCommand(command, pathValue);
-
-  if (process.platform === "win32") {
-    const base = path.basename(resolved).toLowerCase();
-    if (base === "codex.cmd" || base === "codex.ps1") {
-      const codexJs = path.join(
-        path.dirname(resolved),
-        "node_modules",
-        "@openai",
-        "codex",
-        "bin",
-        "codex.js"
-      );
-      if (fs.existsSync(codexJs)) {
-        return { command: process.execPath, prefixArgs: [codexJs] };
-      }
-    }
-  }
-
-  return { command: resolved, prefixArgs: [] };
+function renderIdlePrompt(template: string, repo: RepoInfo, task: string): string {
+  const repoSlug = `${repo.owner}/${repo.repo}`;
+  return template
+    .split("{{repo}}")
+    .join(repoSlug)
+    .split("{{owner}}")
+    .join(repo.owner)
+    .split("{{repoName}}")
+    .join(repo.repo)
+    .split("{{task}}")
+    .join(task);
 }
 
 export function buildCodexInvocation(
@@ -337,6 +289,117 @@ export async function runIssue(
     logPath,
     repos,
     summary
+  };
+}
+
+function resolveIdleReportPath(workdirRoot: string, repo: RepoInfo): string {
+  const reportsDir = path.resolve(workdirRoot, "agent-runner", "reports");
+  fs.mkdirSync(reportsDir, { recursive: true });
+  return path.join(reportsDir, `${repo.owner}-${repo.repo}-idle-${Date.now()}.md`);
+}
+
+function writeIdleReport(
+  reportPath: string,
+  repo: RepoInfo,
+  task: string,
+  success: boolean,
+  summary: string | null,
+  logPath: string
+): void {
+  const lines = [
+    `# Idle task report`,
+    ``,
+    `- Repo: ${repo.owner}/${repo.repo}`,
+    `- Task: ${task}`,
+    `- Success: ${success}`,
+    `- Log: ${logPath}`,
+    `- Timestamp: ${new Date().toISOString()}`,
+    ``,
+    `## Summary`,
+    summary ? summary.trim() : "No summary captured."
+  ];
+  fs.writeFileSync(reportPath, `${lines.join("\n")}\n`, "utf8");
+}
+
+export async function planIdleTasks(
+  config: AgentRunnerConfig,
+  repos: RepoInfo[]
+): Promise<Array<{ repo: RepoInfo; task: string }>> {
+  if (!config.idle?.enabled) {
+    return [];
+  }
+
+  const historyPath = resolveIdleHistoryPath(config.workdirRoot);
+  const history = loadIdleHistory(historyPath);
+  const targets = selectIdleRepos(
+    repos,
+    history,
+    config.idle.maxRunsPerCycle,
+    config.idle.cooldownMinutes
+  );
+
+  if (targets.length === 0) {
+    return [];
+  }
+
+  const planned: Array<{ repo: RepoInfo; task: string }> = [];
+  const startedAt = new Date().toISOString();
+
+  for (const repo of targets) {
+    const { task, nextCursor } = chooseIdleTask(config.idle.tasks, history);
+    history.taskCursor = nextCursor;
+    recordIdleRun(history, repo, task, startedAt);
+    planned.push({ repo, task });
+  }
+
+  saveIdleHistory(historyPath, history);
+  return planned;
+}
+
+export async function runIdleTask(
+  config: AgentRunnerConfig,
+  repo: RepoInfo,
+  task: string
+): Promise<IdleTaskResult> {
+  await cloneRepo(config.workdirRoot, repo);
+
+  const repoPath = resolveRepoPath(config.workdirRoot, repo);
+  const prompt = renderIdlePrompt(config.idle?.promptTemplate ?? "", repo, task);
+
+  const logDir = path.resolve(config.workdirRoot, "agent-runner", "logs");
+  fs.mkdirSync(logDir, { recursive: true });
+  const logPath = path.join(logDir, `${repo.repo}-idle-${Date.now()}.log`);
+
+  const appendLog = (chunk: Buffer | string): void => {
+    fs.appendFileSync(logPath, chunk);
+  };
+
+  const invocation = buildCodexInvocation(config, repoPath, prompt);
+  const exitCode = await new Promise<number>((resolve, reject) => {
+    const child = spawn(invocation.command, invocation.args, invocation.options);
+    child.stdout.on("data", (chunk) => {
+      appendLog(chunk);
+      process.stdout.write(chunk);
+    });
+    child.stderr.on("data", (chunk) => {
+      appendLog(chunk);
+      process.stderr.write(chunk);
+    });
+    child.on("error", (error) => reject(error));
+    child.on("close", (code) => resolve(code ?? 1));
+  });
+
+  const summary = extractSummaryFromLog(logPath);
+  const reportPath = resolveIdleReportPath(config.workdirRoot, repo);
+  writeIdleReport(reportPath, repo, task, exitCode === 0, summary, logPath);
+
+  return {
+    success: exitCode === 0,
+    logPath,
+    repo,
+    task,
+    summary,
+    reportPath
   };
 }
 
