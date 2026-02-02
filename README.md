@@ -123,7 +123,7 @@ the runner marks it as failed + needs-user and asks for a reply.
 Register a scheduled task that runs every minute:
 
 ```powershell
-.\scripts\register-task.ps1 -RepoPath "C:\\path\\to\\agent-runner" -ConfigPath "C:\\path\\to\\agent-runner\\agent-runner.config.json"
+.\scripts\register-task.ps1 -RepoPath "." -ConfigPath ".\\agent-runner.config.json"
 ```
 
 Unregister the task:
@@ -154,7 +154,7 @@ AGENT_RUNNER_SUMMARY_END
 Register a daily label sync task:
 
 ```powershell
-.\scripts\register-label-sync-task.ps1 -RepoPath "C:\\path\\to\\agent-runner" -ConfigPath "C:\\path\\to\\agent-runner\\agent-runner.config.json"
+.\scripts\register-label-sync-task.ps1 -RepoPath "." -ConfigPath ".\\agent-runner.config.json"
 ```
 
 Unregister the label sync task:
@@ -174,3 +174,4 @@ Quick status summary (tasks + recent logs):
 ## Release / deploy
 
 Not applicable. This repository is intended to run locally.
+
