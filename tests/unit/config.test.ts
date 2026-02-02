@@ -35,11 +35,22 @@ describe("loadConfig", () => {
               minRemainingPercent: {
                 fiveHour: 50
               },
-            weeklySchedule: {
-              startMinutes: 1440,
-              minRemainingPercentAtStart: 100,
-              minRemainingPercentAtEnd: 0
-            }
+              weeklySchedule: {
+                startMinutes: 1440,
+                minRemainingPercentAtStart: 100,
+                minRemainingPercentAtEnd: 0
+              }
+            },
+            copilotUsageGate: {
+              enabled: true,
+              timeoutSeconds: 20,
+              apiBaseUrl: "https://api.github.com",
+              apiVersion: "2025-05-01",
+              monthlySchedule: {
+                startMinutes: 1440,
+                minRemainingPercentAtStart: 100,
+                minRemainingPercentAtEnd: 0
+              }
             }
           },
           labels: {

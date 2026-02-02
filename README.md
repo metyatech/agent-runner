@@ -101,6 +101,15 @@ Config file: `agent-runner.config.json`
       - `idle.usageGate.weeklySchedule.startMinutes`: When to begin idle runs (minutes before weekly reset)
       - `idle.usageGate.weeklySchedule.minRemainingPercentAtStart`: Required weekly percent left at startMinutes
       - `idle.usageGate.weeklySchedule.minRemainingPercentAtEnd`: Required weekly percent left at reset time
+  - `idle.copilotUsageGate`: Optional Copilot monthly usage guard (reads `copilot_internal/user`)
+  - `idle.copilotUsageGate.enabled`: Turn Copilot usage gating on/off
+  - `idle.copilotUsageGate.timeoutSeconds`: Timeout for Copilot usage lookup
+  - `idle.copilotUsageGate.apiBaseUrl`: Optional GitHub API base URL (default `https://api.github.com`)
+  - `idle.copilotUsageGate.apiVersion`: Optional GitHub API version header (default `2025-05-01`)
+  - `idle.copilotUsageGate.monthlySchedule`: Monthly ramp for remaining percent
+    - `idle.copilotUsageGate.monthlySchedule.startMinutes`: When to begin idle runs (minutes before monthly reset)
+    - `idle.copilotUsageGate.monthlySchedule.minRemainingPercentAtStart`: Required monthly percent left at startMinutes
+    - `idle.copilotUsageGate.monthlySchedule.minRemainingPercentAtEnd`: Required monthly percent left at reset time
 
 ## Running
 
@@ -127,6 +136,9 @@ If `idle.usageGate.enabled` is true, idle runs only execute when the weekly rese
 window is near and unused weekly capacity remains. The weekly threshold ramps
 down as the reset approaches. The 5h window is used only to confirm that some
 short-term capacity remains (5h reset timing is ignored).
+If `idle.copilotUsageGate.enabled` is true, idle runs also require Copilot monthly
+usage to be within the configured reset window and above the remaining-percent
+threshold for that window.
 
 Example config snippet:
 
@@ -150,6 +162,17 @@ Example config snippet:
         "fiveHour": 50
       },
       "weeklySchedule": {
+        "startMinutes": 1440,
+        "minRemainingPercentAtStart": 100,
+        "minRemainingPercentAtEnd": 0
+      }
+    },
+    "copilotUsageGate": {
+      "enabled": true,
+      "timeoutSeconds": 20,
+      "apiBaseUrl": "https://api.github.com",
+      "apiVersion": "2025-05-01",
+      "monthlySchedule": {
         "startMinutes": 1440,
         "minRemainingPercentAtStart": 100,
         "minRemainingPercentAtEnd": 0

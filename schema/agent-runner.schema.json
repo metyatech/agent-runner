@@ -89,6 +89,31 @@
             }
           },
           "additionalProperties": false
+        },
+        "copilotUsageGate": {
+          "type": "object",
+          "required": ["enabled", "timeoutSeconds", "monthlySchedule"],
+          "properties": {
+            "enabled": { "type": "boolean" },
+            "timeoutSeconds": { "type": "integer", "minimum": 1, "maximum": 120 },
+            "apiBaseUrl": { "type": "string", "minLength": 1 },
+            "apiVersion": { "type": "string", "minLength": 1 },
+            "monthlySchedule": {
+              "type": "object",
+              "required": [
+                "startMinutes",
+                "minRemainingPercentAtStart",
+                "minRemainingPercentAtEnd"
+              ],
+              "properties": {
+                "startMinutes": { "type": "integer", "minimum": 0, "maximum": 525600 },
+                "minRemainingPercentAtStart": { "type": "number", "minimum": 0, "maximum": 100 },
+                "minRemainingPercentAtEnd": { "type": "number", "minimum": 0, "maximum": 100 }
+              },
+              "additionalProperties": false
+            }
+          },
+          "additionalProperties": false
         }
       },
       "additionalProperties": false

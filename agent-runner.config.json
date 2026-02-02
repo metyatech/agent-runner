@@ -26,6 +26,17 @@
         "minRemainingPercentAtEnd": 0
       }
     },
+    "copilotUsageGate": {
+      "enabled": true,
+      "timeoutSeconds": 20,
+      "apiBaseUrl": "https://api.github.com",
+      "apiVersion": "2025-05-01",
+      "monthlySchedule": {
+        "startMinutes": 1440,
+        "minRemainingPercentAtStart": 100,
+        "minRemainingPercentAtEnd": 0
+      }
+    },
     "repoScope": "local"
   },
   "labels": {

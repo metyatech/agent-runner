@@ -31,6 +31,17 @@ export type AgentRunnerConfig = {
         minRemainingPercentAtEnd: number;
       };
     };
+    copilotUsageGate?: {
+      enabled: boolean;
+      timeoutSeconds: number;
+      apiBaseUrl?: string;
+      apiVersion?: string;
+      monthlySchedule: {
+        startMinutes: number;
+        minRemainingPercentAtStart: number;
+        minRemainingPercentAtEnd: number;
+      };
+    };
   };
   labels: {
     request: string;

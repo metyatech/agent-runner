@@ -10,6 +10,7 @@ import { log } from "./logger.js";
 import { acquireLock, releaseLock } from "./lock.js";
 import { buildAgentComment, hasUserReplySince, NEEDS_USER_MARKER } from "./notifications.js";
 import { evaluateUsageGate, fetchCodexStatusOutput, parseCodexStatus } from "./codex-status.js";
+import { evaluateCopilotUsageGate, fetchCopilotUsage } from "./copilot-usage.js";
 import { listTargetRepos, listQueuedIssues, pickNextIssues, queueNewRequests } from "./queue.js";
 import { planIdleTasks, runIdleTask, runIssue } from "./runner.js";
 import { listLocalRepos } from "./local-repos.js";
@@ -267,6 +268,37 @@ program
             });
           } catch (error) {
             log("warn", "Idle usage gate failed. Skipping idle.", json, {
+              error: error instanceof Error ? error.message : String(error)
+            });
+            return;
+          }
+        }
+
+        const copilotGate = config.idle.copilotUsageGate;
+        if (copilotGate?.enabled) {
+          try {
+            const usage = await fetchCopilotUsage(token, copilotGate);
+            if (!usage) {
+              log(
+                "warn",
+                "Idle Copilot usage gate: unable to parse Copilot quota info. Skipping idle.",
+                json
+              );
+              return;
+            }
+
+            const decision = evaluateCopilotUsageGate(usage, copilotGate);
+            if (!decision.allow) {
+              log("info", `Idle Copilot usage gate blocked. ${decision.reason}`, json);
+              return;
+            }
+
+            log("info", `Idle Copilot usage gate allowed. ${decision.reason}`, json, {
+              percentRemaining: decision.percentRemaining,
+              minutesToReset: decision.minutesToReset
+            });
+          } catch (error) {
+            log("warn", "Idle Copilot usage gate failed. Skipping idle.", json, {
               error: error instanceof Error ? error.message : String(error)
             });
             return;
