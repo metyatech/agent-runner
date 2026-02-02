@@ -20,6 +20,7 @@ import {
   resolveActivityStatePath
 } from "./activity-state.js";
 import { AGENT_RUNNER_MARKER, findLastMarkerComment, NEEDS_USER_MARKER } from "./notifications.js";
+import { normalizeLogChunk } from "./log-normalize.js";
 
 export type RunResult = {
   success: boolean;
@@ -243,8 +244,8 @@ export async function runIssue(
     `${issue.repo.repo}-issue-${issue.number}-${Date.now()}.log`
   );
 
-  const appendLog = (chunk: Buffer | string): void => {
-    fs.appendFileSync(logPath, chunk);
+  const appendLog = (value: string): void => {
+    fs.appendFileSync(logPath, value);
   };
   const statePath = resolveRunnerStatePath(config.workdirRoot);
   const activityPath = resolveActivityStatePath(config.workdirRoot);
@@ -286,13 +287,15 @@ export async function runIssue(
       }
 
       child.stdout.on("data", (chunk) => {
-        appendLog(chunk);
-        process.stdout.write(chunk);
+        const normalized = normalizeLogChunk(chunk);
+        appendLog(normalized);
+        process.stdout.write(normalized);
       });
 
       child.stderr.on("data", (chunk) => {
-        appendLog(chunk);
-        process.stderr.write(chunk);
+        const normalized = normalizeLogChunk(chunk);
+        appendLog(normalized);
+        process.stderr.write(normalized);
       });
 
       child.on("error", (error) => reject(error));
@@ -398,8 +401,8 @@ export async function runIdleTask(
   fs.mkdirSync(logDir, { recursive: true });
   const logPath = path.join(logDir, `${repo.repo}-idle-${Date.now()}.log`);
 
-  const appendLog = (chunk: Buffer | string): void => {
-    fs.appendFileSync(logPath, chunk);
+  const appendLog = (value: string): void => {
+    fs.appendFileSync(logPath, value);
   };
 
   const invocation = buildCodexInvocation(config, repoPath, prompt);
@@ -423,14 +426,16 @@ export async function runIdleTask(
         });
         activityRecorded = true;
       }
-      child.stdout.on("data", (chunk) => {
-        appendLog(chunk);
-        process.stdout.write(chunk);
-      });
-      child.stderr.on("data", (chunk) => {
-        appendLog(chunk);
-        process.stderr.write(chunk);
-      });
+    child.stdout.on("data", (chunk) => {
+      const normalized = normalizeLogChunk(chunk);
+      appendLog(normalized);
+      process.stdout.write(normalized);
+    });
+    child.stderr.on("data", (chunk) => {
+      const normalized = normalizeLogChunk(chunk);
+      appendLog(normalized);
+      process.stderr.write(normalized);
+    });
       child.on("error", (error) => reject(error));
       child.on("close", (code) => resolve(code ?? 1));
     });
