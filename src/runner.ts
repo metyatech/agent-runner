@@ -14,6 +14,11 @@ import {
 } from "./idle.js";
 import { parseIssueBody } from "./issue.js";
 import { recordRunningIssue, removeRunningIssue, resolveRunnerStatePath } from "./runner-state.js";
+import {
+  recordActivity,
+  removeActivity,
+  resolveActivityStatePath
+} from "./activity-state.js";
 import { AGENT_RUNNER_MARKER, findLastMarkerComment, NEEDS_USER_MARKER } from "./notifications.js";
 
 export type RunResult = {
@@ -241,10 +246,13 @@ export async function runIssue(
     fs.appendFileSync(logPath, chunk);
   };
   const statePath = resolveRunnerStatePath(config.workdirRoot);
+  const activityPath = resolveActivityStatePath(config.workdirRoot);
 
   const invocation = buildCodexInvocation(config, primaryPath, prompt);
 
   let recordWritten = false;
+  let activityRecorded = false;
+  let activityId: string | null = null;
   let exitCode = 1;
 
   try {
@@ -252,15 +260,28 @@ export async function runIssue(
       const child = spawn(invocation.command, invocation.args, invocation.options);
 
       if (typeof child.pid === "number") {
+        const startedAt = new Date().toISOString();
         recordRunningIssue(statePath, {
           issueId: issue.id,
           issueNumber: issue.number,
           repo: issue.repo,
-          startedAt: new Date().toISOString(),
+          startedAt,
           pid: child.pid,
           logPath
         });
         recordWritten = true;
+        activityId = `issue:${issue.id}`;
+        recordActivity(activityPath, {
+          id: activityId,
+          kind: "issue",
+          repo: issue.repo,
+          startedAt,
+          pid: child.pid,
+          logPath,
+          issueId: issue.id,
+          issueNumber: issue.number
+        });
+        activityRecorded = true;
       }
 
       child.stdout.on("data", (chunk) => {
@@ -279,6 +300,9 @@ export async function runIssue(
   } finally {
     if (recordWritten) {
       removeRunningIssue(statePath, issue.id);
+    }
+    if (activityRecorded && activityId) {
+      removeActivity(activityPath, activityId);
     }
   }
 
@@ -375,8 +399,24 @@ export async function runIdleTask(
   };
 
   const invocation = buildCodexInvocation(config, repoPath, prompt);
+  const activityPath = resolveActivityStatePath(config.workdirRoot);
+  const startedAt = new Date().toISOString();
+  const activityId = `idle:${repo.owner}/${repo.repo}:${Date.now()}`;
+  let activityRecorded = false;
   const exitCode = await new Promise<number>((resolve, reject) => {
     const child = spawn(invocation.command, invocation.args, invocation.options);
+    if (typeof child.pid === "number") {
+      recordActivity(activityPath, {
+        id: activityId,
+        kind: "idle",
+        repo,
+        startedAt,
+        pid: child.pid,
+        logPath,
+        task
+      });
+      activityRecorded = true;
+    }
     child.stdout.on("data", (chunk) => {
       appendLog(chunk);
       process.stdout.write(chunk);
@@ -387,6 +427,10 @@ export async function runIdleTask(
     });
     child.on("error", (error) => reject(error));
     child.on("close", (code) => resolve(code ?? 1));
+  }).finally(() => {
+    if (activityRecorded) {
+      removeActivity(activityPath, activityId);
+    }
   });
 
   const summary = extractSummaryFromLog(logPath);

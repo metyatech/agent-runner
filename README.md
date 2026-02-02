@@ -229,6 +229,20 @@ Quick status summary (tasks + recent logs):
 .\scripts\status.ps1
 ```
 
+## Status UI (GUI)
+
+Serve a local status dashboard that highlights active tasks and recent logs:
+
+```bash
+node dist/cli.js ui --config agent-runner.config.json --port 4311
+```
+
+Then open:
+
+```text
+http://127.0.0.1:4311/
+```
+
 ## Release / deploy
 
 Not applicable. This repository is intended to run locally.

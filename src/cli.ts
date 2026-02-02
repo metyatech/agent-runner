@@ -18,6 +18,7 @@ import {
   loadRunnerState,
   resolveRunnerStatePath
 } from "./runner-state.js";
+import { startStatusServer } from "./status-server.js";
 
 const program = new Command();
 
@@ -448,6 +449,28 @@ program
         log("info", `Updated label ${label.name} in ${repo.repo}.`, json);
       }
     }
+  });
+
+program
+  .command("ui")
+  .description("Serve a local status UI for the agent runner.")
+  .option("-c, --config <path>", "Path to config file", "agent-runner.config.json")
+  .option("--host <host>", "Host to bind", "127.0.0.1")
+  .option("--port <port>", "Port to bind", "4311")
+  .action(async (options) => {
+    const configPath = path.resolve(process.cwd(), options.config);
+    const config = loadConfig(configPath);
+    const port = Number.parseInt(options.port, 10);
+    if (Number.isNaN(port) || port <= 0) {
+      throw new Error(`Invalid port: ${options.port}`);
+    }
+    const host = String(options.host);
+    await startStatusServer({
+      workdirRoot: config.workdirRoot,
+      host,
+      port
+    });
+    console.log(`Status UI listening on http://${host}:${port}/`);
   });
 
 program.parseAsync(process.argv);
