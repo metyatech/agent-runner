@@ -1,7 +1,6 @@
-import fs from "node:fs";
-import path from "node:path";
 import type { AgentRunnerConfig } from "./config.js";
 import type { GitHubClient, IssueInfo, RepoInfo } from "./github.js";
+import { listLocalRepos } from "./local-repos.js";
 import {
   isBlocked,
   isCacheFresh,
@@ -11,7 +10,6 @@ import {
 } from "./repo-cache.js";
 
 const DEFAULT_REPO_CACHE_MINUTES = 60;
-const LOCAL_REPO_EXCLUDES = new Set(["agent-rules-local"]);
 
 type RateLimitInfo = {
   resetAt: string | null;
@@ -69,32 +67,8 @@ export async function listTargetRepos(
     };
   }
 
-  const listLocalRepos = (): RepoInfo[] => {
-    const entries = fs.readdirSync(workdirRoot, { withFileTypes: true });
-    const repos: RepoInfo[] = [];
-    for (const entry of entries) {
-      if (!entry.isDirectory()) {
-        continue;
-      }
-      if (LOCAL_REPO_EXCLUDES.has(entry.name)) {
-        continue;
-      }
-      const repoPath = path.join(workdirRoot, entry.name, ".git");
-      if (!fs.existsSync(repoPath)) {
-        continue;
-      }
-      try {
-        const stat = fs.statSync(repoPath);
-        if (!stat.isDirectory()) {
-          continue;
-        }
-      } catch {
-        continue;
-      }
-      repos.push({ owner: config.owner, repo: entry.name });
-    }
-    return repos;
-  };
+  const listLocalReposForOwner = (): RepoInfo[] =>
+    listLocalRepos(workdirRoot, config.owner);
 
   let cache: RepoCache | null = null;
   try {
@@ -119,7 +93,7 @@ export async function listTargetRepos(
     const rate = parseRateLimit(error);
     if (rate.resetAt) {
       const blockedUntil = rate.resetAt;
-      const fallbackRepos = cache?.repos ?? listLocalRepos();
+      const fallbackRepos = cache?.repos ?? listLocalReposForOwner();
       if (fallbackRepos.length > 0) {
         const source = cache?.repos ? "cache" : "local";
         saveRepoCache(workdirRoot, buildCache(fallbackRepos, blockedUntil));

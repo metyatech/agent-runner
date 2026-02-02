@@ -12,6 +12,7 @@ import { buildAgentComment, hasUserReplySince, NEEDS_USER_MARKER } from "./notif
 import { evaluateUsageGate, fetchCodexStatusOutput, parseCodexStatus } from "./codex-status.js";
 import { listTargetRepos, listQueuedIssues, pickNextIssues, queueNewRequests } from "./queue.js";
 import { planIdleTasks, runIdleTask, runIssue } from "./runner.js";
+import { listLocalRepos } from "./local-repos.js";
 import {
   evaluateRunningIssues,
   isProcessAlive,
@@ -117,6 +118,7 @@ program
 
     const runCycle = async (): Promise<void> => {
       const repoResult = await listTargetRepos(client, config, config.workdirRoot);
+      const rateLimitedUntil = repoResult.blockedUntil;
       if (repoResult.source === "cache" && repoResult.blockedUntil) {
         log(
           "warn",
@@ -137,6 +139,10 @@ program
       const repos = repoResult.repos;
       log("info", `Discovered ${repos.length} repositories.`, json);
 
+      if (rateLimitedUntil) {
+        log("warn", `Skipping GitHub issue polling until ${rateLimitedUntil}.`, json);
+      }
+
       const statePath = resolveRunnerStatePath(config.workdirRoot);
       let state;
       try {
@@ -147,7 +153,7 @@ program
         });
       }
 
-      if (state) {
+      if (state && !rateLimitedUntil) {
         for (const repo of repos) {
           const runningIssues = await client.listIssuesByLabel(repo, config.labels.running);
           if (runningIssues.length === 0) {
@@ -193,35 +199,37 @@ program
         }
       }
 
-      const resumed = await resumeAwaitingUser(repos);
+      const resumed = rateLimitedUntil ? 0 : await resumeAwaitingUser(repos);
       if (resumed > 0) {
         log("info", `Re-queued ${resumed} request(s) after user reply.`, json);
       }
 
       const queuedIssues: IssueInfo[] = [];
       const queuedIds = new Set<number>();
-      for (const repo of repos) {
-        const queued = await queueNewRequests(client, repo, config);
-        if (queued.length > 0) {
-          log("info", `Queued ${queued.length} requests in ${repo.repo}.`, json);
-        }
-        for (const issue of queued) {
-          if (queuedIds.has(issue.id)) {
-            continue;
+      if (!rateLimitedUntil) {
+        for (const repo of repos) {
+          const queued = await queueNewRequests(client, repo, config);
+          if (queued.length > 0) {
+            log("info", `Queued ${queued.length} requests in ${repo.repo}.`, json);
           }
-          queuedIds.add(issue.id);
-          queuedIssues.push(issue);
+          for (const issue of queued) {
+            if (queuedIds.has(issue.id)) {
+              continue;
+            }
+            queuedIds.add(issue.id);
+            queuedIssues.push(issue);
+          }
         }
-      }
 
-      for (const repo of repos) {
-        const repoQueued = await listQueuedIssues(client, repo, config);
-        for (const issue of repoQueued) {
-          if (queuedIds.has(issue.id)) {
-            continue;
+        for (const repo of repos) {
+          const repoQueued = await listQueuedIssues(client, repo, config);
+          for (const issue of repoQueued) {
+            if (queuedIds.has(issue.id)) {
+              continue;
+            }
+            queuedIds.add(issue.id);
+            queuedIssues.push(issue);
           }
-          queuedIds.add(issue.id);
-          queuedIssues.push(issue);
         }
       }
 
@@ -265,7 +273,17 @@ program
           }
         }
 
-        const idleTasks = await planIdleTasks(config, repos);
+        let idleRepos = repos;
+        if (config.idle?.repoScope === "local") {
+          idleRepos = listLocalRepos(config.workdirRoot, config.owner);
+          log(
+            "info",
+            `Idle repo scope set to local. Using ${idleRepos.length} workspace repo(s).`,
+            json
+          );
+        }
+
+        const idleTasks = await planIdleTasks(config, idleRepos);
         if (idleTasks.length === 0) {
           log("info", "No queued requests. Idle cooldown active or no eligible repos.", json);
           return;

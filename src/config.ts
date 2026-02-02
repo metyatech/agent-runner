@@ -16,6 +16,7 @@ export type AgentRunnerConfig = {
     cooldownMinutes: number;
     tasks: string[];
     promptTemplate: string;
+    repoScope?: "all" | "local";
     usageGate?: {
       enabled: boolean;
       command: string;

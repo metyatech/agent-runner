@@ -25,6 +25,7 @@ describe("loadConfig", () => {
             tasks: [
               "Bring the repo into compliance with AGENTS.md and project docs/standards. Identify the highest-impact gap, fix it, and update docs/tests as needed. If nothing meaningful is needed, exit."
             ],
+            repoScope: "local",
             promptTemplate: "Idle {{repo}} {{task}}",
             usageGate: {
               enabled: true,

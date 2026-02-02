@@ -90,6 +90,7 @@ Config file: `agent-runner.config.json`
   - `idle.cooldownMinutes`: Per-repo cooldown between idle runs
   - `idle.tasks`: List of task prompts to rotate through
   - `idle.promptTemplate`: Prompt template for idle runs; supports `{{repo}}` and `{{task}}`
+  - `idle.repoScope`: `"all"` (default) or `"local"` to restrict idle tasks to repos under the workspace root
   - `idle.usageGate`: Optional Codex usage guard (reads `/status` output)
   - `idle.usageGate.enabled`: Turn usage gating on/off
   - `idle.usageGate.command`: Command used to launch Codex for `/status`
@@ -121,6 +122,7 @@ When no queued issues exist, the runner can execute idle tasks defined in the co
 Each idle run writes a report under `reports/` and streams the Codex output to `logs/`.
 When changes are made, the idle prompt is expected to open a PR, mention @metyatech
 in a summary comment, and merge the PR, then sync the main branch locally.
+If `idle.repoScope` is set to `"local"`, idle runs only target repositories under the workspace root.
 If `idle.usageGate.enabled` is true, idle runs only execute when the weekly reset
 window is near and unused weekly capacity remains. The weekly threshold ramps
 down as the reset approaches. The 5h window is used only to confirm that some
@@ -137,6 +139,7 @@ Example config snippet:
     "tasks": [
       "Bring the repo into compliance with AGENTS.md and project docs/standards. Identify the highest-impact gap, fix it, and update docs/tests as needed. If nothing meaningful is needed, exit."
     ],
+    "repoScope": "local",
     "promptTemplate": "You are running an autonomous idle task. Target repo: {{repo}}. Task: {{task}}",
     "usageGate": {
       "enabled": true,

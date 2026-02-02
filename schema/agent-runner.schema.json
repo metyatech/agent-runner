@@ -46,6 +46,7 @@
           "minItems": 1
         },
         "promptTemplate": { "type": "string", "minLength": 1 },
+        "repoScope": { "type": "string", "enum": ["all", "local"] },
         "usageGate": {
           "type": "object",
           "required": [

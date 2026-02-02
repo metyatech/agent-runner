@@ -25,7 +25,8 @@
         "minRemainingPercentAtStart": 100,
         "minRemainingPercentAtEnd": 0
       }
-    }
+    },
+    "repoScope": "local"
   },
   "labels": {
     "request": "agent:request",
