@@ -32,7 +32,13 @@ codex --version
 setx AGENT_GITHUB_TOKEN "<token>"
 ```
 
-5. Update `agent-runner.config.json` with your workspace root and concurrency.
+5. If using webhooks, set the GitHub App webhook secret.
+
+```bash
+setx AGENT_GITHUB_WEBHOOK_SECRET "<secret>"
+```
+
+6. Update `agent-runner.config.json` with your workspace root and concurrency.
 
 ## Development commands
 
@@ -87,6 +93,15 @@ Config file: `agent-runner.config.json`
 - `codex.args`: Default config runs with full access (`--dangerously-bypass-approvals-and-sandbox`); change this if you want approvals or sandboxing.
 - `codex.promptTemplate`: The runner expects a summary block in the output to post to the issue thread.
   - The default template allows GitHub operations (issues/PRs/commits/pushes) but forbids sending/posting outside GitHub unless the user explicitly approves in the issue.
+- `webhooks`: Optional GitHub webhook listener configuration (recommended to avoid repo-wide polling)
+  - `webhooks.enabled`: Turn webhook mode on/off
+  - `webhooks.host`: Host to bind for the local webhook server
+  - `webhooks.port`: Port to bind for the local webhook server
+  - `webhooks.path`: URL path for webhook requests (e.g. `/webhooks/github`)
+  - `webhooks.secret`: Webhook secret (optional if using `webhooks.secretEnv`)
+  - `webhooks.secretEnv`: Environment variable name holding the webhook secret
+  - `webhooks.maxPayloadBytes`: Optional max payload size (bytes)
+  - `webhooks.queueFile`: Optional path for the webhook queue file
 - `copilot`: Copilot CLI command and args for idle runs (the prompt is appended as the last argument).
   - `copilot.args`: Ensure `-p` is the final argument so the prompt is passed as the value. Use `--allow-all` for non-interactive runs.
 - `idle`: Optional idle task settings (runs when no queued issues exist)
@@ -129,6 +144,16 @@ Looping daemon:
 ```bash
 node dist/cli.js run --yes
 ```
+
+Webhook listener (GitHub App):
+
+```bash
+node dist/cli.js webhook --config agent-runner.config.json
+```
+
+When `webhooks.enabled` is true, repo-wide issue polling is skipped and the runner
+relies on webhook-queued issues. Keep the webhook listener running (for example,
+as a background service or scheduled task).
 
 ## Idle runs (issue-less)
 
@@ -195,6 +220,31 @@ Example config snippet:
   }
 }
 ```
+
+## GitHub App Webhooks (Cloudflare Tunnel)
+
+Recommended to avoid repo-wide polling and GitHub rate limits.
+
+1. Create a GitHub App and set its webhook URL to your Cloudflare Tunnel URL,
+   for example `https://<tunnel-host>/webhooks/github`.
+2. Configure the webhook secret and store it in an environment variable
+   (example: `AGENT_GITHUB_WEBHOOK_SECRET`).
+3. Subscribe to events: **Issues** and **Issue comment**.
+4. Install the App on the repositories you want the runner to watch.
+5. Enable `webhooks` in `agent-runner.config.json` and start the webhook listener.
+
+Minimal Cloudflare Tunnel config example (save to a file and run with `cloudflared tunnel run`):
+
+```yaml
+tunnel: <tunnel-id>
+credentials-file: <path-to-credentials.json>
+ingress:
+  - hostname: <tunnel-host>
+    service: http://127.0.0.1:4312
+  - service: http_status:404
+```
+
+Ensure the webhook listener is running locally on the same host/port as the tunnel target.
 
 ## Label sync
 
@@ -312,6 +362,9 @@ Run a background tray helper to open the status UI and pause/resume the runner:
 ```powershell
 .\scripts\tray.ps1 -RepoPath "." -ConfigPath ".\\agent-runner.config.json"
 ```
+
+If `webhooks.enabled` is true, the tray helper will also ensure the webhook listener
+is running in the background.
 
 ## Release / deploy
 

@@ -4,6 +4,7 @@ import process from "node:process";
 import { Command } from "commander";
 import pLimit from "p-limit";
 import { loadConfig } from "./config.js";
+import type { AgentRunnerConfig } from "./config.js";
 import { GitHubClient, type IssueInfo, type LabelInfo, type RepoInfo } from "./github.js";
 import { buildAgentLabels } from "./labels.js";
 import { log } from "./logger.js";
@@ -30,8 +31,103 @@ import { startStatusServer } from "./status-server.js";
 import { buildStatusSnapshot } from "./status-snapshot.js";
 import { removeActivity, resolveActivityStatePath } from "./activity-state.js";
 import { clearStopRequest, isStopRequested, requestStop } from "./stop-flag.js";
+import { handleWebhookEvent } from "./webhook-handler.js";
+import { startWebhookServer } from "./webhook-server.js";
+import {
+  loadWebhookQueue,
+  removeWebhookIssues,
+  resolveWebhookQueuePath
+} from "./webhook-queue.js";
 
 const program = new Command();
+
+function resolveWebhookSecret(config?: AgentRunnerConfig["webhooks"]): string | null {
+  if (!config) {
+    return null;
+  }
+  if (config.secret) {
+    return config.secret;
+  }
+  if (config.secretEnv) {
+    return process.env[config.secretEnv] ?? null;
+  }
+  return null;
+}
+
+async function resolveWebhookQueuedIssues(
+  client: GitHubClient,
+  config: AgentRunnerConfig,
+  queuePath: string,
+  json: boolean,
+  dryRun: boolean
+): Promise<{ issues: IssueInfo[]; removeIds: number[] }> {
+  const entries = loadWebhookQueue(queuePath);
+  if (entries.length === 0) {
+    return { issues: [], removeIds: [] };
+  }
+
+  const issues: IssueInfo[] = [];
+  const removeIds: number[] = [];
+  const seen = new Set<number>();
+
+  for (const entry of entries) {
+    if (seen.has(entry.issueId)) {
+      removeIds.push(entry.issueId);
+      continue;
+    }
+    seen.add(entry.issueId);
+    let issue: IssueInfo | null;
+    try {
+      issue = await client.getIssue(entry.repo, entry.issueNumber);
+    } catch (error) {
+      log("warn", "Failed to resolve webhook queued issue; will retry.", json, {
+        issue: `${entry.repo.owner}/${entry.repo.repo}#${entry.issueNumber}`,
+        error: error instanceof Error ? error.message : String(error)
+      });
+      continue;
+    }
+    if (!issue) {
+      removeIds.push(entry.issueId);
+      continue;
+    }
+
+    if (
+      issue.labels.includes(config.labels.running) ||
+      issue.labels.includes(config.labels.needsUser) ||
+      issue.labels.includes(config.labels.done) ||
+      issue.labels.includes(config.labels.failed)
+    ) {
+      removeIds.push(entry.issueId);
+      continue;
+    }
+
+    if (!issue.labels.includes(config.labels.queued) && issue.labels.includes(config.labels.request)) {
+      if (dryRun) {
+        log("info", `Dry-run: would add queued label to ${issue.url}`, json);
+        issue.labels = [...issue.labels, config.labels.queued];
+      } else {
+        try {
+          await client.addLabels(issue, [config.labels.queued]);
+          issue.labels = [...issue.labels, config.labels.queued];
+        } catch (error) {
+          log("warn", "Failed to add queued label to webhook issue.", json, {
+            issue: issue.url,
+            error: error instanceof Error ? error.message : String(error)
+          });
+          continue;
+        }
+      }
+    }
+
+    if (issue.labels.includes(config.labels.queued)) {
+      issues.push(issue);
+    } else {
+      removeIds.push(entry.issueId);
+    }
+  }
+
+  return { issues, removeIds };
+}
 
 program
   .name("agent-runner")
@@ -60,6 +156,11 @@ program
     const configPath = path.resolve(process.cwd(), options.config);
     const config = loadConfig(configPath);
     const activityPath = resolveActivityStatePath(config.workdirRoot);
+    const webhookConfig = config.webhooks;
+    const webhooksEnabled = Boolean(webhookConfig?.enabled);
+    const webhookQueuePath = webhooksEnabled
+      ? resolveWebhookQueuePath(config.workdirRoot, webhookConfig)
+      : null;
 
     if (options.concurrency) {
       config.concurrency = Number.parseInt(options.concurrency, 10);
@@ -124,29 +225,40 @@ program
     };
 
     const runCycle = async (): Promise<void> => {
-      const repoResult = await listTargetRepos(client, config, config.workdirRoot);
-      const rateLimitedUntil = repoResult.blockedUntil;
-      if (repoResult.source === "cache" && repoResult.blockedUntil) {
-        log(
-          "warn",
-          `Using cached repo list due to rate limit until ${repoResult.blockedUntil}.`,
-          json
-        );
-      } else if (repoResult.source === "local" && repoResult.blockedUntil) {
-        log(
-          "warn",
-          `Using local workspace repo list due to rate limit until ${repoResult.blockedUntil}.`,
-          json
-        );
-      } else if (repoResult.source === "cache") {
-        log("info", "Using cached repo list.", json);
-      } else if (repoResult.source === "local") {
-        log("info", "Using local workspace repo list.", json);
-      }
-      const repos = repoResult.repos;
-      log("info", `Discovered ${repos.length} repositories.`, json);
+      const idleEnabled = Boolean(config.idle?.enabled);
+      const idleNeedsAllRepos = idleEnabled && config.idle?.repoScope !== "local";
+      const shouldPollIssues = !webhooksEnabled;
+      const shouldListRepos = shouldPollIssues || idleNeedsAllRepos;
 
-      if (rateLimitedUntil) {
+      let repos: RepoInfo[] = [];
+      let rateLimitedUntil: string | null = null;
+      if (shouldListRepos) {
+        const repoResult = await listTargetRepos(client, config, config.workdirRoot);
+        rateLimitedUntil = repoResult.blockedUntil;
+        if (repoResult.source === "cache" && repoResult.blockedUntil) {
+          log(
+            "warn",
+            `Using cached repo list due to rate limit until ${repoResult.blockedUntil}.`,
+            json
+          );
+        } else if (repoResult.source === "local" && repoResult.blockedUntil) {
+          log(
+            "warn",
+            `Using local workspace repo list due to rate limit until ${repoResult.blockedUntil}.`,
+            json
+          );
+        } else if (repoResult.source === "cache") {
+          log("info", "Using cached repo list.", json);
+        } else if (repoResult.source === "local") {
+          log("info", "Using local workspace repo list.", json);
+        }
+        repos = repoResult.repos;
+        log("info", `Discovered ${repos.length} repositories.`, json);
+      } else {
+        log("info", "Skipping repo discovery; webhooks enabled.", json);
+      }
+
+      if (rateLimitedUntil && shouldPollIssues) {
         log("warn", `Skipping GitHub issue polling until ${rateLimitedUntil}.`, json);
       }
 
@@ -160,45 +272,71 @@ program
         });
       }
 
-      if (state && !rateLimitedUntil) {
-        for (const repo of repos) {
-          const runningIssues = await client.listIssuesByLabel(repo, config.labels.running);
-          if (runningIssues.length === 0) {
-            continue;
-          }
-          const evaluation = evaluateRunningIssues(runningIssues, state, isProcessAlive);
-
-          for (const issue of evaluation.deadProcess) {
-            if (dryRun) {
-              log("info", `Dry-run: would mark ${issue.issue.url} failed (process exited).`, json);
+      if (state) {
+        if (shouldPollIssues && !rateLimitedUntil) {
+          for (const repo of repos) {
+            const runningIssues = await client.listIssuesByLabel(repo, config.labels.running);
+            if (runningIssues.length === 0) {
               continue;
             }
+            const evaluation = evaluateRunningIssues(runningIssues, state, isProcessAlive);
 
-            await client.addLabels(issue.issue, [config.labels.failed, config.labels.needsUser]);
-            await tryRemoveLabel(issue.issue, config.labels.running);
-            await client.comment(
-              issue.issue,
-              buildAgentComment(
-                `${formatMention(issue.issue)}Detected runner process exit (pid ${issue.record.pid}). ` +
-                  "Please reply with details or requeue instructions.",
-                [NEEDS_USER_MARKER]
-              )
-            );
-          }
+            for (const issue of evaluation.deadProcess) {
+              if (dryRun) {
+                log("info", `Dry-run: would mark ${issue.issue.url} failed (process exited).`, json);
+                continue;
+              }
 
-          for (const issue of evaluation.missingRecord) {
-            if (dryRun) {
-              log("info", `Dry-run: would mark ${issue.url} needs-user (missing state).`, json);
-              continue;
+              await client.addLabels(issue.issue, [config.labels.failed, config.labels.needsUser]);
+              await tryRemoveLabel(issue.issue, config.labels.running);
+              await client.comment(
+                issue.issue,
+                buildAgentComment(
+                  `${formatMention(issue.issue)}Detected runner process exit (pid ${issue.record.pid}). ` +
+                    "Please reply with details or requeue instructions.",
+                  [NEEDS_USER_MARKER]
+                )
+              );
             }
 
+            for (const issue of evaluation.missingRecord) {
+              if (dryRun) {
+                log("info", `Dry-run: would mark ${issue.url} needs-user (missing state).`, json);
+                continue;
+              }
+
+              await client.addLabels(issue, [config.labels.failed, config.labels.needsUser]);
+              await tryRemoveLabel(issue, config.labels.running);
+              await client.comment(
+                issue,
+                buildAgentComment(
+                  `${formatMention(issue)}Runner state was missing for this request. ` +
+                    "Please reply to re-queue the request.",
+                  [NEEDS_USER_MARKER]
+                )
+              );
+            }
+          }
+        } else if (webhooksEnabled) {
+          for (const record of state.running) {
+            if (isProcessAlive(record.pid)) {
+              continue;
+            }
+            const issue = await client.getIssue(record.repo, record.issueNumber);
+            if (!issue) {
+              continue;
+            }
+            if (dryRun) {
+              log("info", `Dry-run: would mark ${issue.url} failed (process exited).`, json);
+              continue;
+            }
             await client.addLabels(issue, [config.labels.failed, config.labels.needsUser]);
             await tryRemoveLabel(issue, config.labels.running);
             await client.comment(
               issue,
               buildAgentComment(
-                `${formatMention(issue)}Runner state was missing for this request. ` +
-                  "Please reply to re-queue the request.",
+                `${formatMention(issue)}Detected runner process exit (pid ${record.pid}). ` +
+                  "Please reply with details or requeue instructions.",
                 [NEEDS_USER_MARKER]
               )
             );
@@ -206,14 +344,15 @@ program
         }
       }
 
-      const resumed = rateLimitedUntil ? 0 : await resumeAwaitingUser(repos);
+      const resumed =
+        shouldPollIssues && !rateLimitedUntil ? await resumeAwaitingUser(repos) : 0;
       if (resumed > 0) {
         log("info", `Re-queued ${resumed} request(s) after user reply.`, json);
       }
 
       const queuedIssues: IssueInfo[] = [];
       const queuedIds = new Set<number>();
-      if (!rateLimitedUntil) {
+      if (shouldPollIssues && !rateLimitedUntil) {
         for (const repo of repos) {
           const queued = await queueNewRequests(client, repo, config);
           if (queued.length > 0) {
@@ -237,6 +376,26 @@ program
             queuedIds.add(issue.id);
             queuedIssues.push(issue);
           }
+        }
+      }
+
+      if (webhooksEnabled && webhookQueuePath) {
+        const resolved = await resolveWebhookQueuedIssues(
+          client,
+          config,
+          webhookQueuePath,
+          json,
+          dryRun
+        );
+        for (const issue of resolved.issues) {
+          if (queuedIds.has(issue.id)) {
+            continue;
+          }
+          queuedIds.add(issue.id);
+          queuedIssues.push(issue);
+        }
+        if (!dryRun && resolved.removeIds.length > 0) {
+          await removeWebhookIssues(webhookQueuePath, resolved.removeIds);
         }
       }
 
@@ -463,6 +622,7 @@ program
         return;
       }
 
+      const webhookRemoveIds: number[] = [];
       for (const issue of picked) {
         await client.addLabels(issue, [config.labels.running]);
         await tryRemoveLabel(issue, config.labels.queued);
@@ -472,6 +632,12 @@ program
             `${formatMention(issue)}Agent runner started on ${new Date().toISOString()}. Concurrency ${config.concurrency}.`
           )
         );
+        if (webhooksEnabled && webhookQueuePath) {
+          webhookRemoveIds.push(issue.id);
+        }
+      }
+      if (!dryRun && webhookRemoveIds.length > 0 && webhookQueuePath) {
+        await removeWebhookIssues(webhookQueuePath, webhookRemoveIds);
       }
 
       const limit = pLimit(config.concurrency);
@@ -705,6 +871,70 @@ program
       port
     });
     console.log(`Status UI listening on http://${host}:${port}/`);
+  });
+
+program
+  .command("webhook")
+  .description("Start a GitHub webhook listener.")
+  .option("-c, --config <path>", "Path to config file", "agent-runner.config.json")
+  .option("--host <host>", "Host to bind")
+  .option("--port <port>", "Port to bind")
+  .option("--path <path>", "Webhook path")
+  .option("--json", "Output JSON logs", false)
+  .action(async (options) => {
+    const json = Boolean(options.json);
+    const configPath = path.resolve(process.cwd(), options.config);
+    const config = loadConfig(configPath);
+    const webhookConfig = config.webhooks;
+    if (!webhookConfig || !webhookConfig.enabled) {
+      throw new Error("Webhooks are disabled. Set webhooks.enabled to true.");
+    }
+    const secret = resolveWebhookSecret(webhookConfig);
+    if (!secret) {
+      throw new Error(
+        "Missing webhook secret. Set webhooks.secret or webhooks.secretEnv and ensure the env var is defined."
+      );
+    }
+
+    const token =
+      process.env.AGENT_GITHUB_TOKEN ||
+      process.env.GITHUB_TOKEN ||
+      process.env.GH_TOKEN;
+
+    if (!token) {
+      throw new Error("Missing GitHub token. Set AGENT_GITHUB_TOKEN or GITHUB_TOKEN.");
+    }
+
+    const host = options.host ? String(options.host) : webhookConfig.host;
+    const portRaw = options.port ? Number.parseInt(options.port, 10) : webhookConfig.port;
+    if (Number.isNaN(portRaw) || portRaw <= 0) {
+      throw new Error(`Invalid port: ${options.port ?? webhookConfig.port}`);
+    }
+    const pathValue = options.path ? String(options.path) : webhookConfig.path;
+    if (!pathValue.startsWith("/")) {
+      throw new Error(`Invalid webhook path: ${pathValue}`);
+    }
+
+    const queuePath = resolveWebhookQueuePath(config.workdirRoot, webhookConfig);
+    const client = new GitHubClient(token);
+
+    await startWebhookServer({
+      host,
+      port: portRaw,
+      path: pathValue,
+      secret,
+      maxPayloadBytes: webhookConfig.maxPayloadBytes,
+      onEvent: (event) =>
+        handleWebhookEvent({
+          event,
+          client,
+          config,
+          queuePath,
+          onLog: (level, message, data) => log(level, message, json, data)
+        }),
+      onLog: (level, message, data) => log(level, message, json, data)
+    });
+    log("info", `Webhook listener ready on http://${host}:${portRaw}${pathValue}`, json);
   });
 
 program.parseAsync(process.argv);

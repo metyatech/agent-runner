@@ -56,6 +56,16 @@ export type AgentRunnerConfig = {
     args: string[];
     promptTemplate: string;
   };
+  webhooks?: {
+    enabled: boolean;
+    host: string;
+    port: number;
+    path: string;
+    secret?: string;
+    secretEnv?: string;
+    maxPayloadBytes?: number;
+    queueFile?: string;
+  };
   copilot?: {
     command: string;
     args: string[];

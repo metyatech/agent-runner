@@ -13,11 +13,61 @@ Add-Type -AssemblyName System.Drawing
 
 $cliPath = Join-Path $RepoPath "dist\\cli.js"
 $statusProcess = $null
+$webhookProcess = $null
+
+function Load-RunnerConfig {
+  if (-not (Test-Path $ConfigPath)) {
+    return $null
+  }
+  try {
+    $raw = Get-Content -Path $ConfigPath -Raw
+    return $raw | ConvertFrom-Json
+  } catch {
+    return $null
+  }
+}
+
+$runnerConfig = Load-RunnerConfig
+$webhookEnabled = $false
+$webhookHost = "127.0.0.1"
+$webhookPort = 4312
+
+if ($runnerConfig -and $runnerConfig.webhooks) {
+  if ($runnerConfig.webhooks.enabled -eq $true) {
+    $webhookEnabled = $true
+  }
+  if ($runnerConfig.webhooks.host) {
+    $webhookHost = $runnerConfig.webhooks.host
+  }
+  if ($runnerConfig.webhooks.port) {
+    $webhookPort = [int]$runnerConfig.webhooks.port
+  }
+}
 
 function Test-StatusServer {
   try {
     $client = New-Object System.Net.Sockets.TcpClient
     $async = $client.BeginConnect($StatusHost, $StatusPort, $null, $null)
+    $connected = $async.AsyncWaitHandle.WaitOne(200)
+    if (-not $connected) {
+      $client.Close()
+      return $false
+    }
+    $client.EndConnect($async)
+    $client.Close()
+    return $true
+  } catch {
+    return $false
+  }
+}
+
+function Test-WebhookServer {
+  if (-not $webhookEnabled) {
+    return $false
+  }
+  try {
+    $client = New-Object System.Net.Sockets.TcpClient
+    $async = $client.BeginConnect($webhookHost, $webhookPort, $null, $null)
     $connected = $async.AsyncWaitHandle.WaitOne(200)
     if (-not $connected) {
       $client.Close()
@@ -52,8 +102,29 @@ function Ensure-StatusServer {
   Start-Sleep -Milliseconds 300
 }
 
+function Ensure-WebhookServer {
+  if (-not $webhookEnabled) {
+    return
+  }
+  if (Test-WebhookServer) {
+    return
+  }
+  if (-not (Test-Path $cliPath)) {
+    return
+  }
+  $args = @(
+    $cliPath,
+    "webhook",
+    "--config",
+    $ConfigPath
+  )
+  $webhookProcess = Start-Process -FilePath "node" -ArgumentList $args -WorkingDirectory $RepoPath -WindowStyle Hidden -PassThru
+  Start-Sleep -Milliseconds 300
+}
+
 function Open-StatusUi {
   Ensure-StatusServer
+  Ensure-WebhookServer
   Start-Process "http://$StatusHost`:$StatusPort/"
 }
 
@@ -117,6 +188,17 @@ $menu.Items.Add("Exit", $null, {
       # ignore
     }
   }
+  if ($webhookProcess -and -not $webhookProcess.HasExited) {
+    try {
+      $webhookProcess.CloseMainWindow() | Out-Null
+      Start-Sleep -Milliseconds 200
+      if (-not $webhookProcess.HasExited) {
+        $webhookProcess.Kill()
+      }
+    } catch {
+      # ignore
+    }
+  }
   $notifyIcon.Visible = $false
   $notifyIcon.Dispose()
   [System.Windows.Forms.Application]::Exit()
@@ -156,4 +238,5 @@ $timer.Add_Tick({
 }) | Out-Null
 $timer.Start()
 
+Ensure-WebhookServer
 [System.Windows.Forms.Application]::Run()

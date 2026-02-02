@@ -234,6 +234,40 @@ export class GitHubClient {
     return comments;
   }
 
+  async getIssue(repo: RepoInfo, issueNumber: number): Promise<IssueInfo | null> {
+    try {
+      const response = await this.octokit.issues.get({
+        owner: repo.owner,
+        repo: repo.repo,
+        issue_number: issueNumber
+      });
+      if (response.data.pull_request) {
+        return null;
+      }
+      if (response.data.state !== "open") {
+        return null;
+      }
+      return {
+        id: response.data.id,
+        number: response.data.number,
+        title: response.data.title,
+        body: response.data.body ?? null,
+        author: response.data.user?.login ?? null,
+        repo,
+        labels: response.data.labels.map((item) => (typeof item === "string" ? item : item.name ?? "")),
+        url: response.data.html_url
+      };
+    } catch (error) {
+      if (error instanceof Error && "status" in error) {
+        const status = (error as { status?: number }).status;
+        if (status === 404) {
+          return null;
+        }
+      }
+      throw error;
+    }
+  }
+
   async getLabel(repo: RepoInfo, name: string): Promise<LabelInfo | null> {
     try {
       const response = await this.octokit.issues.getLabel({
