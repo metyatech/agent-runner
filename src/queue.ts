@@ -1,3 +1,5 @@
+import fs from "node:fs";
+import path from "node:path";
 import type { AgentRunnerConfig } from "./config.js";
 import type { GitHubClient, IssueInfo, RepoInfo } from "./github.js";
 import {
@@ -9,6 +11,7 @@ import {
 } from "./repo-cache.js";
 
 const DEFAULT_REPO_CACHE_MINUTES = 60;
+const LOCAL_REPO_EXCLUDES = new Set(["agent-rules-local"]);
 
 type RateLimitInfo = {
   resetAt: string | null;
@@ -53,7 +56,11 @@ export async function listTargetRepos(
   config: AgentRunnerConfig,
   workdirRoot: string,
   cacheMinutes: number = DEFAULT_REPO_CACHE_MINUTES
-): Promise<{ repos: RepoInfo[]; source: "api" | "cache" | "config"; blockedUntil: string | null }> {
+): Promise<{
+  repos: RepoInfo[];
+  source: "api" | "cache" | "config" | "local";
+  blockedUntil: string | null;
+}> {
   if (config.repos !== "all" && config.repos) {
     return {
       repos: config.repos.map((repo) => ({ owner: config.owner, repo })),
@@ -61,6 +68,33 @@ export async function listTargetRepos(
       blockedUntil: null
     };
   }
+
+  const listLocalRepos = (): RepoInfo[] => {
+    const entries = fs.readdirSync(workdirRoot, { withFileTypes: true });
+    const repos: RepoInfo[] = [];
+    for (const entry of entries) {
+      if (!entry.isDirectory()) {
+        continue;
+      }
+      if (LOCAL_REPO_EXCLUDES.has(entry.name)) {
+        continue;
+      }
+      const repoPath = path.join(workdirRoot, entry.name, ".git");
+      if (!fs.existsSync(repoPath)) {
+        continue;
+      }
+      try {
+        const stat = fs.statSync(repoPath);
+        if (!stat.isDirectory()) {
+          continue;
+        }
+      } catch {
+        continue;
+      }
+      repos.push({ owner: config.owner, repo: entry.name });
+    }
+    return repos;
+  };
 
   let cache: RepoCache | null = null;
   try {
@@ -83,6 +117,15 @@ export async function listTargetRepos(
     return { repos, source: "api", blockedUntil: null };
   } catch (error) {
     const rate = parseRateLimit(error);
+    if (rate.resetAt) {
+      const blockedUntil = rate.resetAt;
+      const fallbackRepos = cache?.repos ?? listLocalRepos();
+      if (fallbackRepos.length > 0) {
+        const source = cache?.repos ? "cache" : "local";
+        saveRepoCache(workdirRoot, buildCache(fallbackRepos, blockedUntil));
+        return { repos: fallbackRepos, source, blockedUntil };
+      }
+    }
     if (cache) {
       const blockedUntil = rate.resetAt ?? cache.blockedUntil ?? null;
       saveRepoCache(workdirRoot, buildCache(cache.repos, blockedUntil));

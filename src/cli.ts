@@ -123,8 +123,16 @@ program
           `Using cached repo list due to rate limit until ${repoResult.blockedUntil}.`,
           json
         );
+      } else if (repoResult.source === "local" && repoResult.blockedUntil) {
+        log(
+          "warn",
+          `Using local workspace repo list due to rate limit until ${repoResult.blockedUntil}.`,
+          json
+        );
       } else if (repoResult.source === "cache") {
         log("info", "Using cached repo list.", json);
+      } else if (repoResult.source === "local") {
+        log("info", "Using local workspace repo list.", json);
       }
       const repos = repoResult.repos;
       log("info", `Discovered ${repos.length} repositories.`, json);
