@@ -9,12 +9,12 @@
     "maxRunsPerCycle": 2,
     "cooldownMinutes": 240,
     "tasks": [
-      "Run a lightweight health check. Prefer the repo-standard lint/test/build (or the smallest relevant subset). Fix only safe, localized issues.",
-      "Scan README and docs for outdated commands or paths. Fix inconsistencies and keep examples repo-relative.",
-      "Look for small, safe refactors (duplicate code, unused exports, dead comments). Apply only if tests can pass quickly.",
-      "Review dependency updates (minor/patch). Apply the smallest safe update and run the relevant tests."
+      "Doc sync: align README/CONTRIBUTING/SECURITY/CHANGELOG with actual commands, paths, and filenames. Only edit docs; skip if no mismatch.",
+      "Metadata hygiene: fill repository/homepage/bugs/engines fields in package.json/pyproject/setup.cfg when missing. No dependency upgrades.",
+      "Test helper cleanup: remove duplicated helper/types/constants in tests by reusing existing modules. Touch tests only; avoid production code.",
+      "Micro-cleanup: remove dead comments, unused files, or redundant config entries. Keep the change tiny (<=3 files, <=150 lines)."
     ],
-    "promptTemplate": "You are running an autonomous idle task.\nTarget repo: {{repo}}\nTask: {{task}}\n\nRequirements:\n- Follow AGENTS.md rules.\n- Do not push directly to main/master. Use a branch, open a PR, post a summary comment that mentions @metyatech, then merge and close the PR if there are changes.\n- If there are no safe changes, exit cleanly without opening a PR or reporting.\n- Repository creation, splitting, renaming, archiving, or deletion is allowed only when clearly justified; otherwise avoid repo-level changes.\n- At the end, output a summary block delimited by:\nAGENT_RUNNER_SUMMARY_START\n<summary>\nAGENT_RUNNER_SUMMARY_END\nInclude: changes made, tests run (or 'Not run'), and commit hashes.",
+    "promptTemplate": "You are running an autonomous idle task.\nTarget repo: {{repo}}\nTask: {{task}}\n\nRequirements:\n- Follow AGENTS.md rules.\n- Do not push directly to main/master. Use a branch, open a PR, post a summary comment that mentions @metyatech, then merge and close the PR if there are changes.\n- If there are no safe changes, exit cleanly without opening a PR or reporting.\n- If the repo has uncommitted changes, exit without making changes.\n- Do not run lint/test/build just for a health check. Only run the smallest required checks when you actually change code.\n- Prefer docs/config/test-only changes; avoid dependency upgrades.\n- Keep changes small: at most 3 files and ~150 lines. Skip anything larger.\n- Repository creation, splitting, renaming, archiving, or deletion is allowed only when clearly justified; otherwise avoid repo-level changes.\n- At the end, output a summary block delimited by:\nAGENT_RUNNER_SUMMARY_START\n<summary>\nAGENT_RUNNER_SUMMARY_END\nInclude: changes made, tests run (or 'Not run'), and commit hashes.",
     "usageGate": {
       "enabled": true,
       "command": "codex",

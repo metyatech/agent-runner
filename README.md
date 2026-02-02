@@ -134,8 +134,8 @@ Example config snippet:
     "maxRunsPerCycle": 1,
     "cooldownMinutes": 240,
     "tasks": [
-      "Run a lightweight health check and fix safe issues.",
-      "Check README and docs for outdated commands."
+      "Doc sync: align README/CONTRIBUTING/SECURITY/CHANGELOG with actual commands.",
+      "Micro-cleanup: remove dead comments or redundant config entries."
     ],
     "promptTemplate": "You are running an autonomous idle task. Target repo: {{repo}}. Task: {{task}}",
     "usageGate": {

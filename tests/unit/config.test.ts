@@ -22,7 +22,9 @@ describe("loadConfig", () => {
             enabled: true,
             maxRunsPerCycle: 1,
             cooldownMinutes: 60,
-            tasks: ["Run a lightweight health check."],
+            tasks: [
+              "Doc sync: align README/CONTRIBUTING/SECURITY/CHANGELOG with actual commands."
+            ],
             promptTemplate: "Idle {{repo}} {{task}}",
             usageGate: {
               enabled: true,
