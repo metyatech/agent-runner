@@ -88,17 +88,6 @@
             }
           },
           "additionalProperties": false
-        },
-        "report": {
-          "type": "object",
-          "required": ["enabled", "repo", "issueTitle", "createIfMissing"],
-          "properties": {
-            "enabled": { "type": "boolean" },
-            "repo": { "type": "string", "minLength": 1 },
-            "issueTitle": { "type": "string", "minLength": 1 },
-            "createIfMissing": { "type": "boolean" }
-          },
-          "additionalProperties": false
         }
       },
       "additionalProperties": false

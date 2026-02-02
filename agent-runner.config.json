@@ -23,17 +23,11 @@
       "minRemainingPercent": {
         "fiveHour": 50
       },
-      "weeklySchedule": {
-        "startMinutes": 1440,
-        "minRemainingPercentAtStart": 100,
-        "minRemainingPercentAtEnd": 0
-      }
-    },
-    "report": {
-      "enabled": false,
-      "repo": "agent-runner",
-      "issueTitle": "Agent Runner Idle Reports",
-      "createIfMissing": true
+    "weeklySchedule": {
+      "startMinutes": 1440,
+      "minRemainingPercentAtStart": 100,
+      "minRemainingPercentAtEnd": 0
+    }
     }
   },
   "labels": {

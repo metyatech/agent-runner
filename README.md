@@ -99,11 +99,6 @@ Config file: `agent-runner.config.json`
       - `idle.usageGate.weeklySchedule.startMinutes`: When to begin idle runs (minutes before weekly reset)
       - `idle.usageGate.weeklySchedule.minRemainingPercentAtStart`: Required weekly percent left at startMinutes
       - `idle.usageGate.weeklySchedule.minRemainingPercentAtEnd`: Required weekly percent left at reset time
-  - `idle.report`: Optional GitHub issue reporting for idle runs
-    - `idle.report.enabled`: Turn GitHub reporting on/off
-    - `idle.report.repo`: Repository that holds the report issue
-    - `idle.report.issueTitle`: Issue title for the rolling idle report
-    - `idle.report.createIfMissing`: Create the issue if it does not exist
 
 ## Running
 
@@ -123,7 +118,6 @@ node dist/cli.js run --yes
 
 When no queued issues exist, the runner can execute idle tasks defined in the config.
 Each idle run writes a report under `reports/` and streams the Codex output to `logs/`.
-If `idle.report.enabled` is true, the runner also posts a summary comment to a GitHub issue.
 If `idle.usageGate.enabled` is true, idle runs only execute when the weekly reset
 window is near and unused weekly capacity remains. The weekly threshold ramps
 down as the reset approaches. The 5h window is used only to confirm that some
@@ -155,12 +149,6 @@ Example config snippet:
         "minRemainingPercentAtStart": 100,
         "minRemainingPercentAtEnd": 0
       }
-    },
-    "report": {
-      "enabled": false,
-      "repo": "agent-runner",
-      "issueTitle": "Agent Runner Idle Reports",
-      "createIfMissing": true
     }
   }
 }

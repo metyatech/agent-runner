@@ -30,12 +30,6 @@ export type AgentRunnerConfig = {
         minRemainingPercentAtEnd: number;
       };
     };
-    report?: {
-      enabled: boolean;
-      repo: string;
-      issueTitle: string;
-      createIfMissing: boolean;
-    };
   };
   labels: {
     request: string;

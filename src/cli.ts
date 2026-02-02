@@ -11,7 +11,6 @@ import { acquireLock, releaseLock } from "./lock.js";
 import { buildAgentComment, hasUserReplySince, NEEDS_USER_MARKER } from "./notifications.js";
 import { evaluateUsageGate, fetchCodexStatusOutput, parseCodexStatus } from "./codex-status.js";
 import { listTargetRepos, listQueuedIssues, pickNextIssues, queueNewRequests } from "./queue.js";
-import { postIdleReport } from "./idle-report.js";
 import { planIdleTasks, runIdleTask, runIssue } from "./runner.js";
 import {
   evaluateRunningIssues,
@@ -279,20 +278,6 @@ program
                   report: result.reportPath,
                   log: result.logPath
                 });
-                try {
-                  await postIdleReport(client, config, {
-                    repo: result.repo,
-                    task: result.task,
-                    success: result.success,
-                    logPath: result.logPath,
-                    reportPath: result.reportPath,
-                    summary: result.summary
-                  });
-                } catch (error) {
-                  log("warn", "Failed to post idle report.", json, {
-                    error: error instanceof Error ? error.message : String(error)
-                  });
-                }
                 return;
               }
               log("warn", "Idle task failed.", json, {
@@ -300,20 +285,6 @@ program
                 report: result.reportPath,
                 log: result.logPath
               });
-              try {
-                await postIdleReport(client, config, {
-                  repo: result.repo,
-                  task: result.task,
-                  success: result.success,
-                  logPath: result.logPath,
-                  reportPath: result.reportPath,
-                  summary: result.summary
-                });
-              } catch (error) {
-                log("warn", "Failed to post idle report.", json, {
-                  error: error instanceof Error ? error.message : String(error)
-                });
-              }
             })
           )
         );
