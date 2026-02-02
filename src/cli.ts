@@ -116,7 +116,17 @@ program
     };
 
     const runCycle = async (): Promise<void> => {
-      const repos = await listTargetRepos(client, config);
+      const repoResult = await listTargetRepos(client, config, config.workdirRoot);
+      if (repoResult.source === "cache" && repoResult.blockedUntil) {
+        log(
+          "warn",
+          `Using cached repo list due to rate limit until ${repoResult.blockedUntil}.`,
+          json
+        );
+      } else if (repoResult.source === "cache") {
+        log("info", "Using cached repo list.", json);
+      }
+      const repos = repoResult.repos;
       log("info", `Discovered ${repos.length} repositories.`, json);
 
       const statePath = resolveRunnerStatePath(config.workdirRoot);
@@ -432,7 +442,8 @@ program
     }
 
     const client = new GitHubClient(token);
-    const repos = await listTargetRepos(client, config);
+    const repoResult = await listTargetRepos(client, config, config.workdirRoot);
+    const repos = repoResult.repos;
     const labels = buildAgentLabels(config);
 
     log("info", `Syncing labels across ${repos.length} repositories.`, json);

@@ -77,6 +77,7 @@ Config file: `agent-runner.config.json`
 - `workdirRoot`: Local workspace root containing repos
 - `pollIntervalSeconds`: Polling interval
 - `concurrency`: Max concurrent requests
+- `repos`: If `"all"`, the runner caches the repository list and refreshes periodically to avoid GitHub rate limits.
 - `labels`: Workflow labels
 - `labels.needsUser`: Label for requests awaiting user reply after a failure
 - `codex`: Codex CLI command and prompt template
