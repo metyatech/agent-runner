@@ -11,21 +11,25 @@ import { isStopRequested } from "./stop-flag.js";
 export type ActivitySnapshot = ActivityRecord & {
   alive: boolean;
   ageMinutes: number;
+  startedAtLocal: string | null;
 };
 
 export type FileSnapshot = {
   path: string;
   updatedAt: string;
+  updatedAtLocal: string | null;
 };
 
 export type StatusSnapshot = {
   generatedAt: string;
+  generatedAtLocal: string;
   workdirRoot: string;
   busy: boolean;
   stopRequested: boolean;
   running: ActivitySnapshot[];
   stale: ActivitySnapshot[];
   activityUpdatedAt: string | null;
+  activityUpdatedAtLocal: string | null;
   logs: FileSnapshot[];
   reports: FileSnapshot[];
 };
@@ -35,6 +39,17 @@ function safeParseDate(value: string): number | null {
   return Number.isNaN(parsed) ? null : parsed;
 }
 
+function formatLocal(value: string | null): string | null {
+  if (!value) {
+    return null;
+  }
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return value;
+  }
+  return date.toLocaleString(undefined, { timeZoneName: "short" });
+}
+
 function toSnapshot(record: ActivityRecord, nowMs: number): ActivitySnapshot {
   const startedMs = safeParseDate(record.startedAt);
   const ageMs = startedMs === null ? 0 : Math.max(0, nowMs - startedMs);
@@ -42,7 +57,8 @@ function toSnapshot(record: ActivityRecord, nowMs: number): ActivitySnapshot {
   return {
     ...record,
     alive: isProcessAlive(record.pid),
-    ageMinutes
+    ageMinutes,
+    startedAtLocal: formatLocal(record.startedAt)
   };
 }
 
@@ -56,7 +72,8 @@ function listRecentFiles(dir: string, limit: number): FileSnapshot[] {
     .map((entry) => {
       const fullPath = path.join(dir, entry.name);
       const stat = fs.statSync(fullPath);
-      return { path: fullPath, updatedAt: new Date(stat.mtimeMs).toISOString() };
+      const updatedAt = new Date(stat.mtimeMs).toISOString();
+      return { path: fullPath, updatedAt, updatedAtLocal: formatLocal(updatedAt) };
     })
     .sort((a, b) => Date.parse(b.updatedAt) - Date.parse(a.updatedAt));
   return entries.slice(0, limit);
@@ -117,14 +134,17 @@ export function buildStatusSnapshot(workdirRoot: string): StatusSnapshot {
   const logsDir = path.resolve(workdirRoot, "agent-runner", "logs");
   const reportsDir = path.resolve(workdirRoot, "agent-runner", "reports");
 
+  const generatedAt = now.toISOString();
   return {
-    generatedAt: now.toISOString(),
+    generatedAt,
+    generatedAtLocal: formatLocal(generatedAt) ?? generatedAt,
     workdirRoot,
     busy: running.length > 0,
     stopRequested: isStopRequested(workdirRoot),
     running,
     stale,
     activityUpdatedAt,
+    activityUpdatedAtLocal: formatLocal(activityUpdatedAt),
     logs: listRecentFiles(logsDir, 5),
     reports: listRecentFiles(reportsDir, 5)
   };

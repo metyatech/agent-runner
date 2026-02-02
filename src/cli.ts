@@ -494,7 +494,9 @@ program
       state = "Paused";
     }
     console.log(`Status: ${state}`);
-    const generatedLocal = new Date(snapshot.generatedAt).toLocaleString();
+    const generatedLocal =
+      snapshot.generatedAtLocal ??
+      new Date(snapshot.generatedAt).toLocaleString(undefined, { timeZoneName: "short" });
     console.log(`Generated: ${generatedLocal}`);
     console.log(`Workdir: ${snapshot.workdirRoot}`);
     console.log(`Running: ${snapshot.running.length}`);

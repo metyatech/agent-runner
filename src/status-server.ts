@@ -203,7 +203,7 @@ function renderHtml(): string {
         if (!value) return "-";
         const date = new Date(value);
         if (Number.isNaN(date.getTime())) return value;
-        return date.toLocaleString();
+        return date.toLocaleString(undefined, { timeZoneName: "short" });
       };
 
       const renderRows = (target, rows) => {
@@ -217,7 +217,7 @@ function renderHtml(): string {
             row.task || "-",
             row.pid || "-",
             row.ageMinutes != null ? row.ageMinutes.toFixed(1) : "-",
-            formatLocal(row.startedAt),
+            row.startedAtLocal || formatLocal(row.startedAt),
             row.logPath || "-"
           ];
           cells.forEach((value) => {
@@ -239,7 +239,8 @@ function renderHtml(): string {
         }
         rows.forEach((row) => {
           const li = document.createElement("li");
-          li.textContent = row.path + " (" + formatLocal(row.updatedAt) + ")";
+          const updated = row.updatedAtLocal || formatLocal(row.updatedAt);
+          li.textContent = row.path + " (" + updated + ")";
           target.appendChild(li);
         });
       };
@@ -263,7 +264,7 @@ function renderHtml(): string {
           }
           statusBadge.textContent = label;
           statusBadge.className = "badge " + style;
-          generatedAt.textContent = formatLocal(data.generatedAt);
+          generatedAt.textContent = data.generatedAtLocal || formatLocal(data.generatedAt);
           workdir.textContent = data.workdirRoot || "-";
 
           renderRows(runningBody, data.running || []);

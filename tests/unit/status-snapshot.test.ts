@@ -39,6 +39,7 @@ describe("status-snapshot", () => {
     const snapshot = buildStatusSnapshot(root);
     expect(snapshot.busy).toBe(true);
     expect(snapshot.stopRequested).toBe(false);
+    expect(snapshot.generatedAtLocal).toBeTruthy();
     expect(snapshot.running.length).toBe(1);
 
     try {
@@ -76,6 +77,7 @@ describe("status-snapshot", () => {
     const snapshot = buildStatusSnapshot(root);
     expect(snapshot.busy).toBe(true);
     expect(snapshot.stopRequested).toBe(false);
+    expect(snapshot.generatedAtLocal).toBeTruthy();
     expect(snapshot.running.length).toBe(1);
     expect(snapshot.running[0].issueId).toBe(123);
   });

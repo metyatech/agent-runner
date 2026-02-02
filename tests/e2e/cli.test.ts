@@ -29,6 +29,7 @@ describe("cli", () => {
     expect(result.status).toBe(0);
     const data = JSON.parse(result.stdout.trim());
     expect(data).toHaveProperty("generatedAt");
+    expect(data).toHaveProperty("generatedAtLocal");
     expect(data).toHaveProperty("busy");
   });
 });
