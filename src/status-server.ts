@@ -254,8 +254,9 @@ function renderHtml(): string {
         target.textContent = "";
         rows.forEach((row) => {
           const tr = document.createElement("tr");
+          const kindLabel = row.engine ? row.kind + " (" + row.engine + ")" : row.kind;
           const cells = [
-            { value: row.kind },
+            { value: kindLabel },
             { value: row.repo ? row.repo.owner + "/" + row.repo.repo : "-" },
             { value: row.issueNumber ? "#" + row.issueNumber : "-" },
             { value: row.task || "-" },

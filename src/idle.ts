@@ -94,3 +94,8 @@ export function recordIdleRun(
   const key = `${repo.owner}/${repo.repo}`;
   history.repos[key] = { lastRunAt: startedAt, lastTask: task };
 }
+
+export type IdlePlanOptions = {
+  maxRuns?: number;
+  now?: Date;
+};

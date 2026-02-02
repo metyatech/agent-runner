@@ -143,6 +143,18 @@
         "promptTemplate": { "type": "string", "minLength": 1 }
       },
       "additionalProperties": false
+    },
+    "copilot": {
+      "type": "object",
+      "required": ["command", "args"],
+      "properties": {
+        "command": { "type": "string", "minLength": 1 },
+        "args": {
+          "type": "array",
+          "items": { "type": "string" }
+        }
+      },
+      "additionalProperties": false
     }
   },
   "additionalProperties": false

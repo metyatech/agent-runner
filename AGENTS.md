@@ -45,6 +45,7 @@ Source: github:metyatech/agent-rules@HEAD/rules/global/autonomous-operations.md
 - Do not preserve backward compatibility unless explicitly requested; avoid legacy aliases and compatibility shims by default.
 - When work reveals rule gaps, redundancy, or misplacement, proactively update rule modules/rulesets (including moves/renames) and regenerate AGENTS.md without waiting for explicit user requests.
 - When something is unclear, investigate to resolve it; do not proceed with unresolved material uncertainty. If still unclear, ask and include what you checked.
+- Do not proceed based on assumptions or guesses without explicit user approval; hypotheses may be discussed but must not drive action.
 - Ask only blocking questions; for non-material ambiguities, pick the lowest-risk option, state the assumption, and proceed.
 - Make decisions explicit when they affect scope, risk, cost, or irreversibility.
 - Prefer asynchronous, low-friction control channels (GitHub Issues/PR comments) unless a repository mandates another.
@@ -93,9 +94,9 @@ Source: github:metyatech/agent-rules@HEAD/rules/global/quality-testing-and-error
 
 ## Verification
 
-- Run the smallest relevant set of lint/typecheck/test/build checks using repo-standard commands.
-- Before committing code changes, run lint/test/build; if any are missing, add them in the same change set.
-- Ensure commit-time automation (pre-commit or repo-native) runs lint/test/build for code changes when feasible.
+- Run the smallest relevant set of lint/typecheck/test/build checks the repo supports using repo-standard commands.
+- Before committing code changes, run the applicable lint/test/build commands; if a relevant check is missing and feasible to add, add it in the same change set.
+- Ensure commit-time automation (pre-commit or repo-native) runs applicable lint/test/build checks for code changes when feasible.
 - If required checks cannot be run, explain why and list the exact commands for the user.
 
 ## Tests (behavior changes)

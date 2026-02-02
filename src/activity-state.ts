@@ -7,6 +7,7 @@ export type ActivityKind = "issue" | "idle";
 export type ActivityRecord = {
   id: string;
   kind: ActivityKind;
+  engine?: "codex" | "copilot";
   repo: RepoInfo;
   startedAt: string;
   pid: number;

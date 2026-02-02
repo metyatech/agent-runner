@@ -56,6 +56,10 @@ export type AgentRunnerConfig = {
     args: string[];
     promptTemplate: string;
   };
+  copilot?: {
+    command: string;
+    args: string[];
+  };
 };
 
 const schemaPath = fileURLToPath(

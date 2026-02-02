@@ -11,8 +11,10 @@ import { acquireLock, releaseLock } from "./lock.js";
 import { buildAgentComment, hasUserReplySince, NEEDS_USER_MARKER } from "./notifications.js";
 import { evaluateUsageGate, fetchCodexStatusOutput, parseCodexStatus } from "./codex-status.js";
 import { evaluateCopilotUsageGate, fetchCopilotUsage } from "./copilot-usage.js";
+import { commandExists } from "./command-exists.js";
 import { listTargetRepos, listQueuedIssues, pickNextIssues, queueNewRequests } from "./queue.js";
 import { planIdleTasks, runIdleTask, runIssue } from "./runner.js";
+import type { IdleEngine } from "./runner.js";
 import { listLocalRepos } from "./local-repos.js";
 import {
   evaluateRunningIssues,
@@ -241,6 +243,7 @@ program
           return;
         }
 
+        let codexAllowed = true;
         const usageGate = config.idle.usageGate;
         if (usageGate?.enabled) {
           try {
@@ -252,57 +255,82 @@ program
             );
             const status = parseCodexStatus(output);
             if (!status) {
-              log("warn", "Idle usage gate: unable to parse /status output. Skipping idle.", json);
-              return;
+              log("warn", "Idle Codex usage gate: unable to parse /status output.", json);
+              codexAllowed = false;
+            } else {
+              const decision = evaluateUsageGate(status, usageGate);
+              if (!decision.allow) {
+                log("info", `Idle Codex usage gate blocked. ${decision.reason}`, json);
+                codexAllowed = false;
+              } else {
+                log("info", `Idle Codex usage gate allowed. ${decision.reason}`, json, {
+                  window: decision.window?.label,
+                  minutesToReset: decision.minutesToReset
+                });
+              }
             }
-
-            const decision = evaluateUsageGate(status, usageGate);
-            if (!decision.allow) {
-              log("info", `Idle usage gate blocked. ${decision.reason}`, json);
-              return;
-            }
-
-            log("info", `Idle usage gate allowed. ${decision.reason}`, json, {
-              window: decision.window?.label,
-              minutesToReset: decision.minutesToReset
-            });
           } catch (error) {
-            log("warn", "Idle usage gate failed. Skipping idle.", json, {
+            log("warn", "Idle Codex usage gate failed. Codex idle disabled.", json, {
               error: error instanceof Error ? error.message : String(error)
             });
-            return;
+            codexAllowed = false;
           }
         }
 
+        let copilotAllowed = false;
         const copilotGate = config.idle.copilotUsageGate;
         if (copilotGate?.enabled) {
           try {
             const usage = await fetchCopilotUsage(token, copilotGate);
             if (!usage) {
-              log(
-                "warn",
-                "Idle Copilot usage gate: unable to parse Copilot quota info. Skipping idle.",
-                json
-              );
-              return;
+              log("warn", "Idle Copilot usage gate: unable to parse Copilot quota info.", json);
+            } else {
+              const decision = evaluateCopilotUsageGate(usage, copilotGate);
+              if (!decision.allow) {
+                log("info", `Idle Copilot usage gate blocked. ${decision.reason}`, json);
+              } else {
+                copilotAllowed = true;
+                log("info", `Idle Copilot usage gate allowed. ${decision.reason}`, json, {
+                  percentRemaining: decision.percentRemaining,
+                  minutesToReset: decision.minutesToReset
+                });
+              }
             }
-
-            const decision = evaluateCopilotUsageGate(usage, copilotGate);
-            if (!decision.allow) {
-              log("info", `Idle Copilot usage gate blocked. ${decision.reason}`, json);
-              return;
-            }
-
-            log("info", `Idle Copilot usage gate allowed. ${decision.reason}`, json, {
-              percentRemaining: decision.percentRemaining,
-              minutesToReset: decision.minutesToReset
-            });
           } catch (error) {
-            log("warn", "Idle Copilot usage gate failed. Skipping idle.", json, {
+            log("warn", "Idle Copilot usage gate failed. Copilot idle disabled.", json, {
               error: error instanceof Error ? error.message : String(error)
             });
-            return;
           }
+        }
+
+        if (copilotAllowed) {
+          if (!config.copilot) {
+            log("warn", "Idle Copilot enabled but no copilot command configured. Skipping Copilot idle.", json);
+            copilotAllowed = false;
+          } else {
+            const exists = await commandExists(config.copilot.command);
+            if (!exists) {
+              log(
+                "warn",
+                `Idle Copilot command not found (${config.copilot.command}). Skipping Copilot idle.`,
+                json
+              );
+              copilotAllowed = false;
+            }
+          }
+        }
+
+        const engines: IdleEngine[] = [];
+        if (codexAllowed) {
+          engines.push("codex");
+        }
+        if (copilotAllowed) {
+          engines.push("copilot");
+        }
+
+        if (engines.length === 0) {
+          log("info", "Idle usage gate blocked for all engines. Skipping idle.", json);
+          return;
         }
 
         let idleRepos = repos;
@@ -315,25 +343,55 @@ program
           );
         }
 
-        const idleTasks = await planIdleTasks(config, idleRepos);
+        let maxRuns = config.idle.maxRunsPerCycle;
+        if (engines.length > maxRuns) {
+          log(
+            "warn",
+            `Idle maxRunsPerCycle (${maxRuns}) is below available engines (${engines.length}). Scheduling ${engines.length} idle task(s).`,
+            json
+          );
+          maxRuns = engines.length;
+        }
+        const idleTasks = await planIdleTasks(config, idleRepos, {
+          maxRuns,
+          now: new Date()
+        });
         if (idleTasks.length === 0) {
           log("info", "No queued requests. Idle cooldown active or no eligible repos.", json);
           return;
         }
 
+        if (idleTasks.length < engines.length) {
+          log(
+            "warn",
+            `Only ${idleTasks.length} idle task(s) available for ${engines.length} engine(s).`,
+            json
+          );
+        }
+
+        const scheduled = idleTasks.map((task, index) => ({
+          ...task,
+          engine: engines[index % engines.length]
+        }));
+
         log(
           "info",
-          `No queued requests. Scheduling ${idleTasks.length} idle task(s).`,
+          `No queued requests. Scheduling ${scheduled.length} idle task(s).`,
           json,
           {
-            repos: idleTasks.map((task) => `${task.repo.owner}/${task.repo.repo}`)
+            tasks: scheduled.map((task) => ({
+              repo: `${task.repo.owner}/${task.repo.repo}`,
+              engine: task.engine,
+              task: task.task
+            }))
           }
         );
 
         if (dryRun) {
           log("info", "Dry-run: would execute idle tasks.", json, {
-            tasks: idleTasks.map((task) => ({
+            tasks: scheduled.map((task) => ({
               repo: `${task.repo.owner}/${task.repo.repo}`,
+              engine: task.engine,
               task: task.task
             }))
           });
@@ -342,12 +400,13 @@ program
 
         const idleLimit = pLimit(config.concurrency);
         await Promise.all(
-          idleTasks.map((task) =>
+          scheduled.map((task) =>
             idleLimit(async () => {
-              const result = await runIdleTask(config, task.repo, task.task);
+              const result = await runIdleTask(config, task.repo, task.task, task.engine);
               if (result.success) {
                 log("info", "Idle task completed.", json, {
                   repo: `${result.repo.owner}/${result.repo.repo}`,
+                  engine: result.engine,
                   report: result.reportPath,
                   log: result.logPath
                 });
@@ -355,6 +414,7 @@ program
               }
               log("warn", "Idle task failed.", json, {
                 repo: `${result.repo.owner}/${result.repo.repo}`,
+                engine: result.engine,
                 report: result.reportPath,
                 log: result.logPath
               });

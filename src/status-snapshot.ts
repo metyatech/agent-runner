@@ -98,6 +98,7 @@ function mergeRunnerState(
     .map((record) => ({
       id: `issue:${record.issueId}`,
       kind: "issue" as const,
+      engine: "codex" as const,
       repo: record.repo,
       startedAt: record.startedAt,
       pid: record.pid,

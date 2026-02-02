@@ -7,6 +7,7 @@ Local agent runner that queues and executes GitHub Agent requests using Codex.
 - Watches GitHub Issues labeled `agent:request`.
 - Queues requests, runs up to the configured concurrency, and posts results back to GitHub.
 - Runs idle maintenance tasks when no queued issues are available.
+- Can optionally run idle tasks through Copilot when monthly quota allows.
 - Designed for a self-hosted Windows machine running Codex CLI.
 
 ## Setup
@@ -23,13 +24,15 @@ npm install
 codex --version
 ```
 
-3. Create a GitHub token with repo access and set it as an environment variable.
+3. If you want Copilot idle runs, ensure the configured Copilot command is available in PATH.
+
+4. Create a GitHub token with repo access and set it as an environment variable.
 
 ```bash
 setx AGENT_GITHUB_TOKEN "<token>"
 ```
 
-4. Update `agent-runner.config.json` with your workspace root and concurrency.
+5. Update `agent-runner.config.json` with your workspace root and concurrency.
 
 ## Development commands
 
@@ -84,6 +87,7 @@ Config file: `agent-runner.config.json`
 - `codex.args`: Default config runs with full access (`--dangerously-bypass-approvals-and-sandbox`); change this if you want approvals or sandboxing.
 - `codex.promptTemplate`: The runner expects a summary block in the output to post to the issue thread.
   - The default template allows GitHub operations (issues/PRs/commits/pushes) but forbids sending/posting outside GitHub unless the user explicitly approves in the issue.
+- `copilot`: Copilot CLI command and args for idle runs (the prompt is appended as the last argument).
 - `idle`: Optional idle task settings (runs when no queued issues exist)
   - `idle.enabled`: Turn idle tasks on/off
   - `idle.maxRunsPerCycle`: Max idle tasks per cycle
@@ -139,6 +143,9 @@ short-term capacity remains (5h reset timing is ignored).
 If `idle.copilotUsageGate.enabled` is true, idle runs also require Copilot monthly
 usage to be within the configured reset window and above the remaining-percent
 threshold for that window.
+When both Codex and Copilot usage gates allow, the runner schedules idle tasks
+for both engines (using different repos when available) and will temporarily
+raise `idle.maxRunsPerCycle` if needed to cover both engines.
 
 Example config snippet:
 
@@ -178,6 +185,10 @@ Example config snippet:
         "minRemainingPercentAtEnd": 0
       }
     }
+  },
+  "copilot": {
+    "command": "copilot",
+    "args": []
   }
 }
 ```

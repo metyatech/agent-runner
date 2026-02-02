@@ -4,13 +4,15 @@ import { spawn } from "node:child_process";
 import type { AgentRunnerConfig } from "./config.js";
 import type { GitHubClient, IssueComment, IssueInfo, RepoInfo } from "./github.js";
 import { resolveCodexCommand } from "./codex-command.js";
+import { commandExists } from "./command-exists.js";
 import {
   chooseIdleTask,
   loadIdleHistory,
   recordIdleRun,
   resolveIdleHistoryPath,
   saveIdleHistory,
-  selectIdleRepos
+  selectIdleRepos,
+  type IdlePlanOptions
 } from "./idle.js";
 import { parseIssueBody } from "./issue.js";
 import { recordRunningIssue, removeRunningIssue, resolveRunnerStatePath } from "./runner-state.js";
@@ -30,16 +32,19 @@ export type RunResult = {
   activityId: string | null;
 };
 
+export type IdleEngine = "codex" | "copilot";
+
 export type IdleTaskResult = {
   success: boolean;
   logPath: string;
   repo: RepoInfo;
   task: string;
+  engine: IdleEngine;
   summary: string | null;
   reportPath: string;
 };
 
-export type CodexInvocation = {
+export type EngineInvocation = {
   command: string;
   args: string[];
   options: {
@@ -51,14 +56,6 @@ export type CodexInvocation = {
 
 function resolveRepoPath(root: string, repo: RepoInfo): string {
   return path.join(root, repo.repo);
-}
-
-async function commandExists(command: string): Promise<boolean> {
-  return new Promise((resolve) => {
-    const check = spawn(command, ["--version"], { shell: true });
-    check.on("error", () => resolve(false));
-    check.on("close", (code) => resolve(code === 0));
-  });
 }
 
 async function cloneRepo(root: string, repo: RepoInfo): Promise<void> {
@@ -195,8 +192,9 @@ function renderIdlePrompt(template: string, repo: RepoInfo, task: string): strin
 export function buildCodexInvocation(
   config: AgentRunnerConfig,
   primaryPath: string,
-  prompt: string
-): CodexInvocation {
+  prompt: string,
+  envOverrides: NodeJS.ProcessEnv = {}
+): EngineInvocation {
   const resolved = resolveCodexCommand(config.codex.command, process.env.PATH);
   const args = [
     ...resolved.prefixArgs,
@@ -214,7 +212,30 @@ export function buildCodexInvocation(
     options: {
       cwd: primaryPath,
       shell: false,
-      env: process.env
+      env: { ...process.env, ...envOverrides }
+    }
+  };
+}
+
+export function buildCopilotInvocation(
+  config: AgentRunnerConfig,
+  primaryPath: string,
+  prompt: string,
+  envOverrides: NodeJS.ProcessEnv = {}
+): EngineInvocation {
+  if (!config.copilot) {
+    throw new Error("Copilot command not configured.");
+  }
+  const resolved = resolveCodexCommand(config.copilot.command, process.env.PATH);
+  const args = [...resolved.prefixArgs, ...config.copilot.args, prompt];
+
+  return {
+    command: resolved.command,
+    args,
+    options: {
+      cwd: primaryPath,
+      shell: false,
+      env: { ...process.env, ...envOverrides }
     }
   };
 }
@@ -276,6 +297,7 @@ export async function runIssue(
         recordActivity(activityPath, {
           id: activityId,
           kind: "issue",
+          engine: "codex",
           repo: issue.repo,
           startedAt,
           pid: child.pid,
@@ -333,6 +355,7 @@ function writeIdleReport(
   reportPath: string,
   repo: RepoInfo,
   task: string,
+  engine: IdleEngine,
   success: boolean,
   summary: string | null,
   logPath: string
@@ -342,6 +365,7 @@ function writeIdleReport(
     ``,
     `- Repo: ${repo.owner}/${repo.repo}`,
     `- Task: ${task}`,
+    `- Engine: ${engine}`,
     `- Success: ${success}`,
     `- Log: ${logPath}`,
     `- Timestamp: ${new Date().toISOString()}`,
@@ -354,19 +378,23 @@ function writeIdleReport(
 
 export async function planIdleTasks(
   config: AgentRunnerConfig,
-  repos: RepoInfo[]
+  repos: RepoInfo[],
+  options: IdlePlanOptions = {}
 ): Promise<Array<{ repo: RepoInfo; task: string }>> {
   if (!config.idle?.enabled) {
     return [];
   }
 
+  const maxRuns = options.maxRuns ?? config.idle.maxRunsPerCycle;
+  const now = options.now ?? new Date();
   const historyPath = resolveIdleHistoryPath(config.workdirRoot);
   const history = loadIdleHistory(historyPath);
   const targets = selectIdleRepos(
     repos,
     history,
-    config.idle.maxRunsPerCycle,
-    config.idle.cooldownMinutes
+    maxRuns,
+    config.idle.cooldownMinutes,
+    now
   );
 
   if (targets.length === 0) {
@@ -374,7 +402,7 @@ export async function planIdleTasks(
   }
 
   const planned: Array<{ repo: RepoInfo; task: string }> = [];
-  const startedAt = new Date().toISOString();
+  const startedAt = now.toISOString();
 
   for (const repo of targets) {
     const { task, nextCursor } = chooseIdleTask(config.idle.tasks, history);
@@ -390,7 +418,8 @@ export async function planIdleTasks(
 export async function runIdleTask(
   config: AgentRunnerConfig,
   repo: RepoInfo,
-  task: string
+  task: string,
+  engine: IdleEngine
 ): Promise<IdleTaskResult> {
   await cloneRepo(config.workdirRoot, repo);
 
@@ -405,10 +434,20 @@ export async function runIdleTask(
     fs.appendFileSync(logPath, value);
   };
 
-  const invocation = buildCodexInvocation(config, repoPath, prompt);
+  const envOverrides: NodeJS.ProcessEnv = {
+    AGENT_RUNNER_ENGINE: engine,
+    AGENT_RUNNER_REPO: `${repo.owner}/${repo.repo}`,
+    AGENT_RUNNER_REPO_PATH: repoPath,
+    AGENT_RUNNER_TASK: task,
+    AGENT_RUNNER_PROMPT: prompt
+  };
+  const invocation =
+    engine === "copilot"
+      ? buildCopilotInvocation(config, repoPath, prompt, envOverrides)
+      : buildCodexInvocation(config, repoPath, prompt, envOverrides);
   const activityPath = resolveActivityStatePath(config.workdirRoot);
   const startedAt = new Date().toISOString();
-  const activityId = `idle:${repo.owner}/${repo.repo}:${Date.now()}`;
+  const activityId = `idle:${engine}:${repo.owner}/${repo.repo}:${Date.now()}`;
   let activityRecorded = false;
   let exitCode: number;
   try {
@@ -418,6 +457,7 @@ export async function runIdleTask(
         recordActivity(activityPath, {
           id: activityId,
           kind: "idle",
+          engine,
           repo,
           startedAt,
           pid: child.pid,
@@ -426,16 +466,16 @@ export async function runIdleTask(
         });
         activityRecorded = true;
       }
-    child.stdout.on("data", (chunk) => {
-      const normalized = normalizeLogChunk(chunk);
-      appendLog(normalized);
-      process.stdout.write(normalized);
-    });
-    child.stderr.on("data", (chunk) => {
-      const normalized = normalizeLogChunk(chunk);
-      appendLog(normalized);
-      process.stderr.write(normalized);
-    });
+      child.stdout.on("data", (chunk) => {
+        const normalized = normalizeLogChunk(chunk);
+        appendLog(normalized);
+        process.stdout.write(normalized);
+      });
+      child.stderr.on("data", (chunk) => {
+        const normalized = normalizeLogChunk(chunk);
+        appendLog(normalized);
+        process.stderr.write(normalized);
+      });
       child.on("error", (error) => reject(error));
       child.on("close", (code) => resolve(code ?? 1));
     });
@@ -448,7 +488,7 @@ export async function runIdleTask(
 
   const summary = extractSummaryFromLog(logPath);
   const reportPath = resolveIdleReportPath(config.workdirRoot, repo);
-  writeIdleReport(reportPath, repo, task, exitCode === 0, summary, logPath);
+  writeIdleReport(reportPath, repo, task, engine, exitCode === 0, summary, logPath);
   if (activityRecorded) {
     removeActivity(activityPath, activityId);
   }
@@ -458,6 +498,7 @@ export async function runIdleTask(
     logPath,
     repo,
     task,
+    engine,
     summary,
     reportPath
   };
