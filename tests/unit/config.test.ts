@@ -23,7 +23,7 @@ describe("loadConfig", () => {
             maxRunsPerCycle: 1,
             cooldownMinutes: 60,
             tasks: [
-              "Doc sync: align README/CONTRIBUTING/SECURITY/CHANGELOG with actual commands."
+              "Bring the repo into compliance with AGENTS.md and project docs/standards. Identify the highest-impact gap, fix it, and update docs/tests as needed. If nothing meaningful is needed, exit."
             ],
             promptTemplate: "Idle {{repo}} {{task}}",
             usageGate: {

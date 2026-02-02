@@ -134,8 +134,7 @@ Example config snippet:
     "maxRunsPerCycle": 1,
     "cooldownMinutes": 240,
     "tasks": [
-      "Doc sync: align README/CONTRIBUTING/SECURITY/CHANGELOG with actual commands.",
-      "Micro-cleanup: remove dead comments or redundant config entries."
+      "Bring the repo into compliance with AGENTS.md and project docs/standards. Identify the highest-impact gap, fix it, and update docs/tests as needed. If nothing meaningful is needed, exit."
     ],
     "promptTemplate": "You are running an autonomous idle task. Target repo: {{repo}}. Task: {{task}}",
     "usageGate": {
