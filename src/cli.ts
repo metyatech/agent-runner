@@ -17,6 +17,11 @@ import {
 } from "./codex-status.js";
 import { evaluateCopilotUsageGate, fetchCopilotUsage } from "./copilot-usage.js";
 import { evaluateGeminiUsageGate, fetchGeminiUsage } from "./gemini-usage.js";
+import {
+  evaluateAmazonQUsageGate,
+  getAmazonQUsageSnapshot,
+  resolveAmazonQUsageStatePath
+} from "./amazon-q-usage.js";
 import { commandExists } from "./command-exists.js";
 import { listTargetRepos, listQueuedIssues, pickNextIssues, queueNewRequests } from "./queue.js";
 import { planIdleTasks, runIdleTask, runIssue } from "./runner.js";
@@ -690,7 +695,35 @@ program
           if (!exists) {
             log("warn", `Idle Amazon Q command not found (${config.amazonQ.command}).`, json);
           } else {
-            amazonQAllowed = true;
+            const amazonQGate = config.idle.amazonQUsageGate;
+            if (amazonQGate?.enabled) {
+              try {
+                const now = new Date();
+                const usage = getAmazonQUsageSnapshot(
+                  resolveAmazonQUsageStatePath(config.workdirRoot),
+                  amazonQGate,
+                  now
+                );
+                const decision = evaluateAmazonQUsageGate(usage, amazonQGate, now);
+                if (!decision.allow) {
+                  log("info", `Idle Amazon Q usage gate blocked. ${decision.reason}`, json);
+                } else {
+                  amazonQAllowed = true;
+                  log("info", `Idle Amazon Q usage gate allowed. ${decision.reason}`, json, {
+                    percentRemaining: decision.percentRemaining,
+                    minutesToReset: decision.minutesToReset,
+                    used: decision.used,
+                    limit: decision.limit
+                  });
+                }
+              } catch (error) {
+                log("warn", "Idle Amazon Q usage gate failed. Amazon Q idle disabled.", json, {
+                  error: error instanceof Error ? error.message : String(error)
+                });
+              }
+            } else {
+              amazonQAllowed = true;
+            }
           }
         }
 

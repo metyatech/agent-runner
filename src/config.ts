@@ -63,6 +63,15 @@ export type AgentRunnerConfig = {
       minRemainingPercentAtStart: number;
       minRemainingPercentAtEnd: number;
     };
+    amazonQUsageGate?: {
+      enabled: boolean;
+      monthlyLimit: number;
+      monthlySchedule: {
+        startMinutes: number;
+        minRemainingPercentAtStart: number;
+        minRemainingPercentAtEnd: number;
+      };
+    };
   };
   labels: {
     request: string;

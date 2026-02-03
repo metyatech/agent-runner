@@ -7,7 +7,7 @@ Local agent runner that queues and executes GitHub Agent requests using Codex.
 - Watches GitHub Issues labeled `agent:request`.
 - Queues requests, runs up to the configured concurrency, and posts results back to GitHub.
 - Runs idle maintenance tasks when no queued issues are available.
-- Can optionally run idle tasks through Copilot when monthly quota allows.
+- Can optionally run idle tasks through Copilot/Gemini/Amazon Q when configured usage gates allow.
 - Designed for a self-hosted Windows machine running Codex CLI.
 
 ## Setup
@@ -26,19 +26,21 @@ codex --version
 
 3. If you want Copilot idle runs, ensure the configured Copilot command is available in PATH.
 
-4. Create a GitHub token with repo access and set it as an environment variable.
+4. If you want Gemini or Amazon Q idle runs, ensure their configured commands are available.
+
+5. Create a GitHub token with repo access and set it as an environment variable.
 
 ```bash
 setx AGENT_GITHUB_TOKEN "<token>"
 ```
 
-5. If using webhooks, set the GitHub App webhook secret.
+6. If using webhooks, set the GitHub App webhook secret.
 
 ```bash
 setx AGENT_GITHUB_WEBHOOK_SECRET "<secret>"
 ```
 
-6. If using Cloudflare Tunnel, set the tunnel token for auto-start.
+7. If using Cloudflare Tunnel, set the tunnel token for auto-start.
 
 ```bash
 setx CLOUDFLARED_TUNNEL_TOKEN "<token>"
@@ -47,7 +49,7 @@ setx CLOUDFLARED_TUNNEL_TOKEN "<token>"
 If the environment variable is not available (for example, before a logoff/logon),
 you can also save the token to `state/cloudflared-token.txt` (ignored by git).
 
-7. Update `agent-runner.config.json` with your workspace root and concurrency.
+8. Update `agent-runner.config.json` with your workspace root and concurrency.
 
 ## Development commands
 
@@ -114,9 +116,11 @@ Config file: `agent-runner.config.json`
 - `webhooks.catchup`: Optional low-frequency fallback scan (Search API) to catch requests missed while the webhook listener was down
   - `webhooks.catchup.enabled`: Turn the catch-up scan on/off
   - `webhooks.catchup.intervalMinutes`: Minimum minutes between scans
-  - `webhooks.catchup.maxIssuesPerRun`: Maximum issues to queue per scan
+- `webhooks.catchup.maxIssuesPerRun`: Maximum issues to queue per scan
 - `copilot`: Copilot CLI command and args for idle runs (the prompt is appended as the last argument).
   - `copilot.args`: Ensure `-p` is the final argument so the prompt is passed as the value. Use `--allow-all` for non-interactive runs.
+- `amazonQ`: Optional Amazon Q CLI command and args for idle runs.
+  - `amazonQ.promptMode`: Use `"arg"` when the prompt is passed as the last argument (recommended for WSL wrapper scripts).
 - `idle`: Optional idle task settings (runs when no queued issues exist)
   - `idle.enabled`: Turn idle tasks on/off
   - `idle.maxRunsPerCycle`: Max idle tasks per cycle
@@ -143,6 +147,15 @@ Config file: `agent-runner.config.json`
     - `idle.copilotUsageGate.monthlySchedule.startMinutes`: When to begin idle runs (minutes before monthly reset)
     - `idle.copilotUsageGate.monthlySchedule.minRemainingPercentAtStart`: Required monthly percent left at startMinutes
     - `idle.copilotUsageGate.monthlySchedule.minRemainingPercentAtEnd`: Required monthly percent left at reset time
+  - `idle.geminiUsageGate`: Optional Gemini usage guard (reads local Gemini CLI config + Google OAuth tokens)
+  - `idle.geminiUsageGate.enabled`: Turn Gemini usage gating on/off
+  - `idle.geminiUsageGate.startMinutes`: When to begin idle runs (minutes before reset)
+  - `idle.geminiUsageGate.minRemainingPercentAtStart`: Required remaining percent at startMinutes
+  - `idle.geminiUsageGate.minRemainingPercentAtEnd`: Required remaining percent at reset time
+  - `idle.amazonQUsageGate`: Optional Amazon Q monthly usage guard (runner-local tracking)
+  - `idle.amazonQUsageGate.enabled`: Turn Amazon Q usage gating on/off
+  - `idle.amazonQUsageGate.monthlyLimit`: Monthly request limit to enforce for runner-driven usage
+  - `idle.amazonQUsageGate.monthlySchedule`: Monthly ramp for remaining percent (same semantics as Copilot)
 
 ## Running
 
@@ -186,6 +199,11 @@ fetch rate limits.
 If `idle.copilotUsageGate.enabled` is true, idle runs also require Copilot monthly
 usage to be within the configured reset window and above the remaining-percent
 threshold for that window.
+If `idle.geminiUsageGate.enabled` is true, idle runs also require Gemini usage
+to be within the configured reset window and above the remaining-percent threshold.
+If `idle.amazonQUsageGate.enabled` is true, idle runs also require Amazon Q monthly
+usage (tracked by agent-runner for its own runs) to be within the configured reset
+window and above the remaining-percent threshold.
 When both Codex and Copilot usage gates allow, the runner schedules idle tasks
 for both engines (using different repos when available) and will temporarily
 raise `idle.maxRunsPerCycle` if needed to cover both engines.

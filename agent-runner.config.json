@@ -66,6 +66,15 @@
       "minRemainingPercentAtStart": 100,
       "minRemainingPercentAtEnd": 0
     },
+    "amazonQUsageGate": {
+      "enabled": true,
+      "monthlyLimit": 50,
+      "monthlySchedule": {
+        "startMinutes": 10080,
+        "minRemainingPercentAtStart": 100,
+        "minRemainingPercentAtEnd": 0
+      }
+    },
     "repoScope": "local"
   },
   "labels": {
