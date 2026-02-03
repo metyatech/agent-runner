@@ -46,6 +46,17 @@
       },
       "additionalProperties": false
     },
+    "amazonQ": {
+      "type": "object",
+      "required": ["enabled", "command", "args"],
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "command": { "type": "string", "minLength": 1 },
+        "args": { "type": "array", "items": { "type": "string" } },
+        "promptMode": { "type": "string", "enum": ["stdin", "arg"] }
+      },
+      "additionalProperties": false
+    },
     "idle": {
       "type": "object",
       "required": ["enabled", "maxRunsPerCycle", "cooldownMinutes", "tasks", "promptTemplate"],

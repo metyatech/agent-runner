@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildCodexInvocation, buildIssueTaskText } from "../../src/runner.js";
+import { buildAmazonQInvocation, buildCodexInvocation, buildIssueTaskText } from "../../src/runner.js";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -129,6 +129,82 @@ describe("buildCodexInvocation", () => {
       process.env.APPDATA = originalAppData;
       fs.rmSync(tempDir, { recursive: true, force: true });
     }
+  });
+});
+
+describe("buildAmazonQInvocation", () => {
+  it("passes prompt via stdin by default", () => {
+    const invocation = buildAmazonQInvocation(
+      {
+        workdirRoot: "D:\\ghws",
+        labels: {
+          request: "agent:request",
+          queued: "agent:queued",
+          running: "agent:running",
+          done: "agent:done",
+          failed: "agent:failed",
+          needsUser: "agent:needs-user"
+        },
+        owner: "metyatech",
+        repos: "all",
+        pollIntervalSeconds: 60,
+        concurrency: 1,
+        logMaintenance: { enabled: true },
+        amazonQ: {
+          enabled: true,
+          command: "kiro",
+          args: ["chat"],
+          promptMode: "stdin"
+        },
+        codex: {
+          command: "codex",
+          args: ["exec", "--full-auto"],
+          promptTemplate: "Template {{repos}} {{task}}"
+        }
+      },
+      "D:\\ghws\\repo",
+      "Prompt for Q"
+    );
+
+    expect(invocation.args.at(-1)).toBe("chat");
+    expect(invocation.stdin).toBe("Prompt for Q");
+  });
+
+  it("passes prompt as last arg when promptMode=arg", () => {
+    const invocation = buildAmazonQInvocation(
+      {
+        workdirRoot: "D:\\ghws",
+        labels: {
+          request: "agent:request",
+          queued: "agent:queued",
+          running: "agent:running",
+          done: "agent:done",
+          failed: "agent:failed",
+          needsUser: "agent:needs-user"
+        },
+        owner: "metyatech",
+        repos: "all",
+        pollIntervalSeconds: 60,
+        concurrency: 1,
+        logMaintenance: { enabled: true },
+        amazonQ: {
+          enabled: true,
+          command: "kiro",
+          args: ["chat"],
+          promptMode: "arg"
+        },
+        codex: {
+          command: "codex",
+          args: ["exec", "--full-auto"],
+          promptTemplate: "Template {{repos}} {{task}}"
+        }
+      },
+      "D:\\ghws\\repo",
+      "Prompt for Q"
+    );
+
+    expect(invocation.args.at(-1)).toBe("Prompt for Q");
+    expect(invocation.stdin).toBeUndefined();
   });
 });
 

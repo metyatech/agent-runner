@@ -18,6 +18,12 @@ export type AgentRunnerConfig = {
     taskRunKeepLatest?: number;
     writeLatestPointers?: boolean;
   };
+  amazonQ?: {
+    enabled: boolean;
+    command: string;
+    args: string[];
+    promptMode?: "stdin" | "arg";
+  };
   idle?: {
     enabled: boolean;
     maxRunsPerCycle: number;

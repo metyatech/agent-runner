@@ -33,7 +33,7 @@ export type RunResult = {
   activityId: string | null;
 };
 
-export type IdleEngine = "codex" | "copilot" | "gemini-pro" | "gemini-flash";
+export type IdleEngine = "codex" | "copilot" | "gemini-pro" | "gemini-flash" | "amazon-q";
 
 export type IdleTaskResult = {
   success: boolean;
@@ -48,12 +48,41 @@ export type IdleTaskResult = {
 export type EngineInvocation = {
   command: string;
   args: string[];
+  stdin?: string;
   options: {
     cwd: string;
     shell: boolean;
     env: NodeJS.ProcessEnv;
   };
 };
+
+export function buildAmazonQInvocation(
+  config: AgentRunnerConfig,
+  primaryPath: string,
+  prompt: string,
+  envOverrides: NodeJS.ProcessEnv = {}
+): EngineInvocation {
+  if (!config.amazonQ || !config.amazonQ.enabled) {
+    throw new Error("Amazon Q command not configured.");
+  }
+  const resolved = resolveCodexCommand(config.amazonQ.command, process.env.PATH);
+  const promptMode = config.amazonQ.promptMode ?? "stdin";
+  const args =
+    promptMode === "arg"
+      ? [...resolved.prefixArgs, ...config.amazonQ.args, prompt]
+      : [...resolved.prefixArgs, ...config.amazonQ.args];
+
+  return {
+    command: resolved.command,
+    args,
+    stdin: promptMode === "stdin" ? prompt : undefined,
+    options: {
+      cwd: primaryPath,
+      shell: false,
+      env: { ...process.env, ...envOverrides }
+    }
+  };
+}
 
 function resolveRepoPath(root: string, repo: RepoInfo): string {
   return path.join(root, repo.repo);
@@ -311,6 +340,14 @@ export async function runIssue(
   try {
     exitCode = await new Promise<number>((resolve, reject) => {
       const child = spawn(invocation.command, invocation.args, invocation.options);
+      if (invocation.stdin && child.stdin) {
+        try {
+          child.stdin.write(invocation.stdin);
+          child.stdin.end();
+        } catch {
+          // best-effort: proceed without stdin if writing fails
+        }
+      }
 
       if (typeof child.pid === "number") {
         const startedAt = new Date().toISOString();
@@ -477,6 +514,8 @@ export async function runIdleTask(
   const invocation =
     engine === "copilot"
       ? buildCopilotInvocation(config, repoPath, prompt, envOverrides)
+      : engine === "amazon-q"
+      ? buildAmazonQInvocation(config, repoPath, prompt, envOverrides)
       : engine === "gemini-pro" || engine === "gemini-flash"
       ? buildGeminiInvocation(config, repoPath, prompt, engine, envOverrides)
       : buildCodexInvocation(config, repoPath, prompt, envOverrides);
@@ -488,6 +527,14 @@ export async function runIdleTask(
   try {
     exitCode = await new Promise<number>((resolve, reject) => {
       const child = spawn(invocation.command, invocation.args, invocation.options);
+      if (invocation.stdin && child.stdin) {
+        try {
+          child.stdin.write(invocation.stdin);
+          child.stdin.end();
+        } catch {
+          // best-effort: proceed without stdin if writing fails
+        }
+      }
       if (typeof child.pid === "number") {
         recordActivity(activityPath, {
           id: activityId,

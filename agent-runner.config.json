@@ -12,6 +12,12 @@
     "taskRunKeepLatest": 200,
     "writeLatestPointers": true
   },
+  "amazonQ": {
+    "enabled": false,
+    "command": "kiro",
+    "args": [],
+    "promptMode": "stdin"
+  },
   "idle": {
     "enabled": true,
     "maxRunsPerCycle": 2,

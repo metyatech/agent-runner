@@ -342,6 +342,25 @@ To prune old logs (uses `logMaintenance` from the config):
 agent-runner logs prune --config .\\agent-runner.config.json --yes
 ```
 
+## Amazon Q Developer (Kiro CLI)
+
+Amazon Q Developer CLI is now distributed as the Kiro CLI. Download and install it, then make sure the `kiro` (or equivalent) command is available on your `PATH`.
+
+Enable it for idle runs by adding `amazonQ` to the config:
+
+```json
+{
+  "amazonQ": {
+    "enabled": true,
+    "command": "kiro",
+    "args": [],
+    "promptMode": "stdin"
+  }
+}
+```
+
+Note: the CLI's non-interactive invocation differs by version/platform. Start with `promptMode: "stdin"` and set `args` based on `kiro --help` so the command exits after answering (not an interactive session).
+
 ### Summary block
 
 At the end of each run, include a summary block so the runner can post it to GitHub:

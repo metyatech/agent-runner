@@ -638,6 +638,7 @@ program
 
         let geminiProAllowed = false;
         let geminiFlashAllowed = false;
+        let amazonQAllowed = false;
         const geminiGate = config.idle.geminiUsageGate;
         if (geminiGate?.enabled) {
           try {
@@ -684,6 +685,15 @@ program
           }
         }
 
+        if (config.amazonQ?.enabled) {
+          const exists = await commandExists(config.amazonQ.command);
+          if (!exists) {
+            log("warn", `Idle Amazon Q command not found (${config.amazonQ.command}).`, json);
+          } else {
+            amazonQAllowed = true;
+          }
+        }
+
         const engines: IdleEngine[] = [];
         if (codexAllowed) {
           engines.push("codex");
@@ -696,6 +706,9 @@ program
         }
         if (geminiFlashAllowed) {
           engines.push("gemini-flash");
+        }
+        if (amazonQAllowed) {
+          engines.push("amazon-q");
         }
 
         if (engines.length === 0) {
