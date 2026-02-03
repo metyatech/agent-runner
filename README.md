@@ -365,6 +365,12 @@ chmod +x q/install.sh
 q login --license free --use-device-flow
 ```
 
+If `q` is not on your PATH in non-interactive WSL invocations, run it via a login shell:
+
+```powershell
+wsl.exe -d Ubuntu -- bash -lc 'q login --license free --use-device-flow'
+```
+
 ### Enable in the runner
 
 Set `amazonQ` in the config (ships disabled by default):
@@ -374,11 +380,13 @@ Set `amazonQ` in the config (ships disabled by default):
   "amazonQ": {
     "enabled": true,
     "command": "wsl.exe",
-    "args": ["-d", "Ubuntu", "--", "bash", "-lc", "q chat --no-interactive --trust-tools= \"$1\"", "--"],
+    "args": ["-d", "Ubuntu", "--", "bash", "-lc", "q chat --no-interactive --trust-all-tools --wrap never \"$1\"", "--"],
     "promptMode": "arg"
   }
 }
 ```
+
+Note: `--trust-all-tools` is required for fully non-interactive runs, but it allows the agent to execute arbitrary shell commands. Only enable this on a machine you are comfortable with the agent operating on.
 
 ### Summary block
 
