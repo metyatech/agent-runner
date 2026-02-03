@@ -374,7 +374,7 @@ Set `amazonQ` in the config (ships disabled by default):
   "amazonQ": {
     "enabled": true,
     "command": "wsl.exe",
-    "args": ["-d", "Ubuntu", "--", "q", "chat", "--no-interactive", "--trust-all-tools"],
+    "args": ["-d", "Ubuntu", "--", "bash", "-lc", "q chat --no-interactive --trust-all-tools \"$1\"", "--"],
     "promptMode": "arg"
   }
 }
