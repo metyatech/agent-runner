@@ -34,10 +34,16 @@ import { clearStopRequest, isStopRequested, requestStop } from "./stop-flag.js";
 import { handleWebhookEvent } from "./webhook-handler.js";
 import { startWebhookServer } from "./webhook-server.js";
 import {
+  enqueueWebhookIssue,
   loadWebhookQueue,
   removeWebhookIssues,
   resolveWebhookQueuePath
 } from "./webhook-queue.js";
+import {
+  loadWebhookCatchupState,
+  resolveWebhookCatchupStatePath,
+  saveWebhookCatchupState
+} from "./webhook-catchup-state.js";
 
 const program = new Command();
 
@@ -52,6 +58,95 @@ function resolveWebhookSecret(config?: AgentRunnerConfig["webhooks"]): string | 
     return process.env[config.secretEnv] ?? null;
   }
   return null;
+}
+
+async function maybeRunWebhookCatchup(options: {
+  client: GitHubClient;
+  config: AgentRunnerConfig;
+  webhookConfig: NonNullable<AgentRunnerConfig["webhooks"]>;
+  queuePath: string;
+  json: boolean;
+  dryRun: boolean;
+  now: Date;
+}): Promise<void> {
+  const { client, config, webhookConfig, queuePath, json, dryRun, now } = options;
+  const catchup = webhookConfig.catchup;
+  if (!catchup || !catchup.enabled) {
+    return;
+  }
+  const statePath = resolveWebhookCatchupStatePath(config.workdirRoot);
+  const state = loadWebhookCatchupState(statePath);
+  const intervalMs = catchup.intervalMinutes * 60 * 1000;
+  if (state.lastRunAt) {
+    const last = Date.parse(state.lastRunAt);
+    if (!Number.isNaN(last) && now.getTime() - last < intervalMs) {
+      return;
+    }
+  }
+
+  const maxIssues = catchup.maxIssuesPerRun;
+  const excludeLabels = [
+    config.labels.queued,
+    config.labels.running,
+    config.labels.done,
+    config.labels.failed,
+    config.labels.needsUser
+  ];
+
+  log("info", "Webhook catch-up scan: searching for missed agent:request issues.", json, {
+    intervalMinutes: catchup.intervalMinutes,
+    maxIssuesPerRun: maxIssues
+  });
+
+  let found: IssueInfo[] = [];
+  try {
+    found = await client.searchOpenIssuesByLabelAcrossOwner(config.owner, config.labels.request, {
+      excludeLabels,
+      perPage: 100,
+      maxPages: 1
+    });
+  } catch (error) {
+    log("warn", "Webhook catch-up scan failed.", json, {
+      error: error instanceof Error ? error.message : String(error)
+    });
+    return;
+  }
+
+  if (found.length === 0) {
+    saveWebhookCatchupState(statePath, { lastRunAt: now.toISOString() });
+    return;
+  }
+
+  const limited = found.slice(0, maxIssues);
+  log("info", `Webhook catch-up scan found ${found.length} issue(s).`, json, {
+    queued: limited.length
+  });
+
+  for (const issue of limited) {
+    if (dryRun) {
+      log("info", `Dry-run: would queue catch-up issue ${issue.url}`, json);
+      continue;
+    }
+    try {
+      await client.addLabels(issue, [config.labels.queued]);
+    } catch (error) {
+      log("warn", "Failed to add queued label during catch-up.", json, {
+        issue: issue.url,
+        error: error instanceof Error ? error.message : String(error)
+      });
+      continue;
+    }
+    try {
+      await enqueueWebhookIssue(queuePath, issue);
+    } catch (error) {
+      log("warn", "Failed to enqueue catch-up issue.", json, {
+        issue: issue.url,
+        error: error instanceof Error ? error.message : String(error)
+      });
+    }
+  }
+
+  saveWebhookCatchupState(statePath, { lastRunAt: now.toISOString() });
 }
 
 async function resolveWebhookQueuedIssues(
@@ -348,6 +443,18 @@ program
         shouldPollIssues && !rateLimitedUntil ? await resumeAwaitingUser(repos) : 0;
       if (resumed > 0) {
         log("info", `Re-queued ${resumed} request(s) after user reply.`, json);
+      }
+
+      if (webhooksEnabled && webhookQueuePath && webhookConfig) {
+        await maybeRunWebhookCatchup({
+          client,
+          config,
+          webhookConfig,
+          queuePath: webhookQueuePath,
+          json,
+          dryRun,
+          now: new Date()
+        });
       }
 
       const queuedIssues: IssueInfo[] = [];

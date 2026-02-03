@@ -107,10 +107,14 @@ Config file: `agent-runner.config.json`
   - `webhooks.host`: Host to bind for the local webhook server
   - `webhooks.port`: Port to bind for the local webhook server
   - `webhooks.path`: URL path for webhook requests (e.g. `/webhooks/github`)
-  - `webhooks.secret`: Webhook secret (optional if using `webhooks.secretEnv`)
-  - `webhooks.secretEnv`: Environment variable name holding the webhook secret
-  - `webhooks.maxPayloadBytes`: Optional max payload size (bytes)
-  - `webhooks.queueFile`: Optional path for the webhook queue file
+- `webhooks.secret`: Webhook secret (optional if using `webhooks.secretEnv`)
+- `webhooks.secretEnv`: Environment variable name holding the webhook secret
+- `webhooks.maxPayloadBytes`: Optional max payload size (bytes)
+- `webhooks.queueFile`: Optional path for the webhook queue file
+- `webhooks.catchup`: Optional low-frequency fallback scan (Search API) to catch requests missed while the webhook listener was down
+  - `webhooks.catchup.enabled`: Turn the catch-up scan on/off
+  - `webhooks.catchup.intervalMinutes`: Minimum minutes between scans
+  - `webhooks.catchup.maxIssuesPerRun`: Maximum issues to queue per scan
 - `copilot`: Copilot CLI command and args for idle runs (the prompt is appended as the last argument).
   - `copilot.args`: Ensure `-p` is the final argument so the prompt is passed as the value. Use `--allow-all` for non-interactive runs.
 - `idle`: Optional idle task settings (runs when no queued issues exist)
@@ -163,6 +167,8 @@ node dist/cli.js webhook --config agent-runner.config.json
 When `webhooks.enabled` is true, repo-wide issue polling is skipped and the runner
 relies on webhook-queued issues. Keep the webhook listener running (for example,
 as a background service or scheduled task).
+If `webhooks.catchup.enabled` is true, the runner also performs a low-frequency
+Search API scan to catch requests created while the webhook listener was down.
 
 ## Idle runs (issue-less)
 

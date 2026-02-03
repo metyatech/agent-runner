@@ -60,7 +60,12 @@
     "host": "127.0.0.1",
     "port": 4312,
     "path": "/webhooks/github",
-    "secretEnv": "AGENT_GITHUB_WEBHOOK_SECRET"
+    "secretEnv": "AGENT_GITHUB_WEBHOOK_SECRET",
+    "catchup": {
+      "enabled": true,
+      "intervalMinutes": 60,
+      "maxIssuesPerRun": 50
+    }
   },
   "copilot": {
     "command": "copilot",

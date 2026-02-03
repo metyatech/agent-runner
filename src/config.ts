@@ -65,6 +65,11 @@ export type AgentRunnerConfig = {
     secretEnv?: string;
     maxPayloadBytes?: number;
     queueFile?: string;
+    catchup?: {
+      enabled: boolean;
+      intervalMinutes: number;
+      maxIssuesPerRun: number;
+    };
   };
   copilot?: {
     command: string;

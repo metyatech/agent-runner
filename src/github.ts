@@ -188,6 +188,73 @@ export class GitHubClient {
     };
   }
 
+  async searchOpenIssuesByLabelAcrossOwner(
+    owner: string,
+    label: string,
+    options?: {
+      excludeLabels?: string[];
+      maxPages?: number;
+      perPage?: number;
+    }
+  ): Promise<IssueInfo[]> {
+    const issues: IssueInfo[] = [];
+    const encodedLabel = label.includes('"') ? label.replace(/"/g, '\\"') : label;
+    const exclude = options?.excludeLabels ?? [];
+    const excludeQuery = exclude
+      .filter((entry) => entry.length > 0)
+      .map((entry) => ` -label:"${entry.replace(/"/g, '\\"')}"`)
+      .join("");
+    const query = `user:${owner} type:issue state:open label:"${encodedLabel}"${excludeQuery}`;
+    const pageSize = Math.min(100, Math.max(1, options?.perPage ?? 100));
+    let page = 1;
+    const maxPages = Math.min(10, Math.max(1, options?.maxPages ?? 10));
+
+    while (true) {
+      const response = await this.octokit.search.issuesAndPullRequests({
+        q: query,
+        sort: "updated",
+        order: "desc",
+        per_page: pageSize,
+        page
+      });
+
+      for (const item of response.data.items) {
+        if ("pull_request" in item) {
+          continue;
+        }
+        const repoUrl = (item as { repository_url?: string }).repository_url;
+        if (!repoUrl) {
+          continue;
+        }
+        const match = /\/repos\/([^/]+)\/([^/]+)$/.exec(repoUrl);
+        if (!match) {
+          continue;
+        }
+        const repo: RepoInfo = { owner: match[1], repo: match[2] };
+        issues.push({
+          id: item.id,
+          number: item.number,
+          title: item.title,
+          body: item.body ?? null,
+          author: item.user?.login ?? null,
+          repo,
+          labels: item.labels.map((label) => (typeof label === "string" ? label : label.name ?? "")),
+          url: item.html_url
+        });
+      }
+
+      if (response.data.items.length < pageSize || response.data.items.length === 0) {
+        break;
+      }
+      page += 1;
+      if (page > maxPages) {
+        break;
+      }
+    }
+
+    return issues;
+  }
+
   async createIssue(repo: RepoInfo, title: string, body: string): Promise<IssueInfo> {
     const response = await this.octokit.issues.create({
       owner: repo.owner,
