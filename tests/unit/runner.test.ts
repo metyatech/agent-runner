@@ -168,7 +168,6 @@ describe("buildAmazonQInvocation", () => {
 
     expect(invocation.args.at(-1)).toBe("chat");
     expect(invocation.stdin).toBe("Prompt for Q");
-    expect(invocation.timeoutMs).toBe(120_000);
   });
 
   it("passes prompt as last arg when promptMode=arg", () => {
@@ -206,7 +205,6 @@ describe("buildAmazonQInvocation", () => {
 
     expect(invocation.args.at(-1)).toBe("Prompt for Q");
     expect(invocation.stdin).toBeUndefined();
-    expect(invocation.timeoutMs).toBe(120_000);
   });
 });
 

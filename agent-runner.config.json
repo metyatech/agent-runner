@@ -24,8 +24,7 @@
       "q chat --no-interactive --trust-all-tools --wrap never \"$1\"",
       "--"
     ],
-    "promptMode": "arg",
-    "timeoutSeconds": 120
+    "promptMode": "arg"
   },
   "idle": {
     "enabled": true,

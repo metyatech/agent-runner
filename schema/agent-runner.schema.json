@@ -53,8 +53,7 @@
         "enabled": { "type": "boolean" },
         "command": { "type": "string", "minLength": 1 },
         "args": { "type": "array", "items": { "type": "string" } },
-        "promptMode": { "type": "string", "enum": ["stdin", "arg"] },
-        "timeoutSeconds": { "type": "integer", "minimum": 1, "maximum": 3600 }
+        "promptMode": { "type": "string", "enum": ["stdin", "arg"] }
       },
       "additionalProperties": false
     },

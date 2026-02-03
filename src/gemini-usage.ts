@@ -72,8 +72,8 @@ function readGeminiOauthClientInfoFromEnv(): GeminiOauthClientInfo | null {
 }
 
 function extractOauthConstantsFromJs(content: string): GeminiOauthClientInfo | null {
-  const clientIdMatch = content.match(/const\\s+OAUTH_CLIENT_ID\\s*=\\s*['"]([^'"]+)['"]/);
-  const clientSecretMatch = content.match(/const\\s+OAUTH_CLIENT_SECRET\\s*=\\s*['"]([^'"]+)['"]/);
+  const clientIdMatch = content.match(/const\s+OAUTH_CLIENT_ID\s*=\s*['"]([^'"]+)['"]/);
+  const clientSecretMatch = content.match(/const\s+OAUTH_CLIENT_SECRET\s*=\s*['"]([^'"]+)['"]/);
   const clientId = clientIdMatch?.[1];
   const clientSecret = clientSecretMatch?.[1];
 
