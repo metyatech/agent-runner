@@ -75,6 +75,19 @@ export function resolveCodexCommand(
         return { command: process.execPath, prefixArgs: [codexJs] };
       }
     }
+    if (base === "gemini.cmd" || base === "gemini.ps1" || base === "gemini") {
+      const geminiJs = path.join(
+        path.dirname(resolved),
+        "node_modules",
+        "@google",
+        "gemini-cli",
+        "dist",
+        "index.js"
+      );
+      if (fs.existsSync(geminiJs)) {
+        return { command: process.execPath, prefixArgs: [geminiJs] };
+      }
+    }
   }
 
   return { command: resolved, prefixArgs: [] };
