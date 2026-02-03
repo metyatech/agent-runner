@@ -49,6 +49,7 @@ export type EngineInvocation = {
   command: string;
   args: string[];
   stdin?: string;
+  timeoutMs?: number;
   options: {
     cwd: string;
     shell: boolean;
@@ -67,6 +68,10 @@ export function buildAmazonQInvocation(
   }
   const resolved = resolveCodexCommand(config.amazonQ.command, process.env.PATH);
   const promptMode = config.amazonQ.promptMode ?? "stdin";
+  const timeoutMs =
+    typeof config.amazonQ.timeoutSeconds === "number" && Number.isFinite(config.amazonQ.timeoutSeconds)
+      ? Math.max(1, Math.floor(config.amazonQ.timeoutSeconds)) * 1000
+      : 120_000;
   const args =
     promptMode === "arg"
       ? [...resolved.prefixArgs, ...config.amazonQ.args, prompt]
@@ -76,6 +81,7 @@ export function buildAmazonQInvocation(
     command: resolved.command,
     args,
     stdin: promptMode === "stdin" ? prompt : undefined,
+    timeoutMs,
     options: {
       cwd: primaryPath,
       shell: false,
@@ -349,6 +355,17 @@ export async function runIssue(
         }
       }
 
+      let timeout: NodeJS.Timeout | null = null;
+      if (typeof invocation.timeoutMs === "number" && invocation.timeoutMs > 0) {
+        timeout = setTimeout(() => {
+          try {
+            child.kill();
+          } catch {
+            // ignore
+          }
+        }, invocation.timeoutMs);
+      }
+
       if (typeof child.pid === "number") {
         const startedAt = new Date().toISOString();
         recordRunningIssue(statePath, {
@@ -387,8 +404,14 @@ export async function runIssue(
         process.stderr.write(normalized);
       });
 
-      child.on("error", (error) => reject(error));
-      child.on("close", (code) => resolve(code ?? 1));
+      child.on("error", (error) => {
+        if (timeout) clearTimeout(timeout);
+        reject(error);
+      });
+      child.on("close", (code) => {
+        if (timeout) clearTimeout(timeout);
+        resolve(code ?? 1);
+      });
     });
   } catch (error) {
     if (activityRecorded && activityId) {
@@ -535,6 +558,17 @@ export async function runIdleTask(
           // best-effort: proceed without stdin if writing fails
         }
       }
+
+      let timeout: NodeJS.Timeout | null = null;
+      if (typeof invocation.timeoutMs === "number" && invocation.timeoutMs > 0) {
+        timeout = setTimeout(() => {
+          try {
+            child.kill();
+          } catch {
+            // ignore
+          }
+        }, invocation.timeoutMs);
+      }
       if (typeof child.pid === "number") {
         recordActivity(activityPath, {
           id: activityId,
@@ -558,8 +592,14 @@ export async function runIdleTask(
         appendLog(normalized);
         process.stderr.write(normalized);
       });
-      child.on("error", (error) => reject(error));
-      child.on("close", (code) => resolve(code ?? 1));
+      child.on("error", (error) => {
+        if (timeout) clearTimeout(timeout);
+        reject(error);
+      });
+      child.on("close", (code) => {
+        if (timeout) clearTimeout(timeout);
+        resolve(code ?? 1);
+      });
     });
   } catch (error) {
     if (activityRecorded) {

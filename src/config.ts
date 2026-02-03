@@ -23,6 +23,7 @@ export type AgentRunnerConfig = {
     command: string;
     args: string[];
     promptMode?: "stdin" | "arg";
+    timeoutSeconds?: number;
   };
   idle?: {
     enabled: boolean;
