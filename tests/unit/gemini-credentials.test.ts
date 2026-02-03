@@ -5,15 +5,29 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 describe("fetchGeminiUsage (credentials refresh)", () => {
   const originalFetch = globalThis.fetch;
+  const originalClientId = process.env.AGENT_RUNNER_GEMINI_OAUTH_CLIENT_ID;
+  const originalClientSecret = process.env.AGENT_RUNNER_GEMINI_OAUTH_CLIENT_SECRET;
 
   beforeEach(() => {
     vi.resetModules();
+    process.env.AGENT_RUNNER_GEMINI_OAUTH_CLIENT_ID = "test-client-id";
+    process.env.AGENT_RUNNER_GEMINI_OAUTH_CLIENT_SECRET = "test-client-secret";
   });
 
   afterEach(() => {
     vi.unstubAllGlobals();
     globalThis.fetch = originalFetch;
     vi.resetModules();
+    if (typeof originalClientId === "string") {
+      process.env.AGENT_RUNNER_GEMINI_OAUTH_CLIENT_ID = originalClientId;
+    } else {
+      delete process.env.AGENT_RUNNER_GEMINI_OAUTH_CLIENT_ID;
+    }
+    if (typeof originalClientSecret === "string") {
+      process.env.AGENT_RUNNER_GEMINI_OAUTH_CLIENT_SECRET = originalClientSecret;
+    } else {
+      delete process.env.AGENT_RUNNER_GEMINI_OAUTH_CLIENT_SECRET;
+    }
   });
 
   it("refreshes OAuth access token with grant_type=refresh_token", async () => {
@@ -88,8 +102,10 @@ describe("fetchGeminiUsage (credentials refresh)", () => {
     expect(tokenInit?.headers?.["Content-Type"]).toBe("application/x-www-form-urlencoded");
     expect(tokenInit?.body).toContain("grant_type=refresh_token");
     expect(tokenInit?.body).toContain("refresh_token=rtok");
-    expect(tokenInit?.body).toContain("client_id=cid");
-    expect(tokenInit?.body).toContain("client_secret=csecret");
+    expect(tokenInit?.body).toContain("client_id=test-client-id");
+    expect(tokenInit?.body).toContain("client_secret=test-client-secret");
+    expect(tokenInit?.body).not.toContain("client_id=cid");
+    expect(tokenInit?.body).not.toContain("client_secret=csecret");
 
     const updated = JSON.parse(fs.readFileSync(credsPath, "utf8"));
     expect(updated.access_token).toBe("newtok");
@@ -98,4 +114,3 @@ describe("fetchGeminiUsage (credentials refresh)", () => {
     fs.rmSync(homeDir, { recursive: true, force: true });
   });
 });
-
