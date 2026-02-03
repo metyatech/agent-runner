@@ -10,6 +10,14 @@ export type AgentRunnerConfig = {
   workdirRoot: string;
   pollIntervalSeconds: number;
   concurrency: number;
+  logMaintenance?: {
+    enabled: boolean;
+    maxAgeDays?: number;
+    keepLatest?: number;
+    maxTotalMB?: number;
+    taskRunKeepLatest?: number;
+    writeLatestPointers?: boolean;
+  };
   idle?: {
     enabled: boolean;
     maxRunsPerCycle: number;

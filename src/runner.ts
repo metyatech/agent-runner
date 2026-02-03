@@ -23,6 +23,7 @@ import {
 } from "./activity-state.js";
 import { AGENT_RUNNER_MARKER, findLastMarkerComment, NEEDS_USER_MARKER } from "./notifications.js";
 import { normalizeLogChunk } from "./log-normalize.js";
+import { resolveLogMaintenance, writeLatestPointer } from "./log-maintenance.js";
 
 export type RunResult = {
   success: boolean;
@@ -290,6 +291,9 @@ export async function runIssue(
     logDir,
     `${issue.repo.repo}-issue-${issue.number}-${Date.now()}.log`
   );
+  if (resolveLogMaintenance(config).writeLatestPointers) {
+    writeLatestPointer(logDir, "issue", logPath);
+  }
 
   const appendLog = (value: string): void => {
     fs.appendFileSync(logPath, value);
@@ -455,6 +459,9 @@ export async function runIdleTask(
   const logDir = path.resolve(config.workdirRoot, "agent-runner", "logs");
   fs.mkdirSync(logDir, { recursive: true });
   const logPath = path.join(logDir, `${repo.repo}-idle-${Date.now()}.log`);
+  if (resolveLogMaintenance(config).writeLatestPointers) {
+    writeLatestPointer(logDir, "idle", logPath);
+  }
 
   const appendLog = (value: string): void => {
     fs.appendFileSync(logPath, value);

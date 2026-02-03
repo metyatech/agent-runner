@@ -4,6 +4,14 @@
   "workdirRoot": "D:\\ghws",
   "pollIntervalSeconds": 60,
   "concurrency": 8,
+  "logMaintenance": {
+    "enabled": true,
+    "maxAgeDays": 30,
+    "keepLatest": 2000,
+    "maxTotalMB": 1024,
+    "taskRunKeepLatest": 200,
+    "writeLatestPointers": true
+  },
   "idle": {
     "enabled": true,
     "maxRunsPerCycle": 2,

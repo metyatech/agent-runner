@@ -1,6 +1,6 @@
 param(
-  [string]$RepoPath = "D:\\ghws\\agent-runner",
-  [string]$ConfigPath = "D:\\ghws\\agent-runner\\agent-runner.config.json",
+  [string]$RepoPath = (Split-Path -Parent $PSScriptRoot),
+  [string]$ConfigPath = (Join-Path (Split-Path -Parent $PSScriptRoot) "agent-runner.config.json"),
   [string]$LogDir = ""
 )
 
@@ -9,14 +9,22 @@ $script = Join-Path $RepoPath "dist\\cli.js"
 $resolvedLogDir = if ($LogDir) { $LogDir } else { (Join-Path $RepoPath "logs") }
 
 New-Item -ItemType Directory -Force -Path $resolvedLogDir | Out-Null
-$timestamp = Get-Date -Format "yyyyMMdd-HHmmss"
-$logPath = Join-Path $resolvedLogDir "task-run-$timestamp.log"
+$date = Get-Date -Format "yyyyMMdd"
+$logPath = Join-Path $resolvedLogDir "task-run-$date.log"
+$latestPath = Join-Path $resolvedLogDir "latest-task-run.path"
 
 function Append-Log {
   param([string]$Line)
   $Line | Out-File -FilePath $logPath -Append -Encoding utf8
 }
 
+try {
+  Set-Content -Path $latestPath -Value "$logPath`n" -Encoding utf8
+} catch {
+  # best-effort
+}
+
+Append-Log ""
 Append-Log "=== AgentRunner task start: $(Get-Date -Format o) ==="
 Append-Log "User: $env:USERNAME"
 Append-Log "Computer: $env:COMPUTERNAME"

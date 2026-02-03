@@ -45,6 +45,7 @@ import {
   resolveWebhookCatchupStatePath,
   saveWebhookCatchupState
 } from "./webhook-catchup-state.js";
+import { pruneLogs, resolveLogMaintenance, resolveLogsDir } from "./log-maintenance.js";
 
 const program = new Command();
 
@@ -269,6 +270,23 @@ program
 
     if (!token) {
       throw new Error("Missing GitHub token. Set AGENT_GITHUB_TOKEN or GITHUB_TOKEN.");
+    }
+
+    const logDecision = resolveLogMaintenance(config);
+    const pruneResult = pruneLogs({
+      dir: resolveLogsDir(config.workdirRoot),
+      decision: logDecision,
+      dryRun
+    });
+    if (logDecision.enabled) {
+      log("info", pruneResult.dryRun ? "Dry-run: would prune logs." : "Pruned logs.", json, {
+        dir: pruneResult.dir,
+        scanned: pruneResult.scanned,
+        deleted: pruneResult.deleted,
+        deletedMB: Math.round((pruneResult.deletedBytes / (1024 * 1024)) * 100) / 100,
+        skipped: pruneResult.skipped,
+        kept: pruneResult.kept
+      });
     }
 
     const lock = acquireLock(path.resolve(config.workdirRoot, "agent-runner", "state", "runner.lock"));
@@ -963,6 +981,39 @@ program
   });
 
 program
+  .command("logs")
+  .description("Manage runner logs.")
+  .addCommand(
+    new Command("prune")
+      .description("Prune old log files under workdirRoot/agent-runner/logs.")
+      .option("-c, --config <path>", "Path to config file", "agent-runner.config.json")
+      .option("--dry-run", "List files that would be deleted", false)
+      .option("--yes", "Actually delete files (required unless --dry-run)", false)
+      .option("--json", "Output JSON", false)
+      .action((options) => {
+        const json = Boolean(options.json);
+        const dryRun = Boolean(options.dryRun);
+        const requireYes = !dryRun && !options.yes;
+        if (requireYes) {
+          throw new Error("Refusing to delete logs without --yes. Use --dry-run to preview.");
+        }
+
+        const configPath = path.resolve(process.cwd(), options.config);
+        const config = loadConfig(configPath);
+        const decision = resolveLogMaintenance(config);
+        const result = pruneLogs({ dir: resolveLogsDir(config.workdirRoot), decision, dryRun });
+        log("info", result.dryRun ? "Dry-run: would prune logs." : "Pruned logs.", json, {
+          dir: result.dir,
+          scanned: result.scanned,
+          deleted: result.deleted,
+          deletedMB: Math.round((result.deletedBytes / (1024 * 1024)) * 100) / 100,
+          skipped: result.skipped,
+          kept: result.kept
+        });
+      })
+  );
+
+program
   .command("status")
   .description("Show runner status snapshot.")
   .option("-c, --config <path>", "Path to config file", "agent-runner.config.json")
@@ -1047,6 +1098,10 @@ program
     const json = Boolean(options.json);
     const configPath = path.resolve(process.cwd(), options.config);
     const config = loadConfig(configPath);
+
+    const decision = resolveLogMaintenance(config);
+    pruneLogs({ dir: resolveLogsDir(config.workdirRoot), decision, dryRun: false });
+
     const webhookConfig = config.webhooks;
     if (!webhookConfig || !webhookConfig.enabled) {
       throw new Error("Webhooks are disabled. Set webhooks.enabled to true.");

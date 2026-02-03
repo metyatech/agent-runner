@@ -1,7 +1,7 @@
 param(
   [string]$RunnerTaskName = "AgentRunner",
   [string]$LabelTaskName = "AgentRunnerLabelSync",
-  [string]$LogDir = "D:\\ghws\\agent-runner\\logs",
+  [string]$LogDir = (Join-Path (Split-Path -Parent $PSScriptRoot) "logs"),
   [int]$LogTail = 5
 )
 
@@ -28,6 +28,13 @@ if ($labelTask) {
 Write-Host ""
 Write-Host "== Recent Logs =="
 if (Test-Path $LogDir) {
+  $latestPath = Join-Path $LogDir "latest-task-run.path"
+  if (Test-Path $latestPath) {
+    $latest = (Get-Content -Path $latestPath -Raw).Trim()
+    if ($latest) {
+      Write-Host "Latest task-run log: $latest"
+    }
+  }
   Get-ChildItem $LogDir -File | Sort-Object LastWriteTime -Descending | Select-Object -First $LogTail | ForEach-Object {
     Write-Host "$($_.LastWriteTime) $($_.Name)"
   }

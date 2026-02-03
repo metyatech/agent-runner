@@ -301,7 +301,8 @@ Unregister the task:
 .\scripts\unregister-task.ps1
 ```
 
-Task run logs are written to `logs/task-run-*.log`.
+Task run logs are written to `logs/task-run-YYYYMMDD.log` (one file per day).
+The latest task-run log path is also written to `logs/latest-task-run.path`.
 
 Issue logs (e.g. `*-issue-*.log`) are appended as output is produced.
 
@@ -331,7 +332,15 @@ Unregister the tunnel task:
 .\scripts\unregister-cloudflared-task.ps1
 ```
 
-Logs are written to `logs/webhook-run-*.log` and `logs/cloudflared-*.log`.
+Logs are written to `logs/webhook-run-*.out.log` / `logs/webhook-run-*.err.log` and `logs/cloudflared-*.out.log` / `logs/cloudflared-*.err.log`.
+
+### Log cleanup
+
+To prune old logs (uses `logMaintenance` from the config):
+
+```powershell
+agent-runner logs prune --config .\\agent-runner.config.json --yes
+```
 
 ### Summary block
 
