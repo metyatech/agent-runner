@@ -229,9 +229,14 @@ Example config snippet:
       }
     }
   },
+  "codex": {
+    "command": "codex",
+    "args": ["exec", "--dangerously-bypass-approvals-and-sandbox", "--model", "gpt-5.2"],
+    "promptTemplate": "..."
+  },
   "copilot": {
     "command": "copilot",
-    "args": ["--allow-all", "-p"]
+    "args": ["--allow-all", "--model", "gemini-3-pro-preview", "-p"]
   }
 }
 ```
