@@ -30,15 +30,28 @@ export type GeminiUsageGateDecision = {
 // Google OAuth client ID used by Gemini CLI
 const CLIENT_ID = "681255809395-oo8ft2oprdnrp9e3aqf6av3hmdib135j.apps.googleusercontent.com";
 
-async function refreshAccessToken(refreshToken: string): Promise<string> {
+type RefreshAccessTokenResult = {
+  accessToken: string;
+  expiryDate?: number;
+};
+
+async function refreshAccessToken(options: {
+  refreshToken: string;
+  clientId: string;
+  clientSecret?: string;
+}): Promise<RefreshAccessTokenResult> {
+  const params = new URLSearchParams();
+  params.set("client_id", options.clientId);
+  if (options.clientSecret) {
+    params.set("client_secret", options.clientSecret);
+  }
+  params.set("refresh_token", options.refreshToken);
+  params.set("grant_type", "refresh_token");
+
   const res = await fetch("https://oauth2.googleapis.com/token", {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      client_id: CLIENT_ID,
-      refresh_token: refreshToken,
-      grant_type: "refresh_type"
-    })
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: params.toString()
   });
 
   if (!res.ok) {
@@ -46,7 +59,14 @@ async function refreshAccessToken(refreshToken: string): Promise<string> {
   }
 
   const data = await res.json() as any;
-  return data.access_token;
+  if (typeof data?.access_token !== "string" || data.access_token.length === 0) {
+    throw new Error("Google token refresh response missing access_token.");
+  }
+
+  const expiryDate =
+    typeof data?.expires_in === "number" ? Date.now() + Math.max(0, data.expires_in) * 1000 : undefined;
+
+  return { accessToken: data.access_token, expiryDate };
 }
 
 async function getCredentials() {
@@ -63,9 +83,22 @@ async function getCredentials() {
   // Buffer of 5 minutes
   if (!accessToken || (creds.expiry_date && creds.expiry_date < now + 300000)) {
     if (creds.refresh_token) {
-      accessToken = await refreshAccessToken(creds.refresh_token);
-      // Optional: update the file with new access token and expiry?
-      // For now, just return the new one in memory.
+      const refreshed = await refreshAccessToken({
+        refreshToken: creds.refresh_token,
+        clientId: creds.client_id ?? CLIENT_ID,
+        clientSecret: creds.client_secret
+      });
+      accessToken = refreshed.accessToken;
+
+      try {
+        creds.access_token = accessToken;
+        if (typeof refreshed.expiryDate === "number") {
+          creds.expiry_date = refreshed.expiryDate;
+        }
+        fs.writeFileSync(credsPath, JSON.stringify(creds, null, 2), "utf8");
+      } catch {
+        // Best-effort: keep the refreshed token in memory even if persisting fails.
+      }
     } else {
       throw new Error("Gemini access token expired and no refresh token available.");
     }
