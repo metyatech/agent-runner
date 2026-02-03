@@ -342,24 +342,43 @@ To prune old logs (uses `logMaintenance` from the config):
 agent-runner logs prune --config .\\agent-runner.config.json --yes
 ```
 
-## Amazon Q Developer (Kiro CLI)
+## Amazon Q Developer (Amazon Q for command line)
 
-Amazon Q Developer CLI is now distributed as the Kiro CLI. Download and install it, then make sure the `kiro` (or equivalent) command is available on your `PATH`.
+The agent runner can use Amazon Q for command line as an idle engine via WSL2.
 
-Enable it for idle runs by adding `amazonQ` to the config:
+### Setup (Windows + WSL2)
+
+1) Install the CLI inside WSL (Ubuntu example):
+
+```bash
+mkdir -p /tmp/amazon-q-install
+cd /tmp/amazon-q-install
+curl --proto '=https' --tlsv1.2 -sSf 'https://desktop-release.q.us-east-1.amazonaws.com/latest/q-x86_64-linux.zip' -o q.zip
+python3 -c "import zipfile; zipfile.ZipFile('q.zip').extractall('.')"
+chmod +x q/install.sh
+./q/install.sh --no-confirm
+```
+
+2) Login (free Builder ID):
+
+```bash
+q login --license free --use-device-flow
+```
+
+### Enable in the runner
+
+Set `amazonQ` in the config (ships disabled by default):
 
 ```json
 {
   "amazonQ": {
     "enabled": true,
-    "command": "kiro",
-    "args": [],
-    "promptMode": "stdin"
+    "command": "wsl.exe",
+    "args": ["-d", "Ubuntu", "--", "q", "chat", "--no-interactive", "--trust-all-tools"],
+    "promptMode": "arg"
   }
 }
 ```
-
-Note: the CLI's non-interactive invocation differs by version/platform. Start with `promptMode: "stdin"` and set `args` based on `kiro --help` so the command exits after answering (not an interactive session).
 
 ### Summary block
 

@@ -14,9 +14,9 @@
   },
   "amazonQ": {
     "enabled": false,
-    "command": "kiro",
-    "args": [],
-    "promptMode": "stdin"
+    "command": "wsl.exe",
+    "args": ["-d", "Ubuntu", "--", "q", "chat", "--no-interactive", "--trust-all-tools"],
+    "promptMode": "arg"
   },
   "idle": {
     "enabled": true,
