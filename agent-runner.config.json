@@ -13,7 +13,7 @@
     "writeLatestPointers": true
   },
   "amazonQ": {
-    "enabled": true,
+    "enabled": false,
     "command": "wsl.exe",
     "args": [
       "-d",
