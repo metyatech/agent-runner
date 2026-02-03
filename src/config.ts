@@ -42,6 +42,13 @@ export type AgentRunnerConfig = {
         minRemainingPercentAtEnd: number;
       };
     };
+    geminiUsageGate?: {
+      enabled: boolean;
+      strategy: "spare-only";
+      startMinutes: number;
+      minRemainingPercentAtStart: number;
+      minRemainingPercentAtEnd: number;
+    };
   };
   labels: {
     request: string;
@@ -55,6 +62,10 @@ export type AgentRunnerConfig = {
     command: string;
     args: string[];
     promptTemplate: string;
+  };
+  gemini?: {
+    command: string;
+    args: string[];
   };
   webhooks?: {
     enabled: boolean;

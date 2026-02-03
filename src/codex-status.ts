@@ -1,6 +1,7 @@
 import { spawn } from "node:child_process";
 import readline from "node:readline";
 import { resolveCodexCommand } from "./codex-command.js";
+import { evaluateUsageRamp } from "./usage-gate-common.js";
 
 export type UsageWindowKey = "fiveHour" | "weekly";
 
@@ -551,41 +552,21 @@ export function evaluateUsageGate(
     return { allow: false, reason: "5h window not found in /status output." };
   }
 
-  let weeklyMinutesToReset = Math.round(
-    (weekly.resetAt.getTime() - now.getTime()) / 60000
+  const weeklyDecision = evaluateUsageRamp(
+    weekly.percentLeft,
+    weekly.resetAt,
+    gate.weeklySchedule,
+    now
   );
-  if (!Number.isFinite(weeklyMinutesToReset)) {
-    weeklyMinutesToReset = 0;
+
+  if (!weeklyDecision.allow) {
+    return {
+      allow: false,
+      reason: `Weekly ${weeklyDecision.reason}`
+    };
   }
-  if (weeklyMinutesToReset < 0) {
-    weeklyMinutesToReset = 0;
-  }
-  const weeklySchedule = gate.weeklySchedule;
+
   const fiveHourRemainingThreshold = gate.minRemainingPercent.fiveHour;
-
-  if (weeklyMinutesToReset > weeklySchedule.startMinutes) {
-    return {
-      allow: false,
-      reason: `Weekly window not close enough: ${weeklyMinutesToReset}m to reset (threshold ${weeklySchedule.startMinutes}m).`
-    };
-  }
-
-  const span = weeklySchedule.startMinutes <= 0 ? 1 : weeklySchedule.startMinutes;
-  const ratio = Math.min(Math.max(weeklyMinutesToReset / span, 0), 1);
-  const weeklyRequired =
-    weeklySchedule.minRemainingPercentAtEnd +
-    (weeklySchedule.minRemainingPercentAtStart - weeklySchedule.minRemainingPercentAtEnd) *
-      ratio;
-
-  if (weekly.percentLeft < weeklyRequired) {
-    return {
-      allow: false,
-      reason: `Weekly remaining too low: ${weekly.percentLeft}% left (threshold ${weeklyRequired.toFixed(
-        1
-      )}%).`
-    };
-  }
-
   if (fiveHour.percentLeft < fiveHourRemainingThreshold) {
     return {
       allow: false,
@@ -595,8 +576,8 @@ export function evaluateUsageGate(
 
   return {
     allow: true,
-    reason: `Weekly window within ${weeklySchedule.startMinutes}m with ${weekly.percentLeft}% left and 5h has ${fiveHour.percentLeft}% remaining.`,
+    reason: `Weekly window within ${gate.weeklySchedule.startMinutes}m with ${weekly.percentLeft}% left and 5h has ${fiveHour.percentLeft}% remaining.`,
     window: weekly,
-    minutesToReset: weeklyMinutesToReset
+    minutesToReset: weeklyDecision.minutesToReset
   };
 }

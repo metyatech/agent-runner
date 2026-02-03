@@ -16,6 +16,7 @@ import {
   rateLimitSnapshotToStatus
 } from "./codex-status.js";
 import { evaluateCopilotUsageGate, fetchCopilotUsage } from "./copilot-usage.js";
+import { evaluateGeminiUsageGate, fetchGeminiUsage } from "./gemini-usage.js";
 import { commandExists } from "./command-exists.js";
 import { listTargetRepos, listQueuedIssues, pickNextIssues, queueNewRequests } from "./queue.js";
 import { planIdleTasks, runIdleTask, runIssue } from "./runner.js";
@@ -617,12 +618,66 @@ program
           }
         }
 
+        let geminiProAllowed = false;
+        let geminiFlashAllowed = false;
+        const geminiGate = config.idle.geminiUsageGate;
+        if (geminiGate?.enabled) {
+          try {
+            const geminiStart = Date.now();
+            const usage = await fetchGeminiUsage();
+            if (timingEnabled) {
+              log(
+                "info",
+                `${timingPrefix} (Gemini): rateLimits=${Date.now() - geminiStart}ms`,
+                json
+              );
+            }
+            if (!usage) {
+              log("warn", "Idle Gemini usage gate: unable to parse Gemini quota info.", json);
+            } else {
+              const decision = evaluateGeminiUsageGate(usage, geminiGate);
+              if (!decision.allowPro && !decision.allowFlash) {
+                log("info", `Idle Gemini usage gate blocked. ${decision.reason}`, json);
+              } else {
+                if (decision.allowPro) geminiProAllowed = true;
+                if (decision.allowFlash) geminiFlashAllowed = true;
+                log("info", `Idle Gemini usage gate allowed. ${decision.reason}`, json);
+              }
+            }
+          } catch (error) {
+            log("warn", "Idle Gemini usage gate failed. Gemini idle disabled.", json, {
+              error: error instanceof Error ? error.message : String(error)
+            });
+          }
+        }
+
+        if (geminiProAllowed || geminiFlashAllowed) {
+          if (!config.gemini) {
+            log("warn", "Idle Gemini enabled but no gemini command configured. Skipping Gemini idle.", json);
+            geminiProAllowed = false;
+            geminiFlashAllowed = false;
+          } else {
+            const exists = await commandExists(config.gemini.command);
+            if (!exists) {
+              log("warn", `Idle Gemini command not found (${config.gemini.command}).`, json);
+              geminiProAllowed = false;
+              geminiFlashAllowed = false;
+            }
+          }
+        }
+
         const engines: IdleEngine[] = [];
         if (codexAllowed) {
           engines.push("codex");
         }
         if (copilotAllowed) {
           engines.push("copilot");
+        }
+        if (geminiProAllowed) {
+          engines.push("gemini-pro");
+        }
+        if (geminiFlashAllowed) {
+          engines.push("gemini-flash");
         }
 
         if (engines.length === 0) {

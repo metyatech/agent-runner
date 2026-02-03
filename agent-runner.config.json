@@ -37,6 +37,13 @@
         "minRemainingPercentAtEnd": 0
       }
     },
+    "geminiUsageGate": {
+      "enabled": true,
+      "strategy": "spare-only",
+      "startMinutes": 240,
+      "minRemainingPercentAtStart": 100,
+      "minRemainingPercentAtEnd": 0
+    },
     "repoScope": "local"
   },
   "labels": {
@@ -75,6 +82,15 @@
       "--allow-all",
       "--model",
       "gemini-3-pro-preview",
+      "-p"
+    ]
+  },
+  "gemini": {
+    "command": "gemini",
+    "args": [
+      "--yolo",
+      "--approval-mode",
+      "yolo",
       "-p"
     ]
   }

@@ -32,7 +32,7 @@ export type RunResult = {
   activityId: string | null;
 };
 
-export type IdleEngine = "codex" | "copilot";
+export type IdleEngine = "codex" | "copilot" | "gemini-pro" | "gemini-flash";
 
 export type IdleTaskResult = {
   success: boolean;
@@ -187,6 +187,32 @@ function renderIdlePrompt(template: string, repo: RepoInfo, task: string): strin
     .join(repo.repo)
     .split("{{task}}")
     .join(task);
+}
+
+export function buildGeminiInvocation(
+  config: AgentRunnerConfig,
+  primaryPath: string,
+  prompt: string,
+  engine: "gemini-pro" | "gemini-flash",
+  envOverrides: NodeJS.ProcessEnv = {}
+): EngineInvocation {
+  if (!config.gemini) {
+    throw new Error("Gemini command not configured.");
+  }
+  const resolved = resolveCodexCommand(config.gemini.command, process.env.PATH);
+  
+  const modelArg = engine === "gemini-pro" ? "gemini-3-pro-preview" : "gemini-3-flash-preview";
+  const args = [...resolved.prefixArgs, "-m", modelArg, ...config.gemini.args, prompt];
+
+  return {
+    command: resolved.command,
+    args,
+    options: {
+      cwd: primaryPath,
+      shell: false,
+      env: { ...process.env, ...envOverrides }
+    }
+  };
 }
 
 export function buildCodexInvocation(
@@ -444,6 +470,8 @@ export async function runIdleTask(
   const invocation =
     engine === "copilot"
       ? buildCopilotInvocation(config, repoPath, prompt, envOverrides)
+      : engine === "gemini-pro" || engine === "gemini-flash"
+      ? buildGeminiInvocation(config, repoPath, prompt, engine, envOverrides)
       : buildCodexInvocation(config, repoPath, prompt, envOverrides);
   const activityPath = resolveActivityStatePath(config.workdirRoot);
   const startedAt = new Date().toISOString();

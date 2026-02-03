@@ -1,6 +1,8 @@
 const DEFAULT_API_BASE_URL = "https://api.github.com";
 const DEFAULT_API_VERSION = "2025-05-01";
 
+import { evaluateUsageRamp } from "./usage-gate-common.js";
+
 export type CopilotUsage = {
   percentRemaining: number;
   resetAt: Date;
@@ -205,48 +207,18 @@ export function evaluateCopilotUsageGate(
   gate: CopilotUsageGateConfig,
   now: Date = new Date()
 ): CopilotUsageGateDecision {
-  let minutesToReset = Math.round((usage.resetAt.getTime() - now.getTime()) / 60000);
-  if (!Number.isFinite(minutesToReset)) {
-    minutesToReset = 0;
-  }
-  if (minutesToReset < 0) {
-    minutesToReset = 0;
-  }
-
-  const schedule = gate.monthlySchedule;
-  if (minutesToReset > schedule.startMinutes) {
-    return {
-      allow: false,
-      reason: `Monthly reset not close enough: ${minutesToReset}m to reset (threshold ${schedule.startMinutes}m).`,
-      percentRemaining: usage.percentRemaining,
-      minutesToReset,
-      resetAt: usage.resetAt
-    };
-  }
-
-  const span = schedule.startMinutes <= 0 ? 1 : schedule.startMinutes;
-  const ratio = Math.min(Math.max(minutesToReset / span, 0), 1);
-  const required =
-    schedule.minRemainingPercentAtEnd +
-    (schedule.minRemainingPercentAtStart - schedule.minRemainingPercentAtEnd) * ratio;
-
-  if (usage.percentRemaining < required) {
-    return {
-      allow: false,
-      reason: `Monthly remaining too low: ${usage.percentRemaining}% left (threshold ${required.toFixed(
-        1
-      )}%).`,
-      percentRemaining: usage.percentRemaining,
-      minutesToReset,
-      resetAt: usage.resetAt
-    };
-  }
+  const decision = evaluateUsageRamp(
+    usage.percentRemaining,
+    usage.resetAt,
+    gate.monthlySchedule,
+    now
+  );
 
   return {
-    allow: true,
-    reason: `Monthly reset within ${schedule.startMinutes}m with ${usage.percentRemaining}% remaining.`,
+    allow: decision.allow,
+    reason: `Monthly ${decision.reason}`,
     percentRemaining: usage.percentRemaining,
-    minutesToReset,
+    minutesToReset: decision.minutesToReset,
     resetAt: usage.resetAt
   };
 }
