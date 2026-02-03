@@ -38,7 +38,16 @@ setx AGENT_GITHUB_TOKEN "<token>"
 setx AGENT_GITHUB_WEBHOOK_SECRET "<secret>"
 ```
 
-6. Update `agent-runner.config.json` with your workspace root and concurrency.
+6. If using Cloudflare Tunnel, set the tunnel token for auto-start.
+
+```bash
+setx CLOUDFLARED_TUNNEL_TOKEN "<token>"
+```
+
+If the environment variable is not available (for example, before a logoff/logon),
+you can also save the token to `state/cloudflared-token.txt` (ignored by git).
+
+7. Update `agent-runner.config.json` with your workspace root and concurrency.
 
 ## Development commands
 
@@ -284,6 +293,34 @@ Unregister the task:
 Task run logs are written to `logs/task-run-*.log`.
 
 Issue logs (e.g. `*-issue-*.log`) are appended as output is produced.
+
+### Webhook + Cloudflare auto-start
+
+Register a webhook listener task (runs at logon):
+
+```powershell
+.\scripts\register-webhook-task.ps1 -RepoPath "." -ConfigPath ".\\agent-runner.config.json"
+```
+
+Unregister the webhook task:
+
+```powershell
+.\scripts\unregister-webhook-task.ps1
+```
+
+Register a Cloudflare Tunnel task (runs at logon):
+
+```powershell
+.\scripts\register-cloudflared-task.ps1 -RepoPath "."
+```
+
+Unregister the tunnel task:
+
+```powershell
+.\scripts\unregister-cloudflared-task.ps1
+```
+
+Logs are written to `logs/webhook-run-*.log` and `logs/cloudflared-*.log`.
 
 ### Summary block
 
