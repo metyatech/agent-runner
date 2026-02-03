@@ -21,7 +21,7 @@
       "--",
       "bash",
       "-lc",
-      "q chat --no-interactive --trust-all-tools \"$1\"",
+      "q chat --no-interactive --trust-tools= \"$1\"",
       "--"
     ],
     "promptMode": "arg"
