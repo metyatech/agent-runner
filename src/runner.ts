@@ -102,7 +102,7 @@ async function cloneRepo(root: string, repo: RepoInfo): Promise<void> {
   const command = useGh ? "gh" : "git";
 
   await new Promise<void>((resolve, reject) => {
-    const child = spawn(command, cloneArgs, { stdio: "inherit", shell: true });
+    const child = spawn(command, cloneArgs, { stdio: "inherit", shell: false });
     child.on("error", reject);
     child.on("close", (code) => {
       if (code === 0) {
