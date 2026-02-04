@@ -36,7 +36,7 @@ describe("GitHubClient.searchOpenIssuesByLabelAcrossOwner", () => {
       maxPages: 1
     });
 
-    expect(seenQuery).toContain('user:metyatech type:issue state:open label:"agent:request"');
+    expect(seenQuery).toContain('user:metyatech is:issue state:open label:"agent:request"');
     expect(seenQuery).toContain('-label:"agent:queued"');
     expect(seenQuery).toContain('-label:"agent:running"');
     expect(issues).toHaveLength(1);

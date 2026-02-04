@@ -24,6 +24,12 @@ export type IssueComment = {
   authorAssociation?: string | null;
 };
 
+type SearchResponse = {
+  data: {
+    items: any[];
+  };
+};
+
 export type PullRequestReviewComment = {
   id: number;
   body: string;
@@ -80,6 +86,23 @@ export class GitHubClient {
 
   constructor(tokenOrOctokit: string | Octokit) {
     this.octokit = typeof tokenOrOctokit === "string" ? new Octokit({ auth: tokenOrOctokit }) : tokenOrOctokit;
+  }
+
+  private async searchIssuesAndPullRequests(options: {
+    query: string;
+    sort?: "updated" | "created" | "comments";
+    order?: "asc" | "desc";
+    perPage: number;
+    page: number;
+  }): Promise<SearchResponse> {
+    const response = await this.octokit.search.issuesAndPullRequests({
+      q: options.query,
+      sort: options.sort,
+      order: options.order,
+      per_page: options.perPage,
+      page: options.page
+    });
+    return response as unknown as SearchResponse;
   }
 
   async listRepos(owner: string): Promise<RepoInfo[]> {
@@ -211,13 +234,14 @@ export class GitHubClient {
 
   async findIssueByTitle(repo: RepoInfo, title: string): Promise<IssueInfo | null> {
     const escaped = title.replace(/"/g, '\\"');
-    const query = `repo:${repo.owner}/${repo.repo} type:issue in:title "${escaped}"`;
-    const response = await this.octokit.search.issuesAndPullRequests({
-      q: query,
-      per_page: 10
+    const query = `repo:${repo.owner}/${repo.repo} is:issue in:title "${escaped}"`;
+    const response = await this.searchIssuesAndPullRequests({
+      query,
+      perPage: 10,
+      page: 1
     });
     const match = response.data.items.find(
-      (item) => !("pull_request" in item) && item.title === title
+      (item: any) => !("pull_request" in item) && item.title === title
     );
     if (!match) {
       return null;
@@ -229,7 +253,7 @@ export class GitHubClient {
       body: match.body ?? null,
       author: match.user?.login ?? null,
       repo,
-      labels: match.labels.map((item) => (typeof item === "string" ? item : item.name ?? "")),
+      labels: match.labels.map((item: any) => (typeof item === "string" ? item : item.name ?? "")),
       url: match.html_url
     };
   }
@@ -250,17 +274,17 @@ export class GitHubClient {
       .filter((entry) => entry.length > 0)
       .map((entry) => ` -label:"${entry.replace(/"/g, '\\"')}"`)
       .join("");
-    const query = `user:${owner} type:issue state:open label:"${encodedLabel}"${excludeQuery}`;
+    const query = `user:${owner} is:issue state:open label:"${encodedLabel}"${excludeQuery}`;
     const pageSize = Math.min(100, Math.max(1, options?.perPage ?? 100));
     let page = 1;
     const maxPages = Math.min(10, Math.max(1, options?.maxPages ?? 10));
 
     while (true) {
-      const response = await this.octokit.search.issuesAndPullRequests({
-        q: query,
+      const response = await this.searchIssuesAndPullRequests({
+        query,
         sort: "updated",
         order: "desc",
-        per_page: pageSize,
+        perPage: pageSize,
         page
       });
 
@@ -284,7 +308,7 @@ export class GitHubClient {
           body: item.body ?? null,
           author: item.user?.login ?? null,
           repo,
-          labels: item.labels.map((label) => (typeof label === "string" ? label : label.name ?? "")),
+          labels: item.labels.map((label: any) => (typeof label === "string" ? label : label.name ?? "")),
           url: item.html_url
         });
       }
@@ -317,48 +341,57 @@ export class GitHubClient {
       .filter((entry) => entry.length > 0)
       .map((entry) => ` -label:"${entry.replace(/"/g, '\\"')}"`)
       .join("");
-    const query = `user:${owner} state:open label:"${encodedLabel}"${excludeQuery}`;
+    const baseQuery = `user:${owner} state:open label:"${encodedLabel}"${excludeQuery}`;
     const pageSize = Math.min(100, Math.max(1, options?.perPage ?? 100));
-    let page = 1;
     const maxPages = Math.min(10, Math.max(1, options?.maxPages ?? 10));
 
-    while (true) {
-      const response = await this.octokit.search.issuesAndPullRequests({
-        q: query,
-        sort: "updated",
-        order: "desc",
-        per_page: pageSize,
-        page
-      });
-
-      for (const item of response.data.items) {
-        const repoUrl = (item as { repository_url?: string }).repository_url;
-        if (!repoUrl) {
-          continue;
-        }
-        const match = /\/repos\/([^/]+)\/([^/]+)$/.exec(repoUrl);
-        if (!match) {
-          continue;
-        }
-        const repo: RepoInfo = { owner: match[1], repo: match[2] };
-        items.push({
-          id: item.id,
-          number: item.number,
-          title: item.title,
-          body: item.body ?? null,
-          author: item.user?.login ?? null,
-          repo,
-          labels: item.labels.map((label) => (typeof label === "string" ? label : label.name ?? "")),
-          url: item.html_url
+    const qualifiers = ["is:issue", "is:pull-request"] as const;
+    const seen = new Set<number>();
+    for (const qualifier of qualifiers) {
+      let page = 1;
+      const query = `${baseQuery} ${qualifier}`;
+      while (true) {
+        const response = await this.searchIssuesAndPullRequests({
+          query,
+          sort: "updated",
+          order: "desc",
+          perPage: pageSize,
+          page
         });
-      }
 
-      if (response.data.items.length < pageSize || response.data.items.length === 0) {
-        break;
-      }
-      page += 1;
-      if (page > maxPages) {
-        break;
+        for (const item of response.data.items as any[]) {
+          if (seen.has(item.id)) {
+            continue;
+          }
+          const repoUrl = (item as { repository_url?: string }).repository_url;
+          if (!repoUrl) {
+            continue;
+          }
+          const match = /\/repos\/([^/]+)\/([^/]+)$/.exec(repoUrl);
+          if (!match) {
+            continue;
+          }
+          const repo: RepoInfo = { owner: match[1], repo: match[2] };
+          items.push({
+            id: item.id,
+            number: item.number,
+            title: item.title,
+            body: item.body ?? null,
+            author: item.user?.login ?? null,
+            repo,
+            labels: item.labels.map((label: any) => (typeof label === "string" ? label : label.name ?? "")),
+            url: item.html_url
+          });
+          seen.add(item.id);
+        }
+
+        if (response.data.items.length < pageSize || response.data.items.length === 0) {
+          break;
+        }
+        page += 1;
+        if (page > maxPages) {
+          break;
+        }
       }
     }
 
@@ -381,48 +414,57 @@ export class GitHubClient {
       .filter((entry) => entry.length > 0)
       .map((entry) => ` -label:"${entry.replace(/"/g, '\\"')}"`)
       .join("");
-    const query = `user:${owner} state:open in:comments "${encodedPhrase}"${excludeQuery}`;
+    const baseQuery = `user:${owner} state:open in:comments "${encodedPhrase}"${excludeQuery}`;
     const pageSize = Math.min(100, Math.max(1, options?.perPage ?? 100));
-    let page = 1;
     const maxPages = Math.min(10, Math.max(1, options?.maxPages ?? 10));
 
-    while (true) {
-      const response = await this.octokit.search.issuesAndPullRequests({
-        q: query,
-        sort: "updated",
-        order: "desc",
-        per_page: pageSize,
-        page
-      });
-
-      for (const item of response.data.items) {
-        const repoUrl = (item as { repository_url?: string }).repository_url;
-        if (!repoUrl) {
-          continue;
-        }
-        const match = /\/repos\/([^/]+)\/([^/]+)$/.exec(repoUrl);
-        if (!match) {
-          continue;
-        }
-        const repo: RepoInfo = { owner: match[1], repo: match[2] };
-        items.push({
-          id: item.id,
-          number: item.number,
-          title: item.title,
-          body: item.body ?? null,
-          author: item.user?.login ?? null,
-          repo,
-          labels: item.labels.map((label) => (typeof label === "string" ? label : label.name ?? "")),
-          url: item.html_url
+    const qualifiers = ["is:issue", "is:pull-request"] as const;
+    const seen = new Set<number>();
+    for (const qualifier of qualifiers) {
+      let page = 1;
+      const query = `${baseQuery} ${qualifier}`;
+      while (true) {
+        const response = await this.searchIssuesAndPullRequests({
+          query,
+          sort: "updated",
+          order: "desc",
+          perPage: pageSize,
+          page
         });
-      }
 
-      if (response.data.items.length < pageSize || response.data.items.length === 0) {
-        break;
-      }
-      page += 1;
-      if (page > maxPages) {
-        break;
+        for (const item of response.data.items as any[]) {
+          if (seen.has(item.id)) {
+            continue;
+          }
+          const repoUrl = (item as { repository_url?: string }).repository_url;
+          if (!repoUrl) {
+            continue;
+          }
+          const match = /\/repos\/([^/]+)\/([^/]+)$/.exec(repoUrl);
+          if (!match) {
+            continue;
+          }
+          const repo: RepoInfo = { owner: match[1], repo: match[2] };
+          items.push({
+            id: item.id,
+            number: item.number,
+            title: item.title,
+            body: item.body ?? null,
+            author: item.user?.login ?? null,
+            repo,
+            labels: item.labels.map((label: any) => (typeof label === "string" ? label : label.name ?? "")),
+            url: item.html_url
+          });
+          seen.add(item.id);
+        }
+
+        if (response.data.items.length < pageSize || response.data.items.length === 0) {
+          break;
+        }
+        page += 1;
+        if (page > maxPages) {
+          break;
+        }
       }
     }
 
