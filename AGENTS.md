@@ -45,6 +45,7 @@ Source: github:metyatech/agent-rules@HEAD/rules/global/autonomous-operations.md
 - Do not preserve backward compatibility unless explicitly requested; avoid legacy aliases and compatibility shims by default.
 - When work reveals rule gaps, redundancy, or misplacement, proactively update rule modules/rulesets (including moves/renames) and regenerate AGENTS.md without waiting for explicit user requests.
 - After each task, run a brief retrospective; if you notice avoidable mistakes, missing checks, or recurring back-and-forth, encode the fix as a rule update and regenerate AGENTS.md.
+- Treat these rules as the source of truth; do not override them with repository conventions. If a repo conflicts, update the repo to comply or update the rules to encode the exception; do not make undocumented exceptions.
 - When something is unclear, investigate to resolve it; do not proceed with unresolved material uncertainty. If still unclear, ask and include what you checked.
 - Do not proceed based on assumptions or guesses without explicit user approval; hypotheses may be discussed but must not drive action.
 - Ask only blocking questions; for non-material ambiguities, pick the lowest-risk option, state the assumption, and proceed.
@@ -84,6 +85,137 @@ Source: github:metyatech/agent-rules@HEAD/rules/global/implementation-and-coding
 - Do not commit build artifacts (follow the repo's .gitignore).
 - Align file/folder names with their contents and keep naming conventions consistent.
 - Do not assume machine-specific environments (fixed workspace directories, drive letters, per-PC paths). Prefer repo-relative paths and explicit configuration so workflows work in arbitrary clone locations.
+
+Source: github:metyatech/agent-rules@HEAD/rules/global/linting-formatting-and-static-analysis.md
+
+# Linters, formatters, and static analysis
+
+## General policy
+
+- Every code repo must have a formatter and a linter/static analyzer for its primary languages.
+- Prefer one formatter and one linter per language; avoid overlapping tools that fight each other.
+- Follow the standard toolchains below. If a repo conflicts, migrate it to comply unless the user explicitly restricts scope.
+- If you believe an exception is needed, encode it as a rule update and regenerate AGENTS.md before proceeding.
+- Enforce in CI: run formatting checks (verify-no-changes) and linting on pull requests and require them for merges.
+- Treat warnings as errors in CI; when a tool cannot, use its strictest available setting so warnings fail CI.
+- Do not disable rules globally; keep suppressions narrow, justified, and time-bounded.
+- Pin tool versions (lockfiles/manifests) for reproducible CI.
+
+## Security baseline
+
+- Require dependency vulnerability scanning appropriate to the ecosystem (SCA) for merges. If you cannot enable it, report the limitation and get explicit user approval before proceeding without it.
+- Enable GitHub secret scanning and remediate findings; never commit secrets. If it is unavailable, add a repo-local secret scanner and require it for merges.
+- Enable CodeQL code scanning for supported languages. If it cannot be enabled, report the limitation and use the best available alternative for that ecosystem.
+
+## Default toolchain by language
+
+### JavaScript / TypeScript (incl. React/Next)
+
+- Format+lint: ESLint + Prettier.
+- Typecheck: `tsc` with strict settings for TS projects.
+- Dependency scan: `osv-scanner`. If unsupported, use the package manager's audit tooling.
+
+### Python
+
+- Format+lint: Ruff.
+- Typecheck: Pyright.
+- Dependency scan: pip-audit.
+
+### Go
+
+- Format: gofmt.
+- Lint/static analysis: golangci-lint (includes staticcheck).
+- Dependency scan: govulncheck.
+
+### Rust
+
+- Format: cargo fmt.
+- Lint/static analysis: cargo clippy with warnings as errors.
+- Dependency scan: cargo audit.
+
+### Java
+
+- Format: Spotless + google-java-format.
+- Lint/static analysis: Checkstyle + SpotBugs.
+- Dependency scan: OWASP Dependency-Check.
+
+### Kotlin
+
+- Format: Spotless + ktlint.
+- Lint/static analysis: detekt.
+- Compiler: enable warnings-as-errors in CI; if impractical, get explicit user approval before relaxing.
+
+### C#
+
+- Format: dotnet format (verify-no-changes in CI).
+- Lint/static analysis: enable .NET analyzers; treat warnings as errors; enable nullable reference types.
+- Dependency scan: `dotnet list package --vulnerable`.
+
+### C++
+
+- Format: clang-format.
+- Lint/static analysis: clang-tidy.
+- Build: enable strong warnings and treat as errors; run sanitizers (ASan/UBSan) in CI where supported.
+
+### PowerShell
+
+- Format+lint: PSScriptAnalyzer (Invoke-Formatter + Invoke-ScriptAnalyzer).
+- Runtime: Set-StrictMode -Version Latest; fail fast on errors.
+- Tests: Pester when tests exist.
+
+### Shell (sh/bash)
+
+- Format: shfmt.
+- Lint: shellcheck.
+
+### Dockerfile
+
+- Lint: hadolint.
+
+### Terraform
+
+- Format: terraform fmt -check.
+- Validate: terraform validate.
+- Lint: tflint.
+- Security scan: trivy config.
+
+### YAML
+
+- Lint: yamllint.
+
+### Markdown
+
+- Lint: markdownlint.
+
+Source: github:metyatech/agent-rules@HEAD/rules/global/observability-and-diagnostics.md
+
+# Observability and diagnostics
+
+## General policy
+
+- Design for debuggability: make failures diagnosable from logs/metrics/traces without reproducing locally.
+- Add observability in the same change set as behavior changes that affect runtime behavior, performance, or reliability.
+
+## Logging
+
+- Prefer structured logs for services; keep field names stable (e.g., level, message, component, request_id/trace_id, version).
+- Include actionable context in errors (what failed, which input/state, what to do next) without logging secrets/PII.
+- Log at the right level; avoid noisy logs in hot paths.
+
+## Metrics
+
+- For long-running services, expose metrics for latency, error rate, throughput, and saturation; add domain metrics for critical flows.
+- Treat missing metrics as a defect when they block verification or incident response.
+
+## Tracing
+
+- For multi-service or async flows, use OpenTelemetry and propagate context across boundaries (HTTP/gRPC/queues).
+- Correlate logs and traces via trace_id/request_id.
+
+## Health and self-checks
+
+- Services must have readiness and liveness checks; fail fast when dependencies are unavailable.
+- CLIs should provide a verbose mode and clear error output; add a self-check command when it reduces support burden.
 
 Source: github:metyatech/agent-rules@HEAD/rules/global/quality-testing-and-errors.md
 

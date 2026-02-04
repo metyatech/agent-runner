@@ -205,6 +205,10 @@ function renderHtml(): string {
         </table>
       </section>
       <section class="panel">
+        <h2>Latest Logs</h2>
+        <ul id="latestLogsList"></ul>
+      </section>
+      <section class="panel">
         <h2>Recent Logs</h2>
         <ul id="logsList"></ul>
       </section>
@@ -223,6 +227,7 @@ function renderHtml(): string {
       const staleTable = document.getElementById("staleTable");
       const staleBody = document.getElementById("staleBody");
       const staleEmpty = document.getElementById("staleEmpty");
+      const latestLogsList = document.getElementById("latestLogsList");
       const logsList = document.getElementById("logsList");
       const reportsList = document.getElementById("reportsList");
 
@@ -297,6 +302,31 @@ function renderHtml(): string {
         });
       };
 
+      const renderLatestLogs = (target, snapshot) => {
+        const rows = [
+          { label: "task-run", file: snapshot.latestTaskRun },
+          { label: "idle", file: snapshot.latestIdle }
+        ];
+        target.textContent = "";
+        rows.forEach((row) => {
+          const li = document.createElement("li");
+          const label = document.createElement("strong");
+          label.textContent = row.label + ": ";
+          li.appendChild(label);
+          if (!row.file || !row.file.path) {
+            li.appendChild(document.createTextNode("None"));
+            target.appendChild(li);
+            return;
+          }
+          const updated = row.file.updatedAtLocal || formatLocal(row.file.updatedAt);
+          li.appendChild(buildLink(row.file.path));
+          const time = document.createElement("span");
+          time.textContent = " (" + updated + ")";
+          li.appendChild(time);
+          target.appendChild(li);
+        });
+      };
+
       async function refresh() {
         try {
           const res = await fetch("/api/status");
@@ -327,6 +357,7 @@ function renderHtml(): string {
           staleTable.hidden = !(data.stale && data.stale.length);
           staleEmpty.hidden = data.stale && data.stale.length;
 
+          renderLatestLogs(latestLogsList, data || {});
           renderList(logsList, data.logs || []);
           renderList(reportsList, data.reports || []);
         } catch (error) {

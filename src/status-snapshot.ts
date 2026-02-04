@@ -30,6 +30,8 @@ export type StatusSnapshot = {
   stale: ActivitySnapshot[];
   activityUpdatedAt: string | null;
   activityUpdatedAtLocal: string | null;
+  latestTaskRun: FileSnapshot | null;
+  latestIdle: FileSnapshot | null;
   logs: FileSnapshot[];
   reports: FileSnapshot[];
 };
@@ -62,13 +64,13 @@ function toSnapshot(record: ActivityRecord, nowMs: number): ActivitySnapshot {
   };
 }
 
-function listRecentFiles(dir: string, limit: number): FileSnapshot[] {
+function listRecentFiles(dir: string, limit: number, exclude?: RegExp): FileSnapshot[] {
   if (!fs.existsSync(dir)) {
     return [];
   }
   const entries = fs
     .readdirSync(dir, { withFileTypes: true })
-    .filter((entry) => entry.isFile())
+    .filter((entry) => entry.isFile() && (!exclude || !exclude.test(entry.name)))
     .map((entry) => {
       const fullPath = path.join(dir, entry.name);
       const stat = fs.statSync(fullPath);
@@ -77,6 +79,38 @@ function listRecentFiles(dir: string, limit: number): FileSnapshot[] {
     })
     .sort((a, b) => Date.parse(b.updatedAt) - Date.parse(a.updatedAt));
   return entries.slice(0, limit);
+}
+
+function snapshotFile(filePath: string): FileSnapshot | null {
+  if (!fs.existsSync(filePath)) {
+    return null;
+  }
+  const stat = fs.statSync(filePath);
+  const updatedAt = new Date(stat.mtimeMs).toISOString();
+  return { path: filePath, updatedAt, updatedAtLocal: formatLocal(updatedAt) };
+}
+
+function readPointerTarget(pointerPath: string): string | null {
+  if (!fs.existsSync(pointerPath)) {
+    return null;
+  }
+  try {
+    const raw = fs.readFileSync(pointerPath, "utf8").trim();
+    if (!raw) {
+      return null;
+    }
+    return raw.split(/\r?\n/)[0] ?? null;
+  } catch {
+    return null;
+  }
+}
+
+function snapshotFromPointer(pointerPath: string): FileSnapshot | null {
+  const target = readPointerTarget(pointerPath);
+  if (!target) {
+    return null;
+  }
+  return snapshotFile(target);
 }
 
 function mergeRunnerState(
@@ -134,6 +168,8 @@ export function buildStatusSnapshot(workdirRoot: string): StatusSnapshot {
 
   const logsDir = path.resolve(workdirRoot, "agent-runner", "logs");
   const reportsDir = path.resolve(workdirRoot, "agent-runner", "reports");
+  const latestTaskRun = snapshotFromPointer(path.join(logsDir, "latest-task-run.path"));
+  const latestIdle = snapshotFromPointer(path.join(logsDir, "latest-idle.path"));
 
   const generatedAt = now.toISOString();
   return {
@@ -146,7 +182,9 @@ export function buildStatusSnapshot(workdirRoot: string): StatusSnapshot {
     stale,
     activityUpdatedAt,
     activityUpdatedAtLocal: formatLocal(activityUpdatedAt),
-    logs: listRecentFiles(logsDir, 5),
+    latestTaskRun,
+    latestIdle,
+    logs: listRecentFiles(logsDir, 5, /\.path$|^agent-runner-run-.*\.(out|err)\.log$/i),
     reports: listRecentFiles(reportsDir, 5)
   };
 }
