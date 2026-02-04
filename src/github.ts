@@ -21,6 +21,7 @@ export type IssueComment = {
   body: string;
   createdAt: string;
   author?: string | null;
+  authorAssociation?: string | null;
 };
 
 export type LabelInfo = {
@@ -419,7 +420,8 @@ export class GitHubClient {
           id: comment.id,
           body: comment.body ?? "",
           createdAt: comment.created_at,
-          author: comment.user?.login ?? null
+          author: comment.user?.login ?? null,
+          authorAssociation: (comment as { author_association?: string }).author_association ?? null
         });
       }
       if (response.data.length < 100) {

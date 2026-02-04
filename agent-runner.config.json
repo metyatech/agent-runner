@@ -12,6 +12,12 @@
     "taskRunKeepLatest": 200,
     "writeLatestPointers": true
   },
+  "reportMaintenance": {
+    "enabled": true,
+    "maxAgeDays": 90,
+    "keepLatest": 500,
+    "maxTotalMB": 256
+  },
   "amazonQ": {
     "enabled": false,
     "command": "wsl.exe",

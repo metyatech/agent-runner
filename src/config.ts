@@ -18,6 +18,12 @@ export type AgentRunnerConfig = {
     taskRunKeepLatest?: number;
     writeLatestPointers?: boolean;
   };
+  reportMaintenance?: {
+    enabled: boolean;
+    maxAgeDays?: number;
+    keepLatest?: number;
+    maxTotalMB?: number;
+  };
   amazonQ?: {
     enabled: boolean;
     command: string;

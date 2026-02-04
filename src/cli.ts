@@ -52,7 +52,14 @@ import {
   resolveWebhookCatchupStatePath,
   saveWebhookCatchupState
 } from "./webhook-catchup-state.js";
+import { isAllowedAuthorAssociation, parseAgentCommand } from "./agent-command.js";
+import {
+  hasProcessedAgentCommandComment,
+  markAgentCommandCommentProcessed,
+  resolveAgentCommandStatePath
+} from "./agent-command-state.js";
 import { pruneLogs, resolveLogMaintenance, resolveLogsDir } from "./log-maintenance.js";
+import { pruneReports, resolveReportMaintenance, resolveReportsDir } from "./report-maintenance.js";
 
 const program = new Command();
 
@@ -107,6 +114,8 @@ async function maybeRunWebhookCatchup(options: {
     maxIssuesPerRun: maxIssues
   });
 
+  const lastRunAt = state.lastRunAt ? Date.parse(state.lastRunAt) : Number.NaN;
+  const commandStatePath = resolveAgentCommandStatePath(config.workdirRoot);
   let found: IssueInfo[] = [];
   try {
     const byLabel = await client.searchOpenItemsByLabelAcrossOwner(config.owner, config.labels.request, {
@@ -146,14 +155,71 @@ async function maybeRunWebhookCatchup(options: {
     queued: limited.length
   });
 
+  let hadErrors = false;
   for (const issue of limited) {
     if (dryRun) {
       log("info", `Dry-run: would queue catch-up issue ${issue.url}`, json);
       continue;
     }
+
+    if (Number.isNaN(lastRunAt)) {
+      if (!issue.labels.includes(config.labels.request)) {
+        continue;
+      }
+      try {
+        await client.addLabels(issue, [config.labels.queued]);
+      } catch (error) {
+        hadErrors = true;
+        log("warn", "Failed to add queued label during catch-up.", json, {
+          issue: issue.url,
+          error: error instanceof Error ? error.message : String(error)
+        });
+        continue;
+      }
+      try {
+        await enqueueWebhookIssue(queuePath, issue);
+      } catch (error) {
+        hadErrors = true;
+        log("warn", "Failed to enqueue catch-up issue.", json, {
+          issue: issue.url,
+          error: error instanceof Error ? error.message : String(error)
+        });
+      }
+      continue;
+    }
+
+    const hasRequestLabel = issue.labels.includes(config.labels.request);
+    let shouldQueueByCommand = false;
+    let triggerCommentId: number | null = null;
+    if (!hasRequestLabel) {
+      const comments = await client.listIssueComments(issue);
+      for (const comment of comments) {
+        const createdAt = Date.parse(comment.createdAt);
+        if (Number.isNaN(createdAt) || createdAt <= lastRunAt) {
+          continue;
+        }
+        if (!isAllowedAuthorAssociation(comment.authorAssociation)) {
+          continue;
+        }
+        if (parseAgentCommand(comment.body)?.kind !== "run") {
+          continue;
+        }
+        const already = await hasProcessedAgentCommandComment(commandStatePath, comment.id);
+        if (already) {
+          continue;
+        }
+        shouldQueueByCommand = true;
+        triggerCommentId = comment.id;
+        break;
+      }
+      if (!shouldQueueByCommand) {
+        continue;
+      }
+    }
     try {
-      await client.addLabels(issue, [config.labels.request, config.labels.queued]);
+      await client.addLabels(issue, hasRequestLabel ? [config.labels.queued] : [config.labels.request, config.labels.queued]);
     } catch (error) {
+      hadErrors = true;
       log("warn", "Failed to add queued label during catch-up.", json, {
         issue: issue.url,
         error: error instanceof Error ? error.message : String(error)
@@ -163,14 +229,22 @@ async function maybeRunWebhookCatchup(options: {
     try {
       await enqueueWebhookIssue(queuePath, issue);
     } catch (error) {
+      hadErrors = true;
       log("warn", "Failed to enqueue catch-up issue.", json, {
         issue: issue.url,
         error: error instanceof Error ? error.message : String(error)
       });
+      continue;
+    }
+
+    if (triggerCommentId) {
+      await markAgentCommandCommentProcessed(commandStatePath, triggerCommentId);
     }
   }
 
-  saveWebhookCatchupState(statePath, { lastRunAt: now.toISOString() });
+  if (!hadErrors) {
+    saveWebhookCatchupState(statePath, { lastRunAt: now.toISOString() });
+  }
 }
 
 async function resolveWebhookQueuedIssues(
@@ -308,6 +382,23 @@ program
         deletedMB: Math.round((pruneResult.deletedBytes / (1024 * 1024)) * 100) / 100,
         skipped: pruneResult.skipped,
         kept: pruneResult.kept
+      });
+    }
+
+    const reportDecision = resolveReportMaintenance(config);
+    const pruneReportsResult = pruneReports({
+      dir: resolveReportsDir(config.workdirRoot),
+      decision: reportDecision,
+      dryRun
+    });
+    if (reportDecision.enabled) {
+      log("info", pruneReportsResult.dryRun ? "Dry-run: would prune reports." : "Pruned reports.", json, {
+        dir: pruneReportsResult.dir,
+        scanned: pruneReportsResult.scanned,
+        deleted: pruneReportsResult.deleted,
+        deletedMB: Math.round((pruneReportsResult.deletedBytes / (1024 * 1024)) * 100) / 100,
+        skipped: pruneReportsResult.skipped,
+        kept: pruneReportsResult.kept
       });
     }
 
@@ -977,7 +1068,7 @@ program
       for (const issue of picked) {
         await client.addLabels(issue, [config.labels.running]);
         await tryRemoveLabel(issue, config.labels.queued);
-        await client.comment(
+        await commentCompletion(
           issue,
           buildAgentComment(
             `Agent runner started on ${new Date().toISOString()}. Concurrency ${config.concurrency}.`
@@ -1174,6 +1265,39 @@ program
         const decision = resolveLogMaintenance(config);
         const result = pruneLogs({ dir: resolveLogsDir(config.workdirRoot), decision, dryRun });
         log("info", result.dryRun ? "Dry-run: would prune logs." : "Pruned logs.", json, {
+          dir: result.dir,
+          scanned: result.scanned,
+          deleted: result.deleted,
+          deletedMB: Math.round((result.deletedBytes / (1024 * 1024)) * 100) / 100,
+          skipped: result.skipped,
+          kept: result.kept
+        });
+      })
+  );
+
+program
+  .command("reports")
+  .description("Manage runner reports.")
+  .addCommand(
+    new Command("prune")
+      .description("Prune old report files under workdirRoot/agent-runner/reports.")
+      .option("-c, --config <path>", "Path to config file", "agent-runner.config.json")
+      .option("--dry-run", "List files that would be deleted", false)
+      .option("--yes", "Actually delete files (required unless --dry-run)", false)
+      .option("--json", "Output JSON", false)
+      .action((options) => {
+        const json = Boolean(options.json);
+        const dryRun = Boolean(options.dryRun);
+        const requireYes = !dryRun && !options.yes;
+        if (requireYes) {
+          throw new Error("Refusing to delete reports without --yes. Use --dry-run to preview.");
+        }
+
+        const configPath = path.resolve(process.cwd(), options.config);
+        const config = loadConfig(configPath);
+        const decision = resolveReportMaintenance(config);
+        const result = pruneReports({ dir: resolveReportsDir(config.workdirRoot), decision, dryRun });
+        log("info", result.dryRun ? "Dry-run: would prune reports." : "Pruned reports.", json, {
           dir: result.dir,
           scanned: result.scanned,
           deleted: result.deleted,

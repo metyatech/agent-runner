@@ -46,6 +46,17 @@
       },
       "additionalProperties": false
     },
+    "reportMaintenance": {
+      "type": "object",
+      "required": ["enabled"],
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "maxAgeDays": { "type": "integer", "minimum": 0, "maximum": 3650 },
+        "keepLatest": { "type": "integer", "minimum": 0, "maximum": 100000 },
+        "maxTotalMB": { "type": "number", "minimum": 0, "maximum": 1048576 }
+      },
+      "additionalProperties": false
+    },
     "amazonQ": {
       "type": "object",
       "required": ["enabled", "command", "args"],

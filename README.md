@@ -109,6 +109,8 @@ Config file: `agent-runner.config.json`
 - `pollIntervalSeconds`: Polling interval
 - `concurrency`: Max concurrent requests
 - `repos`: If `"all"`, the runner caches the repository list and refreshes periodically to avoid GitHub rate limits. When rate-limited and no cache is available, it will fall back to local workspace repositories (directories with a `.git` folder).
+- `logMaintenance`: Optional log pruning settings (applied automatically on startup and via `agent-runner logs prune`)
+- `reportMaintenance`: Optional report pruning settings (applied automatically on startup and via `agent-runner reports prune`)
 - `labels`: Workflow labels
 - `labels.needsUser`: Label for requests awaiting user reply after a failure
 - `codex`: Codex CLI command and prompt template
@@ -410,6 +412,12 @@ To prune old logs (uses `logMaintenance` from the config):
 
 ```powershell
 agent-runner logs prune --config .\\agent-runner.config.json --yes
+```
+
+To prune old reports (uses `reportMaintenance` from the config):
+
+```powershell
+agent-runner reports prune --config .\\agent-runner.config.json --yes
 ```
 
 ## Amazon Q Developer (Amazon Q for command line)
