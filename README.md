@@ -70,6 +70,11 @@ On an Issue or PR, add an issue comment:
 
 Only repo collaborators (OWNER/MEMBER/COLLABORATOR) are accepted for `/agent run` to avoid drive-by execution.
 
+When the target is a PR, agent-runner treats the PR as "managed" after `/agent run` (and for bot-authored PRs). Managed PRs:
+
+- Re-run the agent automatically on PR review feedback (review comments / changes requested).
+- Auto-merge after approval and best-effort delete the remote PR branch.
+
 ## E2E (GitHub API)
 
 The GitHub-flow E2E suite runs against a real GitHub repository and requires environment variables.
@@ -204,8 +209,8 @@ Search API scan to catch requests created while the webhook listener was down.
 
 When no queued issues exist, the runner can execute idle tasks defined in the config.
 Each idle run writes a report under `reports/` and streams the Codex output to `logs/`.
-When changes are made, the idle prompt is expected to open a PR and leave it open
-for human review (no auto-merge/close).
+When changes are made, the idle prompt is expected to open a PR. The runner will
+follow up on PR review feedback and can auto-merge managed PRs after approval.
 
 ### GitHub notifications (GitHub App / bot token)
 

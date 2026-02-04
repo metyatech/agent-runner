@@ -267,6 +267,7 @@ async function handleReviewFollowup(options: {
   await client.addLabels(issue, [config.labels.request]);
   await safeRemoveLabel(client, issue, config.labels.needsUser, onLog);
   await safeRemoveLabel(client, issue, config.labels.failed, onLog);
+  await safeRemoveLabel(client, issue, config.labels.done, onLog);
   await safeRemoveLabel(client, issue, config.labels.running, onLog);
   await safeRemoveLabel(client, issue, config.labels.queued, onLog);
 
@@ -388,6 +389,10 @@ export async function handleWebhookEvent(options: {
       return;
     }
     const comment = payload.comment ?? {};
+    const commentUserType = (comment.user as { type?: string } | undefined)?.type ?? null;
+    if (commentUserType === "Bot" || isAgentRunnerBotLogin(comment.user?.login ?? null)) {
+      return;
+    }
     if (!isAllowedAuthorAssociation(comment.author_association)) {
       onLog?.("info", "Ignoring PR review comment from non-collaborator.", {
         repo: `${repo.owner}/${repo.repo}`,
@@ -454,6 +459,10 @@ export async function handleWebhookEvent(options: {
       return;
     }
     const review = payload.review ?? {};
+    const reviewUserType = (review.user as { type?: string } | undefined)?.type ?? null;
+    if (reviewUserType === "Bot" || isAgentRunnerBotLogin(review.user?.login ?? null)) {
+      return;
+    }
     if (!isAllowedAuthorAssociation(review.author_association)) {
       onLog?.("info", "Ignoring PR review from non-collaborator.", {
         repo: `${repo.owner}/${repo.repo}`,

@@ -60,6 +60,10 @@ import {
 } from "./agent-command-state.js";
 import { pruneLogs, resolveLogMaintenance, resolveLogsDir } from "./log-maintenance.js";
 import { pruneReports, resolveReportMaintenance, resolveReportsDir } from "./report-maintenance.js";
+import { enqueueReviewTask, loadReviewQueue, resolveReviewQueuePath, takeReviewTasks } from "./review-queue.js";
+import { scheduleReviewFollowups } from "./review-scheduler.js";
+import type { ScheduledReviewFollowup } from "./review-scheduler.js";
+import { attemptAutoMergeApprovedPullRequest, resolveAllUnresolvedReviewThreads } from "./pr-review-actions.js";
 
 const program = new Command();
 
@@ -563,6 +567,8 @@ program
       const idleNeedsAllRepos = idleEnabled && config.idle?.repoScope !== "local";
       const shouldPollIssues = !webhooksEnabled;
       const shouldListRepos = shouldPollIssues || idleNeedsAllRepos;
+      const timingEnabled = process.env.AGENT_RUNNER_USAGE_TIMING === "1";
+      const timingPrefix = timingEnabled ? "Usage gate timing" : "";
 
       let repos: RepoInfo[] = [];
       let rateLimitedUntil: string | null = null;
@@ -746,64 +752,94 @@ program
       }
 
       const picked = pickNextIssues(queuedIssues, config.concurrency);
-      if (picked.length === 0) {
+
+      const evaluateCodexIdleAllowed = async (): Promise<boolean> => {
+        const usageGate = config.idle?.usageGate;
+        if (!idleEnabled || !usageGate?.enabled) {
+          return true;
+        }
+
+        try {
+          const timingEvents: Array<{ phase: string; durationMs: number }> = [];
+          const timingSink = timingEnabled
+            ? (phase: string, durationMs: number) => {
+                timingEvents.push({ phase, durationMs });
+              }
+            : undefined;
+          const rateLimits = await fetchCodexRateLimits(
+            usageGate.command,
+            usageGate.args,
+            usageGate.timeoutSeconds,
+            config.workdirRoot,
+            timingSink
+          );
+          const status = rateLimits ? rateLimitSnapshotToStatus(rateLimits, new Date()) : null;
+          if (!status) {
+            log("warn", "Idle Codex usage gate: unable to read rate limits from app-server.", json);
+            return false;
+          }
+
+          const decision = evaluateUsageGate(status, usageGate);
+          if (!decision.allow) {
+            log("info", `Idle Codex usage gate blocked. ${decision.reason}`, json);
+            return false;
+          }
+
+          log("info", `Idle Codex usage gate allowed. ${decision.reason}`, json, {
+            window: decision.window?.label,
+            minutesToReset: decision.minutesToReset
+          });
+
+          if (timingEnabled && timingEvents.length > 0) {
+            log(
+              "info",
+              `${timingPrefix} (Codex): ${timingEvents.map((event) => `${event.phase}=${event.durationMs}ms`).join(", ")}`,
+              json
+            );
+          }
+
+          return true;
+        } catch (error) {
+          log("warn", "Idle Codex usage gate failed. Codex idle disabled.", json, {
+            error: error instanceof Error ? error.message : String(error)
+          });
+          return false;
+        }
+      };
+
+      let scheduledReviewFollowups: ScheduledReviewFollowup[] = [];
+      if (idleEnabled && picked.length < config.concurrency) {
+        const reviewQueuePath = resolveReviewQueuePath(config.workdirRoot);
+        const backlog = loadReviewQueue(reviewQueuePath);
+        if (backlog.length > 0) {
+          const codexAllowed = await evaluateCodexIdleAllowed();
+          if (!codexAllowed) {
+            log(
+              "info",
+              "Review follow-up backlog detected but Codex idle gate is blocked. Skipping review follow-ups.",
+              json,
+              { queued: backlog.length }
+            );
+          } else {
+            const maxEntries = config.concurrency - picked.length;
+            const queue = dryRun ? backlog : await takeReviewTasks(reviewQueuePath, maxEntries);
+            scheduledReviewFollowups = scheduleReviewFollowups({
+              normalRunning: picked.length,
+              concurrency: config.concurrency,
+              allowedEngines: ["codex"],
+              queue
+            });
+          }
+        }
+      }
+
+      if (picked.length === 0 && scheduledReviewFollowups.length === 0) {
         if (!config.idle?.enabled) {
           log("info", "No queued requests.", json);
           return;
         }
 
-        const timingEnabled = process.env.AGENT_RUNNER_USAGE_TIMING === "1";
-        const timingPrefix = timingEnabled ? "Usage gate timing" : "";
-
-        let codexAllowed = true;
-        const usageGate = config.idle.usageGate;
-        if (usageGate?.enabled) {
-          try {
-            const timingEvents: Array<{ phase: string; durationMs: number }> = [];
-            const timingSink = timingEnabled
-              ? (phase: string, durationMs: number) => {
-                  timingEvents.push({ phase, durationMs });
-                }
-              : undefined;
-            const rateLimits = await fetchCodexRateLimits(
-              usageGate.command,
-              usageGate.args,
-              usageGate.timeoutSeconds,
-              config.workdirRoot,
-              timingSink
-            );
-            const status = rateLimits ? rateLimitSnapshotToStatus(rateLimits, new Date()) : null;
-            if (!status) {
-              log("warn", "Idle Codex usage gate: unable to read rate limits from app-server.", json);
-              codexAllowed = false;
-            } else {
-              const decision = evaluateUsageGate(status, usageGate);
-              if (!decision.allow) {
-                log("info", `Idle Codex usage gate blocked. ${decision.reason}`, json);
-                codexAllowed = false;
-              } else {
-                log("info", `Idle Codex usage gate allowed. ${decision.reason}`, json, {
-                  window: decision.window?.label,
-                  minutesToReset: decision.minutesToReset
-                });
-              }
-            }
-            if (timingEnabled && timingEvents.length > 0) {
-              log(
-                "info",
-                `${timingPrefix} (Codex): ${timingEvents
-                  .map((event) => `${event.phase}=${event.durationMs}ms`)
-                  .join(", ")}`,
-                json
-              );
-            }
-          } catch (error) {
-            log("warn", "Idle Codex usage gate failed. Codex idle disabled.", json, {
-              error: error instanceof Error ? error.message : String(error)
-            });
-            codexAllowed = false;
-          }
-        }
+        const codexAllowed = await evaluateCodexIdleAllowed();
 
         let copilotAllowed = false;
         const copilotGate = config.idle.copilotUsageGate;
@@ -1061,13 +1097,22 @@ program
         log("info", `Dry-run: would process ${picked.length} request(s).`, json, {
           issues: picked.map((issue) => issue.url)
         });
+        if (scheduledReviewFollowups.length > 0) {
+          log("info", `Dry-run: would process ${scheduledReviewFollowups.length} review follow-up(s).`, json, {
+            followups: scheduledReviewFollowups.map((followup) => ({
+              url: followup.url,
+              reason: followup.reason,
+              requiresEngine: followup.requiresEngine
+            }))
+          });
+        }
         return;
       }
 
       const limit = pLimit(config.concurrency);
 
-      await Promise.all(
-        picked.map((issue) =>
+      await Promise.all([
+        ...picked.map((issue) =>
           limit(async () => {
             let activityId: string | null = null;
             try {
@@ -1075,9 +1120,7 @@ program
               await tryRemoveLabel(issue, config.labels.queued);
               await commentCompletion(
                 issue,
-                buildAgentComment(
-                  `Agent runner started on ${new Date().toISOString()}. Concurrency ${config.concurrency}.`
-                )
+                buildAgentComment(`Agent runner started on ${new Date().toISOString()}. Concurrency ${config.concurrency}.`)
               );
               if (webhooksEnabled && webhookQueuePath) {
                 await removeWebhookIssues(webhookQueuePath, [issue.id]);
@@ -1128,8 +1171,142 @@ program
               }
             }
           })
+        ),
+        ...scheduledReviewFollowups.map((followup) =>
+          limit(async () => {
+            const issue = await client.getIssue(followup.repo, followup.prNumber);
+            if (!issue) {
+              log("warn", "Review follow-up skipped: unable to resolve PR.", json, { url: followup.url });
+              return;
+            }
+
+            if (!followup.requiresEngine) {
+              try {
+                const merge = await attemptAutoMergeApprovedPullRequest({
+                  client,
+                  repo: followup.repo,
+                  pullNumber: followup.prNumber,
+                  issue
+                });
+
+                if (merge.merged) {
+                  await client.addLabels(issue, [config.labels.done]);
+                  await commentCompletion(
+                    issue,
+                    buildAgentComment(
+                      `Agent runner auto-merged after approval (method: ${merge.mergeMethod}).` +
+                        `${merge.branchDeleted ? "\n\nDeleted remote branch." : ""}`
+                    )
+                  );
+                  return;
+                }
+
+                if (merge.retry) {
+                  const reviewQueuePath = resolveReviewQueuePath(config.workdirRoot);
+                  await enqueueReviewTask(reviewQueuePath, {
+                    issueId: followup.issueId,
+                    prNumber: followup.prNumber,
+                    repo: followup.repo,
+                    url: followup.url,
+                    reason: followup.reason,
+                    requiresEngine: false
+                  });
+                  log("info", "Auto-merge not ready yet; re-queued approval follow-up.", json, {
+                    url: followup.url,
+                    reason: merge.reason
+                  });
+                  return;
+                }
+
+                log("info", "Auto-merge skipped.", json, { url: followup.url, reason: merge.reason });
+              } catch (error) {
+                log("warn", "Auto-merge failed.", json, {
+                  url: followup.url,
+                  error: error instanceof Error ? error.message : String(error)
+                });
+              }
+              return;
+            }
+
+            let activityId: string | null = null;
+            try {
+              await client.addLabels(issue, [config.labels.running]);
+              await tryRemoveLabel(issue, config.labels.queued);
+              await commentCompletion(
+                issue,
+                buildAgentComment(
+                  `Agent runner started review follow-up (${followup.reason}) on ${new Date().toISOString()}. Concurrency ${config.concurrency}.`
+                )
+              );
+
+              const result = await runIssue(client, config, issue);
+              activityId = result.activityId;
+              if (result.success) {
+                try {
+                  const resolved = await resolveAllUnresolvedReviewThreads({
+                    client,
+                    repo: followup.repo,
+                    pullNumber: followup.prNumber
+                  });
+                  if (resolved.resolved > 0) {
+                    log("info", "Resolved PR review threads after follow-up run.", json, {
+                      url: followup.url,
+                      resolved: resolved.resolved,
+                      unresolvedBefore: resolved.unresolvedBefore,
+                      total: resolved.total
+                    });
+                  }
+                } catch (error) {
+                  log("warn", "Failed to resolve PR review threads after follow-up run.", json, {
+                    url: followup.url,
+                    error: error instanceof Error ? error.message : String(error)
+                  });
+                }
+
+                await client.addLabels(issue, [config.labels.done]);
+                await tryRemoveLabel(issue, config.labels.running);
+                await commentCompletion(
+                  issue,
+                  buildAgentComment(
+                    `Agent runner completed review follow-up successfully.` +
+                      `${result.summary ? `\n\nSummary:\n${result.summary}` : ""}` +
+                      `\n\nLog: ${result.logPath}`
+                  )
+                );
+                return;
+              }
+
+              await client.addLabels(issue, [config.labels.failed, config.labels.needsUser]);
+              await tryRemoveLabel(issue, config.labels.running);
+              await commentCompletion(
+                issue,
+                buildAgentComment(
+                  `Agent runner failed review follow-up.` +
+                    `${result.summary ? `\n\nSummary:\n${result.summary}` : ""}` +
+                    `\n\nLog: ${result.logPath}\n\nPlease reply with any details or fixes; the runner will re-queue after detecting your response.`,
+                  [NEEDS_USER_MARKER]
+                )
+              );
+            } catch (error) {
+              await client.addLabels(issue, [config.labels.failed, config.labels.needsUser]);
+              await tryRemoveLabel(issue, config.labels.running);
+              await commentCompletion(
+                issue,
+                buildAgentComment(
+                  `Agent runner failed review follow-up with error: ${
+                    error instanceof Error ? error.message : String(error)
+                  }\n\nPlease reply with any details or fixes; the runner will re-queue after detecting your response.`,
+                  [NEEDS_USER_MARKER]
+                )
+              );
+            } finally {
+              if (activityId) {
+                removeActivity(activityPath, activityId);
+              }
+            }
+          })
         )
-      );
+      ]);
     };
 
     try {

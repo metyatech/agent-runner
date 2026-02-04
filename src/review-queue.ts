@@ -162,3 +162,19 @@ export async function removeReviewTasks(queuePath: string, issueIds: number[]): 
   });
 }
 
+export async function takeReviewTasks(queuePath: string, maxEntries: number): Promise<ReviewQueueEntry[]> {
+  const limit = Math.max(0, Math.floor(maxEntries));
+  if (limit <= 0) {
+    return [];
+  }
+  return withQueueLock(queuePath, () => {
+    const state = readQueueState(queuePath);
+    const taken = state.queued.slice(0, limit);
+    if (taken.length === 0) {
+      return [];
+    }
+    const remaining = state.queued.slice(taken.length);
+    writeQueueState(queuePath, remaining);
+    return taken;
+  });
+}

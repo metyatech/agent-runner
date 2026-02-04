@@ -35,6 +35,39 @@ export type PullRequestReviewComment = {
   line?: number | null;
 };
 
+export type PullRequestReview = {
+  id: number;
+  state: string;
+  submittedAt: string | null;
+  author: string | null;
+  body: string | null;
+};
+
+export type PullRequestDetails = {
+  number: number;
+  url: string;
+  draft: boolean;
+  state: string;
+  merged: boolean;
+  mergeable: boolean | null;
+  mergeableState: string | null;
+  headRef: string;
+  headSha: string;
+  headRepoFullName: string | null;
+};
+
+export type RepoMergeOptions = {
+  allowSquashMerge: boolean;
+  allowMergeCommit: boolean;
+  allowRebaseMerge: boolean;
+};
+
+export type PullRequestReviewThread = {
+  id: string;
+  isResolved: boolean;
+  isOutdated: boolean;
+};
+
 export type LabelInfo = {
   name: string;
   color: string;
@@ -587,5 +620,204 @@ export class GitHubClient {
       }
       throw error;
     }
+  }
+
+  async getRepoMergeOptions(repo: RepoInfo): Promise<RepoMergeOptions> {
+    const response = await this.octokit.repos.get({
+      owner: repo.owner,
+      repo: repo.repo
+    });
+
+    return {
+      allowSquashMerge: Boolean((response.data as { allow_squash_merge?: boolean }).allow_squash_merge),
+      allowMergeCommit: Boolean((response.data as { allow_merge_commit?: boolean }).allow_merge_commit),
+      allowRebaseMerge: Boolean((response.data as { allow_rebase_merge?: boolean }).allow_rebase_merge)
+    };
+  }
+
+  async getPullRequest(repo: RepoInfo, pullNumber: number): Promise<PullRequestDetails | null> {
+    try {
+      const response = await this.octokit.pulls.get({
+        owner: repo.owner,
+        repo: repo.repo,
+        pull_number: pullNumber
+      });
+
+      const headRef = response.data.head.ref ?? "";
+      const headSha = response.data.head.sha ?? "";
+      if (!headRef || !headSha) {
+        return null;
+      }
+
+      const mergeableState =
+        typeof (response.data as { mergeable_state?: string }).mergeable_state === "string"
+          ? (response.data as { mergeable_state?: string }).mergeable_state!
+          : null;
+
+      return {
+        number: response.data.number,
+        url: response.data.html_url,
+        draft: Boolean((response.data as { draft?: boolean }).draft),
+        state: response.data.state ?? "open",
+        merged: Boolean((response.data as { merged?: boolean }).merged),
+        mergeable:
+          typeof (response.data as { mergeable?: boolean | null }).mergeable === "boolean"
+            ? (response.data as { mergeable?: boolean | null }).mergeable!
+            : (response.data as { mergeable?: boolean | null }).mergeable ?? null,
+        mergeableState,
+        headRef,
+        headSha,
+        headRepoFullName: response.data.head.repo?.full_name ?? null
+      };
+    } catch (error) {
+      if (error instanceof Error && "status" in error) {
+        const status = (error as { status?: number }).status;
+        if (status === 404) {
+          return null;
+        }
+      }
+      throw error;
+    }
+  }
+
+  async listPullRequestReviews(repo: RepoInfo, pullNumber: number): Promise<PullRequestReview[]> {
+    const reviews: PullRequestReview[] = [];
+    let page = 1;
+    while (true) {
+      const response = await this.octokit.pulls.listReviews({
+        owner: repo.owner,
+        repo: repo.repo,
+        pull_number: pullNumber,
+        per_page: 100,
+        page
+      });
+      for (const review of response.data) {
+        reviews.push({
+          id: review.id,
+          state: review.state ?? "",
+          submittedAt: (review as { submitted_at?: string | null }).submitted_at ?? null,
+          author: review.user?.login ?? null,
+          body: review.body ?? null
+        });
+      }
+      if (response.data.length < 100) {
+        break;
+      }
+      page += 1;
+    }
+    return reviews;
+  }
+
+  async mergePullRequest(options: {
+    repo: RepoInfo;
+    pullNumber: number;
+    sha?: string | null;
+    mergeMethod?: "merge" | "squash" | "rebase";
+    commitTitle?: string | null;
+    commitMessage?: string | null;
+  }): Promise<{ merged: boolean; message?: string | null }> {
+    const response = await this.octokit.pulls.merge({
+      owner: options.repo.owner,
+      repo: options.repo.repo,
+      pull_number: options.pullNumber,
+      sha: options.sha ?? undefined,
+      merge_method: options.mergeMethod ?? undefined,
+      commit_title: options.commitTitle ?? undefined,
+      commit_message: options.commitMessage ?? undefined
+    });
+    return {
+      merged: Boolean((response.data as { merged?: boolean }).merged),
+      message: (response.data as { message?: string | null }).message ?? null
+    };
+  }
+
+  async deleteBranchRef(repo: RepoInfo, ref: string): Promise<void> {
+    await this.octokit.git.deleteRef({
+      owner: repo.owner,
+      repo: repo.repo,
+      ref
+    });
+  }
+
+  async listPullRequestReviewThreads(repo: RepoInfo, pullNumber: number): Promise<PullRequestReviewThread[]> {
+    const threads: PullRequestReviewThread[] = [];
+    let cursor: string | null = null;
+
+    while (true) {
+      const response = await this.octokit.request("POST /graphql", {
+        query: `
+          query($owner: String!, $name: String!, $number: Int!, $after: String) {
+            repository(owner: $owner, name: $name) {
+              pullRequest(number: $number) {
+                reviewThreads(first: 100, after: $after) {
+                  nodes {
+                    id
+                    isResolved
+                    isOutdated
+                  }
+                  pageInfo {
+                    hasNextPage
+                    endCursor
+                  }
+                }
+              }
+            }
+          }
+        `,
+        owner: repo.owner,
+        name: repo.repo,
+        number: pullNumber,
+        after: cursor
+      });
+
+      const data = response.data as {
+        repository?: {
+          pullRequest?: {
+            reviewThreads?: {
+              nodes?: Array<{
+                id: string;
+                isResolved: boolean;
+                isOutdated: boolean;
+              }> | null;
+              pageInfo?: { hasNextPage: boolean; endCursor: string | null } | null;
+            } | null;
+          } | null;
+        } | null;
+      };
+
+      const nodes = data.repository?.pullRequest?.reviewThreads?.nodes ?? [];
+      for (const node of nodes) {
+        if (!node?.id) continue;
+        threads.push({
+          id: node.id,
+          isResolved: Boolean(node.isResolved),
+          isOutdated: Boolean(node.isOutdated)
+        });
+      }
+
+      const pageInfo = data.repository?.pullRequest?.reviewThreads?.pageInfo;
+      if (!pageInfo?.hasNextPage || !pageInfo.endCursor) {
+        break;
+      }
+      cursor = pageInfo.endCursor;
+    }
+
+    return threads;
+  }
+
+  async resolvePullRequestReviewThread(threadId: string): Promise<void> {
+    await this.octokit.request("POST /graphql", {
+      query: `
+        mutation($threadId: ID!) {
+          resolveReviewThread(input: { threadId: $threadId }) {
+            thread {
+              id
+              isResolved
+            }
+          }
+        }
+      `,
+      threadId
+    });
   }
 }
