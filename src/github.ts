@@ -505,4 +505,45 @@ export class GitHubClient {
       description: label.description ?? ""
     });
   }
+
+  async getRepoDefaultBranch(repo: RepoInfo): Promise<string> {
+    const response = await this.octokit.repos.get({
+      owner: repo.owner,
+      repo: repo.repo
+    });
+    const branch = response.data.default_branch;
+    if (!branch) {
+      throw new Error(`Missing default branch for ${repo.owner}/${repo.repo}`);
+    }
+    return branch;
+  }
+
+  async getPullRequestHead(repo: RepoInfo, pullNumber: number): Promise<{
+    headRef: string;
+    headSha: string;
+    headRepoFullName: string | null;
+  } | null> {
+    try {
+      const response = await this.octokit.pulls.get({
+        owner: repo.owner,
+        repo: repo.repo,
+        pull_number: pullNumber
+      });
+      const headRef = response.data.head.ref;
+      const headSha = response.data.head.sha;
+      const headRepoFullName = response.data.head.repo?.full_name ?? null;
+      if (!headRef || !headSha) {
+        return null;
+      }
+      return { headRef, headSha, headRepoFullName };
+    } catch (error) {
+      if (error instanceof Error && "status" in error) {
+        const status = (error as { status?: number }).status;
+        if (status === 404) {
+          return null;
+        }
+      }
+      throw error;
+    }
+  }
 }

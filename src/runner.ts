@@ -2,9 +2,8 @@ import fs from "node:fs";
 import path from "node:path";
 import { spawn } from "node:child_process";
 import type { AgentRunnerConfig } from "./config.js";
-import type { GitHubClient, IssueComment, IssueInfo, RepoInfo } from "./github.js";
+import { GitHubClient, type IssueComment, type IssueInfo, type RepoInfo } from "./github.js";
 import { resolveCodexCommand } from "./codex-command.js";
-import { commandExists } from "./command-exists.js";
 import { recordAmazonQUsage, resolveAmazonQUsageStatePath } from "./amazon-q-usage.js";
 import {
   chooseIdleTask,
@@ -15,7 +14,6 @@ import {
   selectIdleRepos,
   type IdlePlanOptions
 } from "./idle.js";
-import { parseIssueBody } from "./issue.js";
 import { recordRunningIssue, removeRunningIssue, resolveRunnerStatePath } from "./runner-state.js";
 import {
   recordActivity,
@@ -26,6 +24,15 @@ import { AGENT_RUNNER_MARKER, findLastMarkerComment, NEEDS_USER_MARKER } from ".
 import { normalizeLogChunk } from "./log-normalize.js";
 import { resolveLogMaintenance, writeLatestPointer } from "./log-maintenance.js";
 import { buildGitHubNotifyChildEnv } from "./github-notify-env.js";
+import { resolveTargetRepos } from "./target-repos.js";
+import {
+  createWorktreeForRemoteBranch,
+  createWorktreeFromDefaultBranch,
+  ensureRepoCache,
+  refreshRepoCache,
+  removeWorktree,
+  resolveRunWorkRoot
+} from "./git-worktree.js";
 
 export type RunResult = {
   success: boolean;
@@ -86,45 +93,12 @@ export function buildAmazonQInvocation(
   };
 }
 
-function resolveRepoPath(root: string, repo: RepoInfo): string {
-  return path.join(root, repo.repo);
+function isPullRequestUrl(url: string): boolean {
+  return /\/pull\/\d+$/i.test(url);
 }
 
-async function cloneRepo(root: string, repo: RepoInfo): Promise<void> {
-  const repoPath = resolveRepoPath(root, repo);
-  if (fs.existsSync(repoPath)) {
-    return;
-  }
-
-  fs.mkdirSync(root, { recursive: true });
-  const useGh = await commandExists("gh");
-  const cloneArgs = useGh
-    ? ["repo", "clone", `${repo.owner}/${repo.repo}`, repoPath, "--", "--recursive"]
-    : ["clone", "--recursive", `https://github.com/${repo.owner}/${repo.repo}.git`, repoPath];
-  const command = useGh ? "gh" : "git";
-
-  await new Promise<void>((resolve, reject) => {
-    const child = spawn(command, cloneArgs, { stdio: "inherit", shell: false });
-    child.on("error", reject);
-    child.on("close", (code) => {
-      if (code === 0) {
-        resolve();
-      } else {
-        reject(new Error(`Clone failed (${command} ${cloneArgs.join(" ")})`));
-      }
-    });
-  });
-}
-
-function resolveTargetRepos(issue: IssueInfo, parsed: ReturnType<typeof parseIssueBody>, owner: string): RepoInfo[] {
-  const base = issue.repo;
-  const additional = parsed.repoList.map((repo) => ({ owner, repo }));
-  const combined = [base, ...additional];
-  const unique = new Map<string, RepoInfo>();
-  for (const repo of combined) {
-    unique.set(`${repo.owner}/${repo.repo}`, repo);
-  }
-  return Array.from(unique.values());
+function resolveWorktreeDirName(repo: RepoInfo): string {
+  return `${repo.owner}--${repo.repo}`.replace(/[^a-zA-Z0-9._-]/g, "_");
 }
 
 const MAX_ISSUE_COMMENT_CHARS = 4_000;
@@ -274,16 +248,18 @@ export function buildCodexInvocation(
   config: AgentRunnerConfig,
   primaryPath: string,
   prompt: string,
-  envOverrides: NodeJS.ProcessEnv = {}
+  options: { envOverrides?: NodeJS.ProcessEnv; addDir?: string } = {}
 ): EngineInvocation {
   const resolved = resolveCodexCommand(config.codex.command, process.env.PATH);
+  const envOverrides = options.envOverrides ?? {};
+  const addDir = options.addDir ?? config.workdirRoot;
   const args = [
     ...resolved.prefixArgs,
     ...config.codex.args,
     "-C",
     primaryPath,
     "--add-dir",
-    config.workdirRoot,
+    addDir,
     prompt
   ];
 
@@ -326,18 +302,62 @@ export async function runIssue(
   config: AgentRunnerConfig,
   issue: IssueInfo
 ): Promise<RunResult> {
-  const parsed = parseIssueBody(issue.body);
-  const repos = resolveTargetRepos(issue, parsed, config.owner);
-
-  for (const repo of repos) {
-    await cloneRepo(config.workdirRoot, repo);
-  }
-
+  const repos = resolveTargetRepos(issue, config.owner);
   const comments = await client.listIssueComments(issue);
 
+  const runId = `issue-${issue.id}-${Date.now()}`;
+  const workRoot = resolveRunWorkRoot(config.workdirRoot, runId);
+  const prepared: Array<{ cachePath: string; worktreePath: string }> = [];
+
+  const prHead = isPullRequestUrl(issue.url) ? await client.getPullRequestHead(issue.repo, issue.number) : null;
+
   const primaryRepo = repos[0];
-  const primaryPath = resolveRepoPath(config.workdirRoot, primaryRepo);
-  const prompt = renderPrompt(config.codex.promptTemplate, repos, issue, comments);
+  let primaryPath: string | null = null;
+
+  try {
+    for (const repo of repos) {
+      const cachePath = await ensureRepoCache(config.workdirRoot, repo);
+      await refreshRepoCache(cachePath);
+
+      const worktreePath = path.join(workRoot, resolveWorktreeDirName(repo));
+      const isPrimary =
+        repo.owner.toLowerCase() === primaryRepo.owner.toLowerCase() && repo.repo.toLowerCase() === primaryRepo.repo.toLowerCase();
+
+      if (isPrimary && prHead) {
+        const expected = `${repo.owner}/${repo.repo}`.toLowerCase();
+        const headRepo = prHead.headRepoFullName?.toLowerCase() ?? null;
+        if (headRepo && headRepo !== expected) {
+          throw new Error(
+            `PR head repo is ${prHead.headRepoFullName}, expected ${repo.owner}/${repo.repo}. ` +
+              "PRs from forks are not supported for /agent run because the runner cannot push to the head branch."
+          );
+        }
+        await createWorktreeForRemoteBranch({ cachePath, worktreePath, branch: prHead.headRef });
+      } else {
+        const defaultBranch = await client.getRepoDefaultBranch(repo);
+        const branchSuffix = `${Date.now()}`;
+        const newBranch = isPrimary
+          ? `agent-runner/issue-${issue.number}-${branchSuffix}`
+          : `agent-runner/issue-${issue.number}-${branchSuffix}/${repo.repo}`;
+        await createWorktreeFromDefaultBranch({
+          cachePath,
+          worktreePath,
+          defaultBranch,
+          newBranch
+        });
+      }
+
+      prepared.push({ cachePath, worktreePath });
+      if (isPrimary) {
+        primaryPath = worktreePath;
+      }
+    }
+
+    if (!primaryPath) {
+      throw new Error(`Missing primary worktree for ${primaryRepo.owner}/${primaryRepo.repo}`);
+    }
+
+    const prompt = renderPrompt(config.codex.promptTemplate, repos, issue, comments);
 
   const logDir = path.resolve(config.workdirRoot, "agent-runner", "logs");
   fs.mkdirSync(logDir, { recursive: true });
@@ -356,7 +376,15 @@ export async function runIssue(
   const activityPath = resolveActivityStatePath(config.workdirRoot);
 
   const notifyEnv = await buildGitHubNotifyChildEnv(config.workdirRoot);
-  const invocation = buildCodexInvocation(config, primaryPath, prompt, notifyEnv);
+  const invocation = buildCodexInvocation(config, primaryPath, prompt, {
+    envOverrides: {
+      ...notifyEnv,
+      AGENT_RUNNER_WORKROOT: workRoot,
+      AGENT_RUNNER_PRIMARY_REPO: `${primaryRepo.owner}/${primaryRepo.repo}`,
+      AGENT_RUNNER_PRIMARY_REPO_PATH: primaryPath
+    },
+    addDir: workRoot
+  });
 
   let recordWritten = false;
   let activityRecorded = false;
@@ -436,6 +464,16 @@ export async function runIssue(
     summary,
     activityId
   };
+  } finally {
+    for (const entry of prepared) {
+      await removeWorktree(entry.cachePath, entry.worktreePath);
+    }
+    try {
+      await fs.promises.rm(workRoot, { recursive: true, force: true });
+    } catch {
+      // ignore
+    }
+  }
 }
 
 function resolveIdleReportPath(workdirRoot: string, repo: RepoInfo): string {
@@ -514,10 +552,30 @@ export async function runIdleTask(
   task: string,
   engine: IdleEngine
 ): Promise<IdleTaskResult> {
-  await cloneRepo(config.workdirRoot, repo);
+  const runId = `idle-${engine}-${repo.repo}-${Date.now()}`;
+  const workRoot = resolveRunWorkRoot(config.workdirRoot, runId);
+  const cachePath = await ensureRepoCache(config.workdirRoot, repo);
+  await refreshRepoCache(cachePath);
 
-  const repoPath = resolveRepoPath(config.workdirRoot, repo);
-  const prompt = renderIdlePrompt(config.idle?.promptTemplate ?? "", repo, task);
+  const repoPath = path.join(workRoot, resolveWorktreeDirName(repo));
+  let created = false;
+
+  try {
+    const token =
+      process.env.AGENT_GITHUB_TOKEN ||
+      process.env.GITHUB_TOKEN ||
+      process.env.GH_TOKEN;
+
+    if (!token) {
+      throw new Error("Missing GitHub token. Set AGENT_GITHUB_TOKEN or GITHUB_TOKEN.");
+    }
+    const client = new GitHubClient(token);
+    const defaultBranch = await client.getRepoDefaultBranch(repo);
+    const newBranch = `agent-runner/idle-${engine}-${Date.now()}`;
+    await createWorktreeFromDefaultBranch({ cachePath, worktreePath: repoPath, defaultBranch, newBranch });
+    created = true;
+
+    const prompt = renderIdlePrompt(config.idle?.promptTemplate ?? "", repo, task);
 
   const logDir = path.resolve(config.workdirRoot, "agent-runner", "logs");
   fs.mkdirSync(logDir, { recursive: true });
@@ -538,6 +596,7 @@ export async function runIdleTask(
     AGENT_RUNNER_REPO_PATH: repoPath,
     AGENT_RUNNER_TASK: task,
     AGENT_RUNNER_PROMPT: prompt,
+    AGENT_RUNNER_WORKROOT: workRoot,
     ...notifyEnv
   };
   const invocation =
@@ -547,7 +606,7 @@ export async function runIdleTask(
       ? buildAmazonQInvocation(config, repoPath, prompt, envOverrides)
       : engine === "gemini-pro" || engine === "gemini-flash"
       ? buildGeminiInvocation(config, repoPath, prompt, engine, envOverrides)
-      : buildCodexInvocation(config, repoPath, prompt, envOverrides);
+      : buildCodexInvocation(config, repoPath, prompt, { envOverrides, addDir: workRoot });
   const activityPath = resolveActivityStatePath(config.workdirRoot);
   const startedAt = new Date().toISOString();
   const activityId = `idle:${engine}:${repo.owner}/${repo.repo}:${Date.now()}`;
@@ -624,6 +683,16 @@ export async function runIdleTask(
     summary,
     reportPath
   };
+  } finally {
+    if (created) {
+      await removeWorktree(cachePath, repoPath);
+    }
+    try {
+      await fs.promises.rm(workRoot, { recursive: true, force: true });
+    } catch {
+      // ignore
+    }
+  }
 }
 
 const summaryStart = "AGENT_RUNNER_SUMMARY_START";

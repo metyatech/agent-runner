@@ -7,6 +7,7 @@ Local agent runner that queues and executes GitHub Agent requests using Codex.
 - Accepts requests from GitHub Issues / PRs via an issue comment: `/agent run` (recommended with webhooks).
 - Also supports label-based requests via `agent:request` (useful when polling without webhooks).
 - Queues requests, runs up to the configured concurrency, and posts results back to GitHub.
+- Runs each request in an isolated git worktree under `workdirRoot/agent-runner/work/` to avoid mixing changes across concurrent runs.
 - Runs idle maintenance tasks when no queued issues are available.
 - Can optionally run idle tasks through Copilot/Gemini/Amazon Q when configured usage gates allow.
 - Designed for a self-hosted Windows machine running Codex CLI.
