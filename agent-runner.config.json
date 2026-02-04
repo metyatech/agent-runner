@@ -33,7 +33,16 @@
     "tasks": [
       "Bring the repo into compliance with AGENTS.md and project docs/standards. Identify the highest-impact gap, fix it, and update docs/tests as needed. If nothing meaningful is needed, exit."
     ],
-    "promptTemplate": "You are running an autonomous idle task.\nTarget repo: {{repo}}\nTask: {{task}}\n\nRequirements:\n- Follow AGENTS.md rules.\n- Do not push directly to the main branch. Use a branch and open a PR if there are changes.\n- Do NOT merge or close the PR automatically. Leave it open for human review.\n- Post a short summary comment on the PR (no @mention needed).\n- If there are no safe changes, exit cleanly without opening a PR.\n- After opening a PR, check out the main branch and pull to keep the local clone clean.\n- If the repo has uncommitted changes, exit without making changes.\n- Repository creation, splitting, renaming, archiving, or deletion is allowed when needed.\n- At the end, output a summary block delimited by:\nAGENT_RUNNER_SUMMARY_START\n<summary>\nAGENT_RUNNER_SUMMARY_END\nInclude: changes made, tests run (or 'Not run'), and commit hashes.",
+    "promptTemplate": "You are running an autonomous idle task.\nTarget repo: {{repo}}\nTask: {{task}}\n\nRequirements:\n- Follow AGENTS.md rules.\n- Do not push directly to the main branch. Use a branch and open a PR if there are changes.\n- Do NOT merge or close the PR automatically. Leave it open for human review.\n- Post a short summary comment on the PR (no @mention needed).\n- If there are no safe changes, exit cleanly without opening a PR.\n- After opening a PR, check out the main branch and pull to keep the local clone clean.\n- If the repo has uncommitted changes, exit without making changes.\n- Repository creation, splitting, renaming, archiving, or deletion is allowed when needed.\n- At the end, output a summary block delimited by:\nAGENT_RUNNER_SUMMARY_START\n<summary>\nAGENT_RUNNER_SUMMARY_END\nInclude: changes made, tests run (or 'Not run'), commit hashes, and PR URL (or 'none').",
+    "notifications": {
+      "github": {
+        "enabled": true,
+        "repo": { "owner": "metyatech", "repo": "agent-runner" },
+        "workflowFile": "idle-notify.yml",
+        "workflowRef": "main",
+        "issueTitle": "Agent Runner: Idle Inbox"
+      }
+    },
     "usageGate": {
       "enabled": true,
       "command": "codex",

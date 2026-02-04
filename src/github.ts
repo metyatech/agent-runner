@@ -163,6 +163,21 @@ export class GitHubClient {
     });
   }
 
+  async dispatchWorkflow(options: {
+    repo: RepoInfo;
+    workflowFile: string;
+    ref: string;
+    inputs?: Record<string, string>;
+  }): Promise<void> {
+    await this.octokit.actions.createWorkflowDispatch({
+      owner: options.repo.owner,
+      repo: options.repo.repo,
+      workflow_id: options.workflowFile,
+      ref: options.ref,
+      inputs: options.inputs ?? {}
+    });
+  }
+
   async findIssueByTitle(repo: RepoInfo, title: string): Promise<IssueInfo | null> {
     const escaped = title.replace(/"/g, '\\"');
     const query = `repo:${repo.owner}/${repo.repo} type:issue in:title "${escaped}"`;

@@ -70,6 +70,32 @@
           "minItems": 1
         },
         "promptTemplate": { "type": "string", "minLength": 1 },
+        "notifications": {
+          "type": "object",
+          "properties": {
+            "github": {
+              "type": "object",
+              "required": ["enabled", "repo"],
+              "properties": {
+                "enabled": { "type": "boolean" },
+                "repo": {
+                  "type": "object",
+                  "required": ["owner", "repo"],
+                  "properties": {
+                    "owner": { "type": "string", "minLength": 1 },
+                    "repo": { "type": "string", "minLength": 1 }
+                  },
+                  "additionalProperties": false
+                },
+                "workflowFile": { "type": "string", "minLength": 1 },
+                "workflowRef": { "type": "string", "minLength": 1 },
+                "issueTitle": { "type": "string", "minLength": 1 }
+              },
+              "additionalProperties": false
+            }
+          },
+          "additionalProperties": false
+        },
         "repoScope": { "type": "string", "enum": ["all", "local"] },
         "usageGate": {
           "type": "object",

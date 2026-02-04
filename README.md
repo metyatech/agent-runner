@@ -190,8 +190,27 @@ Search API scan to catch requests created while the webhook listener was down.
 
 When no queued issues exist, the runner can execute idle tasks defined in the config.
 Each idle run writes a report under `reports/` and streams the Codex output to `logs/`.
-When changes are made, the idle prompt is expected to open a PR, mention @metyatech
-in a summary comment, and merge the PR, then sync the main branch locally.
+When changes are made, the idle prompt is expected to open a PR and leave it open
+for human review (no auto-merge/close). A short summary comment on the PR is ok,
+but @mentions are unnecessary when the runner is operating under your own account.
+
+### GitHub notifications for idle completions
+
+GitHub does not notify you about actions performed by your own account, so idle PR
+comments/mentions created by a runner using your token may not generate notifications.
+
+To get durable notifications (and an inbox you can review later), enable
+`idle.notifications.github`. On each idle completion, agent-runner will:
+
+1. Ensure a dedicated "Idle Inbox" issue exists (by title) in the configured repo.
+2. Dispatch the `idle-notify.yml` workflow in that repo.
+3. The workflow posts a comment as `github-actions[bot]`, which generates a GitHub notification.
+
+You can then triage via GitHub Notifications and mark items Done. The issue itself
+acts as a running log of idle completions.
+
+Requires: GitHub Actions enabled in the notification repo and a token with
+permission to dispatch workflows.
 If `idle.repoScope` is set to `"local"`, idle runs only target repositories under the workspace root.
 If `idle.usageGate.enabled` is true, idle runs only execute when the weekly reset
 window is near and unused weekly capacity remains. The weekly threshold ramps
@@ -224,6 +243,15 @@ Example config snippet:
     ],
     "repoScope": "local",
     "promptTemplate": "You are running an autonomous idle task. Target repo: {{repo}}. Task: {{task}}",
+    "notifications": {
+      "github": {
+        "enabled": true,
+        "repo": { "owner": "<owner>", "repo": "<repo>" },
+        "workflowFile": "idle-notify.yml",
+        "workflowRef": "main",
+        "issueTitle": "Agent Runner: Idle Inbox"
+      }
+    },
     "usageGate": {
       "enabled": true,
       "command": "codex",

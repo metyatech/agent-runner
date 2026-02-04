@@ -30,6 +30,18 @@ export type AgentRunnerConfig = {
     cooldownMinutes: number;
     tasks: string[];
     promptTemplate: string;
+    notifications?: {
+      github?: {
+        enabled: boolean;
+        repo: {
+          owner: string;
+          repo: string;
+        };
+        workflowFile?: string;
+        workflowRef?: string;
+        issueTitle?: string;
+      };
+    };
     repoScope?: "all" | "local";
     usageGate?: {
       enabled: boolean;

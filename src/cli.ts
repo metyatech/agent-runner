@@ -26,6 +26,7 @@ import { commandExists } from "./command-exists.js";
 import { listTargetRepos, listQueuedIssues, pickNextIssues, queueNewRequests } from "./queue.js";
 import { planIdleTasks, runIdleTask, runIssue } from "./runner.js";
 import type { IdleEngine } from "./runner.js";
+import { maybeNotifyIdleCompletionGithub } from "./idle-github-notify.js";
 import { listLocalRepos } from "./local-repos.js";
 import {
   evaluateRunningIssues,
@@ -819,6 +820,7 @@ program
           scheduled.map((task) =>
             idleLimit(async () => {
               const result = await runIdleTask(config, task.repo, task.task, task.engine);
+              await maybeNotifyIdleCompletionGithub({ client, config, result, json });
               if (result.success) {
                 log("info", "Idle task completed.", json, {
                   repo: `${result.repo.owner}/${result.repo.repo}`,
