@@ -11,6 +11,7 @@ import { buildAgentLabels } from "./labels.js";
 import { log } from "./logger.js";
 import { acquireLock, releaseLock } from "./lock.js";
 import { buildAgentComment, hasUserReplySince, NEEDS_USER_MARKER } from "./notifications.js";
+import { resolveGitHubNotifyToken } from "./github-notify-token.js";
 import {
   evaluateUsageGate,
   fetchCodexRateLimits,
@@ -295,9 +296,19 @@ program
       });
     }
 
-    const lock = acquireLock(path.resolve(config.workdirRoot, "agent-runner", "state", "runner.lock"));
+    let lock: ReturnType<typeof acquireLock>;
+    try {
+      lock = acquireLock(path.resolve(config.workdirRoot, "agent-runner", "state", "runner.lock"));
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      if (options.once && message.startsWith("Runner already active")) {
+        log("info", message, json);
+        return;
+      }
+      throw error;
+    }
     const client = new GitHubClient(token);
-    const notifyToken = process.env.AGENT_GITHUB_NOTIFY_TOKEN;
+    const notifyToken = resolveGitHubNotifyToken(config.workdirRoot);
     const notifyClient = notifyToken ? new GitHubClient(notifyToken) : null;
     if (notifyClient) {
       log("info", "GitHub notify token detected. Completion comments will be posted as a bot user.", json);

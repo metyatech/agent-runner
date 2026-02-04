@@ -202,8 +202,15 @@ If you want GitHub Notifications on the PR/issue itself, run agent-runner with a
 separate token that belongs to a bot account (or GitHub App):
 
 - Set `AGENT_GITHUB_NOTIFY_TOKEN` to a token that can comment on your repos.
+- Or save it to `state/github-notify-token.txt` (ignored by git).
 - agent-runner will use that token to post completion/failure comments so the author
   is not your own account, and GitHub will generate notifications as expected.
+
+Helper script (writes `state/github-notify-token.txt`):
+
+```powershell
+.\scripts\set-notify-token.ps1 -Token "<token>"
+```
 
 For idle runs, notifications are posted to the PR when a PR URL is present in the idle summary.
 If `idle.repoScope` is set to `"local"`, idle runs only target repositories under the workspace root.
