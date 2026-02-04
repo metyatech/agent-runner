@@ -25,6 +25,7 @@ import {
 import { AGENT_RUNNER_MARKER, findLastMarkerComment, NEEDS_USER_MARKER } from "./notifications.js";
 import { normalizeLogChunk } from "./log-normalize.js";
 import { resolveLogMaintenance, writeLatestPointer } from "./log-maintenance.js";
+import { buildGitHubNotifyChildEnv } from "./github-notify-env.js";
 
 export type RunResult = {
   success: boolean;
@@ -528,12 +529,15 @@ export async function runIdleTask(
     fs.appendFileSync(logPath, value);
   };
 
+  const notifyEnv = await buildGitHubNotifyChildEnv(config.workdirRoot);
+
   const envOverrides: NodeJS.ProcessEnv = {
     AGENT_RUNNER_ENGINE: engine,
     AGENT_RUNNER_REPO: `${repo.owner}/${repo.repo}`,
     AGENT_RUNNER_REPO_PATH: repoPath,
     AGENT_RUNNER_TASK: task,
-    AGENT_RUNNER_PROMPT: prompt
+    AGENT_RUNNER_PROMPT: prompt,
+    ...notifyEnv
   };
   const invocation =
     engine === "copilot"
