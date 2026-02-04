@@ -1,6 +1,12 @@
 import type { AgentRunnerConfig } from "./config.js";
 import type { GitHubClient, IssueInfo, RepoInfo } from "./github.js";
 import { buildAgentComment, hasUserReplySince, NEEDS_USER_MARKER } from "./notifications.js";
+import { isAllowedAuthorAssociation, parseAgentCommand } from "./agent-command.js";
+import {
+  hasProcessedAgentCommandComment,
+  markAgentCommandCommentProcessed,
+  resolveAgentCommandStatePath
+} from "./agent-command-state.js";
 import { enqueueWebhookIssue } from "./webhook-queue.js";
 import type { WebhookEvent } from "./webhook-server.js";
 
@@ -15,6 +21,20 @@ type IssuePayload = {
   pull_request?: unknown;
 };
 
+type PullRequestPayload = {
+  id?: number;
+  number?: number;
+  html_url?: string;
+};
+
+type CommentPayload = {
+  id?: number;
+  body?: string | null;
+  html_url?: string;
+  author_association?: string;
+  user?: { login?: string | null };
+};
+
 type RepositoryPayload = {
   name?: string;
   owner?: { login?: string };
@@ -23,8 +43,10 @@ type RepositoryPayload = {
 type WebhookPayload = {
   action?: string;
   issue?: IssuePayload;
+  pull_request?: PullRequestPayload;
   repository?: RepositoryPayload;
   label?: { name?: string };
+  comment?: CommentPayload;
 };
 
 function parseLabels(labels: IssuePayload["labels"]): string[] {
@@ -48,9 +70,6 @@ function parseRepo(payload: WebhookPayload): RepoInfo | null {
 function parseIssue(payload: WebhookPayload, repo: RepoInfo): IssueInfo | null {
   const issue = payload.issue;
   if (!issue) {
-    return null;
-  }
-  if (issue.pull_request) {
     return null;
   }
   if (!issue.id || !issue.number || !issue.title || !issue.html_url) {
@@ -89,6 +108,25 @@ function shouldQueueIssue(issue: IssueInfo, config: AgentRunnerConfig, labelHint
   return true;
 }
 
+function isBusyOrTerminal(issue: IssueInfo, config: AgentRunnerConfig): "running" | "queued" | "terminal" | null {
+  if (issue.labels.includes(config.labels.running)) {
+    return "running";
+  }
+  if (issue.labels.includes(config.labels.queued)) {
+    return "queued";
+  }
+  if (issue.labels.includes(config.labels.needsUser)) {
+    return "terminal";
+  }
+  if (issue.labels.includes(config.labels.done)) {
+    return "terminal";
+  }
+  if (issue.labels.includes(config.labels.failed)) {
+    return "terminal";
+  }
+  return null;
+}
+
 async function ensureQueued(
   client: GitHubClient,
   config: AgentRunnerConfig,
@@ -114,6 +152,68 @@ async function safeRemoveLabel(
       error: error instanceof Error ? error.message : String(error)
     });
   }
+}
+
+async function handleAgentRunCommand(options: {
+  client: GitHubClient;
+  config: AgentRunnerConfig;
+  queuePath: string;
+  issue: IssueInfo;
+  comment: CommentPayload;
+  onLog?: (level: "info" | "warn" | "error", message: string, data?: Record<string, unknown>) => void;
+}): Promise<void> {
+  const { client, config, queuePath, issue, comment, onLog } = options;
+  const commentId = comment.id ?? 0;
+  const statePath = resolveAgentCommandStatePath(config.workdirRoot);
+
+  if (!commentId || commentId <= 0) {
+    onLog?.("warn", "Ignoring /agent run due to missing comment id.", { issue: issue.url });
+    return;
+  }
+
+  if (!isAllowedAuthorAssociation(comment.author_association)) {
+    onLog?.("info", "Ignoring /agent run from non-collaborator.", {
+      issue: issue.url,
+      authorAssociation: comment.author_association ?? null,
+      user: comment.user?.login ?? null
+    });
+    return;
+  }
+
+  if (await hasProcessedAgentCommandComment(statePath, commentId)) {
+    return;
+  }
+
+  const status = isBusyOrTerminal(issue, config);
+  if (status === "running") {
+    await markAgentCommandCommentProcessed(statePath, commentId);
+    await client.comment(
+      issue,
+      buildAgentComment("Ignored `/agent run`: already running.")
+    );
+    return;
+  }
+  if (status === "queued") {
+    await markAgentCommandCommentProcessed(statePath, commentId);
+    await client.comment(
+      issue,
+      buildAgentComment("Ignored `/agent run`: already queued.")
+    );
+    return;
+  }
+
+  await client.addLabels(issue, [config.labels.request]);
+  await safeRemoveLabel(client, issue, config.labels.needsUser, onLog);
+  await safeRemoveLabel(client, issue, config.labels.failed, onLog);
+  await safeRemoveLabel(client, issue, config.labels.done, onLog);
+  await safeRemoveLabel(client, issue, config.labels.running, onLog);
+  await safeRemoveLabel(client, issue, config.labels.queued, onLog);
+
+  await ensureQueued(client, config, queuePath, issue);
+  await markAgentCommandCommentProcessed(statePath, commentId);
+
+  const requester = comment.user?.login ? `Requested by ${comment.user.login}.` : "Request received.";
+  await client.comment(issue, buildAgentComment(`${requester} Queued via \`/agent run\`.`));
 }
 
 export async function handleWebhookEvent(options: {
@@ -175,6 +275,20 @@ export async function handleWebhookEvent(options: {
     if (action !== "created") {
       return;
     }
+
+    const command = parseAgentCommand(payload.comment?.body ?? null);
+    if (command?.kind === "run") {
+      await handleAgentRunCommand({
+        client,
+        config,
+        queuePath,
+        issue,
+        comment: payload.comment ?? {},
+        onLog
+      });
+      return;
+    }
+
     if (!issue.labels.includes(config.labels.needsUser)) {
       return;
     }
@@ -189,17 +303,71 @@ export async function handleWebhookEvent(options: {
     await safeRemoveLabel(client, issue, config.labels.failed, onLog);
     await safeRemoveLabel(client, issue, config.labels.running, onLog);
     await safeRemoveLabel(client, issue, config.labels.queued, onLog);
-    const mention = issue.author ? `@${issue.author} ` : "";
     await client.comment(
       issue,
       buildAgentComment(
-        `${mention}Reply received. Re-queued for execution.`,
+        `Reply received. Re-queued for execution.`,
         []
       )
     );
     await ensureQueued(client, config, queuePath, issue);
     onLog?.("info", "Webhook re-queued issue after comment.", {
       issue: issue.url
+    });
+    return;
+  }
+
+  if (event.event === "pull_request_review_comment") {
+    const action = payload.action ?? "";
+    if (action !== "created") {
+      return;
+    }
+    const command = parseAgentCommand(payload.comment?.body ?? null);
+    if (command?.kind !== "run") {
+      return;
+    }
+    const comment = payload.comment ?? {};
+    const commentId = comment.id ?? 0;
+    if (!commentId || commentId <= 0) {
+      onLog?.("warn", "Ignoring /agent run review comment due to missing id.", { repo: `${repo.owner}/${repo.repo}` });
+      return;
+    }
+    if (!isAllowedAuthorAssociation(comment.author_association)) {
+      onLog?.("info", "Ignoring /agent run review comment from non-collaborator.", {
+        repo: `${repo.owner}/${repo.repo}`,
+        authorAssociation: comment.author_association ?? null,
+        user: comment.user?.login ?? null
+      });
+      return;
+    }
+
+    const statePath = resolveAgentCommandStatePath(config.workdirRoot);
+    if (await hasProcessedAgentCommandComment(statePath, commentId)) {
+      return;
+    }
+
+    const prNumber = payload.pull_request?.number ?? 0;
+    if (!prNumber || prNumber <= 0) {
+      onLog?.("warn", "Ignoring /agent run review comment due to missing PR number.", { repo: `${repo.owner}/${repo.repo}` });
+      return;
+    }
+
+    const issue = await client.getIssue(repo, prNumber);
+    if (!issue) {
+      onLog?.("warn", "Ignoring /agent run review comment because PR could not be resolved.", {
+        repo: `${repo.owner}/${repo.repo}`,
+        prNumber
+      });
+      return;
+    }
+
+    await handleAgentRunCommand({
+      client,
+      config,
+      queuePath,
+      issue,
+      comment,
+      onLog
     });
   }
 }

@@ -102,18 +102,33 @@ async function maybeRunWebhookCatchup(options: {
     config.labels.needsUser
   ];
 
-  log("info", "Webhook catch-up scan: searching for missed agent:request issues.", json, {
+  log("info", "Webhook catch-up scan: searching for missed /agent run comment requests and agent:request labels.", json, {
     intervalMinutes: catchup.intervalMinutes,
     maxIssuesPerRun: maxIssues
   });
 
   let found: IssueInfo[] = [];
   try {
-    found = await client.searchOpenIssuesByLabelAcrossOwner(config.owner, config.labels.request, {
+    const byLabel = await client.searchOpenItemsByLabelAcrossOwner(config.owner, config.labels.request, {
       excludeLabels,
       perPage: 100,
       maxPages: 1
     });
+    const byCommand = await client.searchOpenItemsByCommentPhraseAcrossOwner(config.owner, "/agent run", {
+      excludeLabels,
+      perPage: 100,
+      maxPages: 1
+    });
+    const seen = new Set<number>();
+    const merged: IssueInfo[] = [];
+    for (const item of [...byLabel, ...byCommand]) {
+      if (seen.has(item.id)) {
+        continue;
+      }
+      seen.add(item.id);
+      merged.push(item);
+    }
+    found = merged;
   } catch (error) {
     log("warn", "Webhook catch-up scan failed.", json, {
       error: error instanceof Error ? error.message : String(error)
@@ -137,7 +152,7 @@ async function maybeRunWebhookCatchup(options: {
       continue;
     }
     try {
-      await client.addLabels(issue, [config.labels.queued]);
+      await client.addLabels(issue, [config.labels.request, config.labels.queued]);
     } catch (error) {
       log("warn", "Failed to add queued label during catch-up.", json, {
         issue: issue.url,
@@ -1289,7 +1304,29 @@ program
     }
 
     const queuePath = resolveWebhookQueuePath(config.workdirRoot, webhookConfig);
-    const client = new GitHubClient(token);
+
+    const notify = createGitHubNotifyClient(config.workdirRoot);
+    let client: GitHubClient | null = notify?.client ?? null;
+    if (client) {
+      log(
+        "info",
+        notify?.source === "github-app"
+          ? "Webhook listener GitHub client configured via GitHub App."
+          : "Webhook listener GitHub client configured via notify token.",
+        json
+      );
+    }
+
+    if (!client && token) {
+      client = new GitHubClient(token);
+      log("info", "Webhook listener GitHub client configured via environment token.", json);
+    }
+
+    if (!client) {
+      throw new Error(
+        "Missing GitHub credentials for webhook listener. Configure the GitHub App notify client or set AGENT_GITHUB_TOKEN/GITHUB_TOKEN."
+      );
+    }
 
     await startWebhookServer({
       host,

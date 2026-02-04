@@ -114,9 +114,6 @@ export class GitHubClient {
         state: "open"
       });
       for (const issue of response.data) {
-        if (issue.pull_request) {
-          continue;
-        }
         issues.push({
           id: issue.id,
           number: issue.number,
@@ -259,6 +256,134 @@ export class GitHubClient {
     return issues;
   }
 
+  async searchOpenItemsByLabelAcrossOwner(
+    owner: string,
+    label: string,
+    options?: {
+      excludeLabels?: string[];
+      maxPages?: number;
+      perPage?: number;
+    }
+  ): Promise<IssueInfo[]> {
+    const items: IssueInfo[] = [];
+    const encodedLabel = label.includes('"') ? label.replace(/"/g, '\\"') : label;
+    const exclude = options?.excludeLabels ?? [];
+    const excludeQuery = exclude
+      .filter((entry) => entry.length > 0)
+      .map((entry) => ` -label:"${entry.replace(/"/g, '\\"')}"`)
+      .join("");
+    const query = `user:${owner} state:open label:"${encodedLabel}"${excludeQuery}`;
+    const pageSize = Math.min(100, Math.max(1, options?.perPage ?? 100));
+    let page = 1;
+    const maxPages = Math.min(10, Math.max(1, options?.maxPages ?? 10));
+
+    while (true) {
+      const response = await this.octokit.search.issuesAndPullRequests({
+        q: query,
+        sort: "updated",
+        order: "desc",
+        per_page: pageSize,
+        page
+      });
+
+      for (const item of response.data.items) {
+        const repoUrl = (item as { repository_url?: string }).repository_url;
+        if (!repoUrl) {
+          continue;
+        }
+        const match = /\/repos\/([^/]+)\/([^/]+)$/.exec(repoUrl);
+        if (!match) {
+          continue;
+        }
+        const repo: RepoInfo = { owner: match[1], repo: match[2] };
+        items.push({
+          id: item.id,
+          number: item.number,
+          title: item.title,
+          body: item.body ?? null,
+          author: item.user?.login ?? null,
+          repo,
+          labels: item.labels.map((label) => (typeof label === "string" ? label : label.name ?? "")),
+          url: item.html_url
+        });
+      }
+
+      if (response.data.items.length < pageSize || response.data.items.length === 0) {
+        break;
+      }
+      page += 1;
+      if (page > maxPages) {
+        break;
+      }
+    }
+
+    return items;
+  }
+
+  async searchOpenItemsByCommentPhraseAcrossOwner(
+    owner: string,
+    phrase: string,
+    options?: {
+      excludeLabels?: string[];
+      maxPages?: number;
+      perPage?: number;
+    }
+  ): Promise<IssueInfo[]> {
+    const items: IssueInfo[] = [];
+    const encodedPhrase = phrase.replace(/"/g, '\\"');
+    const exclude = options?.excludeLabels ?? [];
+    const excludeQuery = exclude
+      .filter((entry) => entry.length > 0)
+      .map((entry) => ` -label:"${entry.replace(/"/g, '\\"')}"`)
+      .join("");
+    const query = `user:${owner} state:open in:comments "${encodedPhrase}"${excludeQuery}`;
+    const pageSize = Math.min(100, Math.max(1, options?.perPage ?? 100));
+    let page = 1;
+    const maxPages = Math.min(10, Math.max(1, options?.maxPages ?? 10));
+
+    while (true) {
+      const response = await this.octokit.search.issuesAndPullRequests({
+        q: query,
+        sort: "updated",
+        order: "desc",
+        per_page: pageSize,
+        page
+      });
+
+      for (const item of response.data.items) {
+        const repoUrl = (item as { repository_url?: string }).repository_url;
+        if (!repoUrl) {
+          continue;
+        }
+        const match = /\/repos\/([^/]+)\/([^/]+)$/.exec(repoUrl);
+        if (!match) {
+          continue;
+        }
+        const repo: RepoInfo = { owner: match[1], repo: match[2] };
+        items.push({
+          id: item.id,
+          number: item.number,
+          title: item.title,
+          body: item.body ?? null,
+          author: item.user?.login ?? null,
+          repo,
+          labels: item.labels.map((label) => (typeof label === "string" ? label : label.name ?? "")),
+          url: item.html_url
+        });
+      }
+
+      if (response.data.items.length < pageSize || response.data.items.length === 0) {
+        break;
+      }
+      page += 1;
+      if (page > maxPages) {
+        break;
+      }
+    }
+
+    return items;
+  }
+
   async createIssue(repo: RepoInfo, title: string, body: string): Promise<IssueInfo> {
     const response = await this.octokit.issues.create({
       owner: repo.owner,
@@ -312,9 +437,6 @@ export class GitHubClient {
         repo: repo.repo,
         issue_number: issueNumber
       });
-      if (response.data.pull_request) {
-        return null;
-      }
       if (response.data.state !== "open") {
         return null;
       }

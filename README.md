@@ -4,7 +4,8 @@ Local agent runner that queues and executes GitHub Agent requests using Codex.
 
 ## Overview
 
-- Watches GitHub Issues labeled `agent:request`.
+- Accepts requests from GitHub Issues / PRs via an issue comment: `/agent run` (recommended with webhooks).
+- Also supports label-based requests via `agent:request` (useful when polling without webhooks).
 - Queues requests, runs up to the configured concurrency, and posts results back to GitHub.
 - Runs idle maintenance tasks when no queued issues are available.
 - Can optionally run idle tasks through Copilot/Gemini/Amazon Q when configured usage gates allow.
@@ -57,6 +58,16 @@ you can also save the token to `state/cloudflared-token.txt` (ignored by git).
 - `npm run test` (unit tests + local CLI checks; does not call GitHub API)
 - `npm run build`
 - `npm run dev -- run --once --yes`
+
+## Requesting work
+
+On an Issue or PR, add an issue comment:
+
+```text
+/agent run
+```
+
+Only repo collaborators (OWNER/MEMBER/COLLABORATOR) are accepted for `/agent run` to avoid drive-by execution.
 
 ## E2E (GitHub API)
 
@@ -113,7 +124,7 @@ Config file: `agent-runner.config.json`
 - `webhooks.secretEnv`: Environment variable name holding the webhook secret
 - `webhooks.maxPayloadBytes`: Optional max payload size (bytes)
 - `webhooks.queueFile`: Optional path for the webhook queue file
-- `webhooks.catchup`: Optional low-frequency fallback scan (Search API) to catch requests missed while the webhook listener was down
+- `webhooks.catchup`: Optional low-frequency fallback scan (Search API) to catch requests missed while the webhook listener was down (looks for `/agent run` comments and `agent:request` labels)
   - `webhooks.catchup.enabled`: Turn the catch-up scan on/off
   - `webhooks.catchup.intervalMinutes`: Minimum minutes between scans
 - `webhooks.catchup.maxIssuesPerRun`: Maximum issues to queue per scan
