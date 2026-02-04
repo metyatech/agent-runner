@@ -24,6 +24,17 @@ export type IssueComment = {
   authorAssociation?: string | null;
 };
 
+export type PullRequestReviewComment = {
+  id: number;
+  body: string;
+  createdAt: string;
+  author?: string | null;
+  authorAssociation?: string | null;
+  url?: string | null;
+  path?: string | null;
+  line?: number | null;
+};
+
 export type LabelInfo = {
   name: string;
   color: string;
@@ -422,6 +433,37 @@ export class GitHubClient {
           createdAt: comment.created_at,
           author: comment.user?.login ?? null,
           authorAssociation: (comment as { author_association?: string }).author_association ?? null
+        });
+      }
+      if (response.data.length < 100) {
+        break;
+      }
+      page += 1;
+    }
+    return comments;
+  }
+
+  async listPullRequestReviewComments(repo: RepoInfo, pullNumber: number): Promise<PullRequestReviewComment[]> {
+    const comments: PullRequestReviewComment[] = [];
+    let page = 1;
+    while (true) {
+      const response = await this.octokit.pulls.listReviewComments({
+        owner: repo.owner,
+        repo: repo.repo,
+        pull_number: pullNumber,
+        per_page: 100,
+        page
+      });
+      for (const comment of response.data) {
+        comments.push({
+          id: comment.id,
+          body: comment.body ?? "",
+          createdAt: comment.created_at,
+          author: comment.user?.login ?? null,
+          authorAssociation: (comment as { author_association?: string }).author_association ?? null,
+          url: comment.html_url ?? null,
+          path: comment.path ?? null,
+          line: typeof (comment as { line?: number }).line === "number" ? (comment as { line?: number }).line! : null
         });
       }
       if (response.data.length < 100) {

@@ -2,7 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { spawn } from "node:child_process";
 import type { AgentRunnerConfig } from "./config.js";
-import { GitHubClient, type IssueComment, type IssueInfo, type RepoInfo } from "./github.js";
+import { GitHubClient, type IssueComment, type IssueInfo, type PullRequestReviewComment, type RepoInfo } from "./github.js";
 import { resolveCodexCommand } from "./codex-command.js";
 import { recordAmazonQUsage, resolveAmazonQUsageStatePath } from "./amazon-q-usage.js";
 import {
@@ -104,6 +104,9 @@ function resolveWorktreeDirName(repo: RepoInfo): string {
 const MAX_ISSUE_COMMENT_CHARS = 4_000;
 const MAX_ISSUE_COMMENTS_BLOCK_CHARS = 12_000;
 const MAX_ISSUE_COMMENTS_COUNT = 8;
+const MAX_REVIEW_COMMENT_CHARS = 4_000;
+const MAX_REVIEW_COMMENTS_BLOCK_CHARS = 12_000;
+const MAX_REVIEW_COMMENTS_COUNT = 8;
 
 function truncateForPrompt(value: string, maxChars: number): string {
   if (value.length <= maxChars) {
@@ -164,21 +167,73 @@ function formatCommentsForPrompt(comments: IssueComment[]): string {
   return `${note}${chunks.join("\n")}`.trim();
 }
 
-export function buildIssueTaskText(issue: IssueInfo, comments: IssueComment[]): string {
+function formatReviewCommentsForPrompt(comments: PullRequestReviewComment[]): string {
+  const selected = comments.slice(-MAX_REVIEW_COMMENTS_COUNT);
+  if (selected.length === 0) {
+    return "";
+  }
+
+  let remaining = MAX_REVIEW_COMMENTS_BLOCK_CHARS;
+  const chunks: string[] = [];
+
+  for (const comment of selected) {
+    const headerParts = [`review-comment ${comment.id}`, comment.createdAt];
+    if (comment.author) {
+      headerParts.push(`@${comment.author}`);
+    }
+    if (comment.path) {
+      headerParts.push(comment.line ? `${comment.path}:${comment.line}` : comment.path);
+    }
+    const header = `--- ${headerParts.join(" ")} ---`;
+    const body = truncateForPrompt(comment.body.trim(), MAX_REVIEW_COMMENT_CHARS);
+    const chunk = `${header}\n${body}\n`;
+    if (chunk.length > remaining) {
+      break;
+    }
+    chunks.push(chunk);
+    remaining -= chunk.length;
+  }
+
+  if (chunks.length === 0) {
+    return "";
+  }
+
+  return chunks.join("\n").trim();
+}
+
+export function buildIssueTaskText(
+  issue: IssueInfo,
+  comments: IssueComment[],
+  reviewComments: PullRequestReviewComment[] = []
+): string {
   const issueBody = issue.body ?? "";
   const base = `Issue: ${issue.title}\nURL: ${issue.url}\n\n${issueBody}`.trim();
   const commentBlock = formatCommentsForPrompt(comments);
+  const reviewBlock = formatReviewCommentsForPrompt(reviewComments);
 
-  if (!commentBlock) {
+  if (!commentBlock && !reviewBlock) {
     return base;
   }
 
-  return `${base}\n\nRecent user replies (issue comments):\n${commentBlock}`;
+  const sections: string[] = [base];
+  if (commentBlock) {
+    sections.push(`Recent user replies (issue comments):\n${commentBlock}`);
+  }
+  if (reviewBlock) {
+    sections.push(`PR review comments:\n${reviewBlock}`);
+  }
+  return sections.join("\n\n");
 }
 
-function renderPrompt(template: string, repos: RepoInfo[], issue: IssueInfo, comments: IssueComment[]): string {
+function renderPrompt(
+  template: string,
+  repos: RepoInfo[],
+  issue: IssueInfo,
+  comments: IssueComment[],
+  reviewComments: PullRequestReviewComment[]
+): string {
   const repoList = repos.map((repo) => `${repo.owner}/${repo.repo}`).join(", ");
-  const taskText = buildIssueTaskText(issue, comments);
+  const taskText = buildIssueTaskText(issue, comments, reviewComments);
   return template.replace("{{repos}}", repoList).replace("{{task}}", taskText);
 }
 
@@ -304,6 +359,9 @@ export async function runIssue(
 ): Promise<RunResult> {
   const repos = resolveTargetRepos(issue, config.owner);
   const comments = await client.listIssueComments(issue);
+  const reviewComments = isPullRequestUrl(issue.url)
+    ? await client.listPullRequestReviewComments(issue.repo, issue.number)
+    : [];
 
   const runId = `issue-${issue.id}-${Date.now()}`;
   const workRoot = resolveRunWorkRoot(config.workdirRoot, runId);
@@ -359,7 +417,7 @@ export async function runIssue(
       throw new Error(`Missing primary worktree for ${primaryRepo.owner}/${primaryRepo.repo}`);
     }
 
-    const prompt = renderPrompt(config.codex.promptTemplate, repos, issue, comments);
+    const prompt = renderPrompt(config.codex.promptTemplate, repos, issue, comments, reviewComments);
 
   const logDir = path.resolve(config.workdirRoot, "agent-runner", "logs");
   fs.mkdirSync(logDir, { recursive: true });
