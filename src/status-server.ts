@@ -98,6 +98,20 @@ function renderHtml(): string {
         color: var(--muted);
         font-size: 13px;
       }
+      .control {
+        padding: 8px 14px;
+        border-radius: 999px;
+        border: 1px solid #d0d0d0;
+        background: #ffffff;
+        color: var(--accent);
+        font-weight: 700;
+        font-size: 12px;
+        cursor: pointer;
+      }
+      .control:disabled {
+        opacity: 0.6;
+        cursor: not-allowed;
+      }
       .wrap {
         padding: 0 32px 32px;
         display: grid;
@@ -160,9 +174,11 @@ function renderHtml(): string {
     <header>
       <h1>Agent Runner Status</h1>
       <span id="statusBadge" class="badge idle">Idle</span>
+      <button id="notifyButton" class="control" type="button">Enable notifications</button>
       <div class="meta">
         Updated: <span id="generatedAt">-</span><br />
-        Workdir: <code id="workdir">-</code>
+        Workdir: <code id="workdir">-</code><br />
+        Notifications: <span id="notifyState">-</span>
       </div>
     </header>
     <div class="wrap">
@@ -219,6 +235,8 @@ function renderHtml(): string {
     </div>
     <script>
       const statusBadge = document.getElementById("statusBadge");
+      const notifyButton = document.getElementById("notifyButton");
+      const notifyState = document.getElementById("notifyState");
       const generatedAt = document.getElementById("generatedAt");
       const workdir = document.getElementById("workdir");
       const runningTable = document.getElementById("runningTable");
@@ -230,6 +248,89 @@ function renderHtml(): string {
       const latestLogsList = document.getElementById("latestLogsList");
       const logsList = document.getElementById("logsList");
       const reportsList = document.getElementById("reportsList");
+
+      const notificationsKey = "agent-runner:status:notifications";
+      const notificationsSupported = "Notification" in window && typeof Notification !== "undefined";
+      let notificationsEnabled = false;
+      let idleBaselineCaptured = false;
+      let idleBaselineTimeMs = 0;
+      let lastIdleReportPath = null;
+
+      const loadNotificationsEnabled = () => {
+        try {
+          return localStorage.getItem(notificationsKey) === "true";
+        } catch {
+          return false;
+        }
+      };
+
+      const saveNotificationsEnabled = (value) => {
+        try {
+          localStorage.setItem(notificationsKey, value ? "true" : "false");
+        } catch {}
+      };
+
+      const updateNotificationUi = () => {
+        if (!notificationsSupported) {
+          notifyButton.disabled = true;
+          notifyState.textContent = "Unavailable";
+          return;
+        }
+
+        const permission = Notification.permission;
+        if (permission === "denied") {
+          notifyButton.disabled = true;
+          notifyState.textContent = "Blocked";
+          return;
+        }
+
+        notifyButton.disabled = false;
+        notifyButton.textContent = notificationsEnabled ? "Disable notifications" : "Enable notifications";
+        notifyState.textContent = notificationsEnabled ? "On" : "Off";
+      };
+
+      const setNotificationsEnabled = (value) => {
+        notificationsEnabled = Boolean(value);
+        saveNotificationsEnabled(notificationsEnabled);
+        updateNotificationUi();
+      };
+
+      const maybeNotifyIdleReport = (snapshot) => {
+        const latest = snapshot && snapshot.reports && snapshot.reports[0] ? snapshot.reports[0] : null;
+        if (!latest || !latest.path) {
+          return;
+        }
+        if (latest.path === lastIdleReportPath) {
+          return;
+        }
+        lastIdleReportPath = latest.path;
+
+        const updatedMs = Date.parse(latest.updatedAt || "");
+        if (Number.isFinite(updatedMs) && updatedMs < idleBaselineTimeMs) {
+          return;
+        }
+
+        if (!notificationsEnabled || !notificationsSupported) {
+          return;
+        }
+        if (Notification.permission !== "granted") {
+          return;
+        }
+
+        const updated = latest.updatedAtLocal || formatLocal(latest.updatedAt);
+        const title = "Agent Runner: idle completed";
+        const body = latest.path + " (" + updated + ")";
+        try {
+          const note = new Notification(title, { body });
+          note.onclick = () => {
+            try {
+              window.focus();
+              openPath(latest.path);
+              note.close();
+            } catch {}
+          };
+        } catch {}
+      };
 
       const formatLocal = (value) => {
         if (!value) return "-";
@@ -334,6 +435,16 @@ function renderHtml(): string {
             throw new Error("status fetch failed");
           }
           const data = await res.json();
+          if (!idleBaselineCaptured) {
+            idleBaselineCaptured = true;
+            idleBaselineTimeMs = Date.now();
+            lastIdleReportPath =
+              data && data.reports && data.reports[0] && data.reports[0].path
+                ? data.reports[0].path
+                : null;
+          } else {
+            maybeNotifyIdleReport(data);
+          }
           const stopRequested = Boolean(data.stopRequested);
           let label = "Idle";
           let style = "idle";
@@ -364,6 +475,32 @@ function renderHtml(): string {
           statusBadge.textContent = "Error";
           statusBadge.className = "badge idle";
         }
+      }
+
+      notificationsEnabled = notificationsSupported ? loadNotificationsEnabled() : false;
+      updateNotificationUi();
+      if (notificationsSupported) {
+        notifyButton.addEventListener("click", async () => {
+          const permission = Notification.permission;
+          if (permission === "granted") {
+            setNotificationsEnabled(!notificationsEnabled);
+            return;
+          }
+          if (permission === "denied") {
+            updateNotificationUi();
+            return;
+          }
+          try {
+            const next = await Notification.requestPermission();
+            if (next === "granted") {
+              setNotificationsEnabled(true);
+              return;
+            }
+            setNotificationsEnabled(false);
+          } catch {
+            setNotificationsEnabled(false);
+          }
+        });
       }
 
       refresh();
