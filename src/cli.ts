@@ -323,9 +323,6 @@ program
       }
     };
 
-    const formatMention = (issue: IssueInfo): string =>
-      issue.author ? `@${issue.author} ` : "";
-
     const commentCompletion = async (issue: IssueInfo, body: string): Promise<void> => {
       if (notifyClient) {
         try {
@@ -438,7 +435,7 @@ program
           await client.comment(
             issue,
             buildAgentComment(
-              `${formatMention(issue)}Reply received. Re-queued for execution.`,
+              `Reply received. Re-queued for execution.`,
               []
             )
           );
@@ -516,7 +513,7 @@ program
               await client.comment(
                 issue.issue,
                 buildAgentComment(
-                  `${formatMention(issue.issue)}Detected runner process exit (pid ${issue.record.pid}). ` +
+                  `Detected runner process exit (pid ${issue.record.pid}). ` +
                     "Please reply with details or requeue instructions.",
                   [NEEDS_USER_MARKER]
                 )
@@ -534,7 +531,7 @@ program
               await client.comment(
                 issue,
                 buildAgentComment(
-                  `${formatMention(issue)}Runner state was missing for this request. ` +
+                  `Runner state was missing for this request. ` +
                     "Please reply to re-queue the request.",
                   [NEEDS_USER_MARKER]
                 )
@@ -559,7 +556,7 @@ program
             await client.comment(
               issue,
               buildAgentComment(
-                `${formatMention(issue)}Detected runner process exit (pid ${record.pid}). ` +
+                `Detected runner process exit (pid ${record.pid}). ` +
                   "Please reply with details or requeue instructions.",
                 [NEEDS_USER_MARKER]
               )
@@ -961,7 +958,7 @@ program
         await client.comment(
           issue,
           buildAgentComment(
-            `${formatMention(issue)}Agent runner started on ${new Date().toISOString()}. Concurrency ${config.concurrency}.`
+            `Agent runner started on ${new Date().toISOString()}. Concurrency ${config.concurrency}.`
           )
         );
         if (webhooksEnabled && webhookQueuePath) {
