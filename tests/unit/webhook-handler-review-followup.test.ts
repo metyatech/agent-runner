@@ -1,0 +1,98 @@
+import { describe, expect, it } from "vitest";
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
+import type { AgentRunnerConfig } from "../../src/config.js";
+import type { IssueInfo, RepoInfo } from "../../src/github.js";
+import { handleWebhookEvent } from "../../src/webhook-handler.js";
+import { loadReviewQueue, resolveReviewQueuePath } from "../../src/review-queue.js";
+
+function makeConfig(workdirRoot: string): AgentRunnerConfig {
+  return {
+    owner: "metyatech",
+    repos: ["demo"],
+    workdirRoot,
+    pollIntervalSeconds: 60,
+    concurrency: 1,
+    labels: {
+      request: "agent:request",
+      queued: "agent:queued",
+      running: "agent:running",
+      done: "agent:done",
+      failed: "agent:failed",
+      needsUser: "agent:needs-user"
+    },
+    codex: { command: "codex", args: [], promptTemplate: "" },
+    idle: {
+      enabled: true,
+      maxRunsPerCycle: 1,
+      cooldownMinutes: 60,
+      tasks: [],
+      promptTemplate: ""
+    }
+  };
+}
+
+function makeRepo(): RepoInfo {
+  return { owner: "metyatech", repo: "demo" };
+}
+
+function makePullRequestIssue(repo: RepoInfo): IssueInfo {
+  return {
+    id: 101,
+    number: 5,
+    title: "PR",
+    body: "Body",
+    author: "agent-runner-bot[bot]",
+    repo,
+    labels: [],
+    url: "https://github.com/metyatech/demo/pull/5"
+  };
+}
+
+describe("webhook-handler review followup", () => {
+  it("enqueues managed PRs on review comments (non /agent run)", async () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "agent-runner-webhook-review-followup-"));
+    const config = makeConfig(root);
+    const repo = makeRepo();
+    const pr = makePullRequestIssue(repo);
+    const queuePath = path.join(root, "agent-runner", "state", "webhook-queue.json");
+
+    const calls: { addLabels: string[][] } = { addLabels: [] };
+    const client = {
+      addLabels: async (_issue: IssueInfo, labels: string[]) => {
+        calls.addLabels.push(labels);
+      },
+      removeLabel: async () => {},
+      comment: async () => {},
+      listIssueComments: async () => [],
+      getIssue: async (_repo: RepoInfo, number: number) => (number === pr.number ? pr : null)
+    };
+
+    await handleWebhookEvent({
+      event: {
+        event: "pull_request_review_comment",
+        delivery: "z",
+        payload: {
+          action: "created",
+          repository: { name: repo.repo, owner: { login: repo.owner } },
+          pull_request: { number: pr.number, id: pr.id, html_url: pr.url },
+          comment: {
+            id: 9003,
+            body: "Please address this review comment.",
+            author_association: "OWNER",
+            user: { login: "metyatech" }
+          }
+        }
+      },
+      client: client as any,
+      config,
+      queuePath
+    });
+
+    expect(calls.addLabels.flat()).toContain(config.labels.request);
+    const reviewQueuePath = resolveReviewQueuePath(config.workdirRoot);
+    expect(loadReviewQueue(reviewQueuePath)).toHaveLength(1);
+  });
+});
+

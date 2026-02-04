@@ -8,6 +8,7 @@ import {
   resolveAgentCommandStatePath
 } from "./agent-command-state.js";
 import { enqueueWebhookIssue } from "./webhook-queue.js";
+import { enqueueReviewTask, resolveReviewQueuePath } from "./review-queue.js";
 import type { WebhookEvent } from "./webhook-server.js";
 
 type IssuePayload = {
@@ -35,6 +36,14 @@ type CommentPayload = {
   user?: { login?: string | null };
 };
 
+type ReviewPayload = {
+  id?: number;
+  body?: string | null;
+  state?: string;
+  author_association?: string;
+  user?: { login?: string | null };
+};
+
 type RepositoryPayload = {
   name?: string;
   owner?: { login?: string };
@@ -44,6 +53,7 @@ type WebhookPayload = {
   action?: string;
   issue?: IssuePayload;
   pull_request?: PullRequestPayload;
+  review?: ReviewPayload;
   repository?: RepositoryPayload;
   label?: { name?: string };
   comment?: CommentPayload;
@@ -125,6 +135,20 @@ function isBusyOrTerminal(issue: IssueInfo, config: AgentRunnerConfig): "running
     return "terminal";
   }
   return null;
+}
+
+function isAgentRunnerBotLogin(login: string | null): boolean {
+  if (!login) return false;
+  const normalized = login.trim().toLowerCase();
+  if (!normalized.endsWith("[bot]")) return false;
+  return normalized.includes("agent-runner");
+}
+
+function isManagedPullRequest(issue: IssueInfo, config: AgentRunnerConfig): boolean {
+  if (issue.labels.includes(config.labels.request)) {
+    return true;
+  }
+  return isAgentRunnerBotLogin(issue.author ?? null);
 }
 
 async function ensureQueued(
@@ -214,6 +238,47 @@ async function handleAgentRunCommand(options: {
 
   const requester = comment.user?.login ? `Requested by ${comment.user.login}.` : "Request received.";
   await client.comment(issue, buildAgentComment(`${requester} Queued via \`/agent run\`.`));
+}
+
+async function handleReviewFollowup(options: {
+  client: GitHubClient;
+  config: AgentRunnerConfig;
+  repo: RepoInfo;
+  prNumber: number;
+  reason: "review_comment" | "review" | "approval";
+  requiresEngine: boolean;
+  onLog?: (level: "info" | "warn" | "error", message: string, data?: Record<string, unknown>) => void;
+}): Promise<void> {
+  const { client, config, repo, prNumber, reason, requiresEngine, onLog } = options;
+
+  if (!config.idle?.enabled) {
+    return;
+  }
+
+  const issue = await client.getIssue(repo, prNumber);
+  if (!issue) {
+    return;
+  }
+
+  if (!isManagedPullRequest(issue, config)) {
+    return;
+  }
+
+  await client.addLabels(issue, [config.labels.request]);
+  await safeRemoveLabel(client, issue, config.labels.needsUser, onLog);
+  await safeRemoveLabel(client, issue, config.labels.failed, onLog);
+  await safeRemoveLabel(client, issue, config.labels.running, onLog);
+  await safeRemoveLabel(client, issue, config.labels.queued, onLog);
+
+  const reviewQueuePath = resolveReviewQueuePath(config.workdirRoot);
+  await enqueueReviewTask(reviewQueuePath, {
+    issueId: issue.id,
+    prNumber,
+    repo,
+    url: issue.url,
+    reason,
+    requiresEngine
+  });
 }
 
 export async function handleWebhookEvent(options: {
@@ -322,18 +387,9 @@ export async function handleWebhookEvent(options: {
     if (action !== "created") {
       return;
     }
-    const command = parseAgentCommand(payload.comment?.body ?? null);
-    if (command?.kind !== "run") {
-      return;
-    }
     const comment = payload.comment ?? {};
-    const commentId = comment.id ?? 0;
-    if (!commentId || commentId <= 0) {
-      onLog?.("warn", "Ignoring /agent run review comment due to missing id.", { repo: `${repo.owner}/${repo.repo}` });
-      return;
-    }
     if (!isAllowedAuthorAssociation(comment.author_association)) {
-      onLog?.("info", "Ignoring /agent run review comment from non-collaborator.", {
+      onLog?.("info", "Ignoring PR review comment from non-collaborator.", {
         repo: `${repo.owner}/${repo.repo}`,
         authorAssociation: comment.author_association ?? null,
         user: comment.user?.login ?? null
@@ -341,33 +397,104 @@ export async function handleWebhookEvent(options: {
       return;
     }
 
-    const statePath = resolveAgentCommandStatePath(config.workdirRoot);
-    if (await hasProcessedAgentCommandComment(statePath, commentId)) {
+    const prNumber = payload.pull_request?.number ?? 0;
+    if (!prNumber || prNumber <= 0) {
+      onLog?.("warn", "Ignoring PR review comment due to missing PR number.", { repo: `${repo.owner}/${repo.repo}` });
+      return;
+    }
+
+    const command = parseAgentCommand(payload.comment?.body ?? null);
+    if (command?.kind === "run") {
+      const commentId = comment.id ?? 0;
+      if (!commentId || commentId <= 0) {
+        onLog?.("warn", "Ignoring /agent run review comment due to missing id.", { repo: `${repo.owner}/${repo.repo}` });
+        return;
+      }
+
+      const statePath = resolveAgentCommandStatePath(config.workdirRoot);
+      if (await hasProcessedAgentCommandComment(statePath, commentId)) {
+        return;
+      }
+
+      const issue = await client.getIssue(repo, prNumber);
+      if (!issue) {
+        onLog?.("warn", "Ignoring /agent run review comment because PR could not be resolved.", {
+          repo: `${repo.owner}/${repo.repo}`,
+          prNumber
+        });
+        return;
+      }
+
+      await handleAgentRunCommand({
+        client,
+        config,
+        queuePath,
+        issue,
+        comment,
+        onLog
+      });
+      return;
+    }
+
+    await handleReviewFollowup({
+      client,
+      config,
+      repo,
+      prNumber,
+      reason: "review_comment",
+      requiresEngine: true,
+      onLog
+    });
+    return;
+  }
+
+  if (event.event === "pull_request_review") {
+    const action = payload.action ?? "";
+    if (action !== "submitted") {
+      return;
+    }
+    const review = payload.review ?? {};
+    if (!isAllowedAuthorAssociation(review.author_association)) {
+      onLog?.("info", "Ignoring PR review from non-collaborator.", {
+        repo: `${repo.owner}/${repo.repo}`,
+        authorAssociation: review.author_association ?? null,
+        user: review.user?.login ?? null
+      });
       return;
     }
 
     const prNumber = payload.pull_request?.number ?? 0;
     if (!prNumber || prNumber <= 0) {
-      onLog?.("warn", "Ignoring /agent run review comment due to missing PR number.", { repo: `${repo.owner}/${repo.repo}` });
+      onLog?.("warn", "Ignoring PR review due to missing PR number.", { repo: `${repo.owner}/${repo.repo}` });
       return;
     }
 
-    const issue = await client.getIssue(repo, prNumber);
-    if (!issue) {
-      onLog?.("warn", "Ignoring /agent run review comment because PR could not be resolved.", {
-        repo: `${repo.owner}/${repo.repo}`,
-        prNumber
+    const state = (review.state ?? "").toLowerCase();
+    const body = review.body?.trim() ?? "";
+
+    if (state === "approved") {
+      await handleReviewFollowup({
+        client,
+        config,
+        repo,
+        prNumber,
+        reason: "approval",
+        requiresEngine: false,
+        onLog
       });
       return;
     }
 
-    await handleAgentRunCommand({
-      client,
-      config,
-      queuePath,
-      issue,
-      comment,
-      onLog
-    });
+    if (state === "changes_requested" || body.length > 0) {
+      await handleReviewFollowup({
+        client,
+        config,
+        repo,
+        prNumber,
+        reason: "review",
+        requiresEngine: true,
+        onLog
+      });
+    }
   }
 }
