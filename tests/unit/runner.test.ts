@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { buildAmazonQInvocation, buildCodexInvocation, buildIssueTaskText } from "../../src/runner.js";
+import {
+  buildAmazonQInvocation,
+  buildCodexInvocation,
+  buildGeminiInvocation,
+  buildIssueTaskText
+} from "../../src/runner.js";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -205,6 +210,56 @@ describe("buildAmazonQInvocation", () => {
 
     expect(invocation.args.at(-1)).toBe("Prompt for Q");
     expect(invocation.stdin).toBeUndefined();
+  });
+});
+
+describe("buildGeminiInvocation", () => {
+  it("sets GEMINI_CLI_SYSTEM_DEFAULTS_PATH to disable interactive shell", () => {
+    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "agent-runner-gemini-"));
+
+    try {
+      const invocation = buildGeminiInvocation(
+        {
+          workdirRoot: tempDir,
+          labels: {
+            request: "agent:request",
+            queued: "agent:queued",
+            running: "agent:running",
+            done: "agent:done",
+            failed: "agent:failed",
+            needsUser: "agent:needs-user"
+          },
+          owner: "metyatech",
+          repos: "all",
+          pollIntervalSeconds: 60,
+          concurrency: 1,
+          codex: {
+            command: "codex",
+            args: ["exec", "--full-auto"],
+            promptTemplate: "Template {{repos}} {{task}}"
+          },
+          gemini: {
+            command: "gemini",
+            args: ["--approval-mode", "yolo", "-p"]
+          }
+        },
+        path.join(tempDir, "repo"),
+        "Prompt",
+        "gemini-flash"
+      );
+
+      const defaultsPath = invocation.options.env.GEMINI_CLI_SYSTEM_DEFAULTS_PATH;
+      if (!defaultsPath) {
+        throw new Error("Expected GEMINI_CLI_SYSTEM_DEFAULTS_PATH to be set.");
+      }
+      expect(defaultsPath).toBe(path.join(tempDir, "agent-runner", "state", "gemini-system-defaults.json"));
+      expect(fs.existsSync(defaultsPath)).toBe(true);
+
+      const parsed = JSON.parse(fs.readFileSync(defaultsPath, "utf8")) as any;
+      expect(parsed?.tools?.shell?.enableInteractiveShell).toBe(false);
+    } finally {
+      fs.rmSync(tempDir, { recursive: true, force: true });
+    }
   });
 });
 

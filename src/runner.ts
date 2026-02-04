@@ -220,6 +220,25 @@ function renderIdlePrompt(template: string, repo: RepoInfo, task: string): strin
     .join(task);
 }
 
+function ensureGeminiSystemDefaultsPath(workdirRoot: string): string {
+  const stateDir = path.resolve(workdirRoot, "agent-runner", "state");
+  fs.mkdirSync(stateDir, { recursive: true });
+  const defaultsPath = path.join(stateDir, "gemini-system-defaults.json");
+
+  if (!fs.existsSync(defaultsPath)) {
+    const defaults = {
+      tools: {
+        shell: {
+          enableInteractiveShell: false
+        }
+      }
+    };
+    fs.writeFileSync(defaultsPath, `${JSON.stringify(defaults, null, 2)}\n`, "utf8");
+  }
+
+  return defaultsPath;
+}
+
 export function buildGeminiInvocation(
   config: AgentRunnerConfig,
   primaryPath: string,
@@ -241,7 +260,11 @@ export function buildGeminiInvocation(
     options: {
       cwd: primaryPath,
       shell: false,
-      env: { ...process.env, ...envOverrides }
+      env: {
+        ...process.env,
+        ...envOverrides,
+        GEMINI_CLI_SYSTEM_DEFAULTS_PATH: ensureGeminiSystemDefaultsPath(config.workdirRoot)
+      }
     }
   };
 }

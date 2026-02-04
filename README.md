@@ -119,6 +119,9 @@ Config file: `agent-runner.config.json`
 - `webhooks.catchup.maxIssuesPerRun`: Maximum issues to queue per scan
 - `copilot`: Copilot CLI command and args for idle runs (the prompt is appended as the last argument).
   - `copilot.args`: Ensure `-p` is the final argument so the prompt is passed as the value. Use `--allow-all` for non-interactive runs.
+- `gemini`: Gemini CLI command and args for idle runs (the prompt is appended as the last argument).
+  - `gemini.args`: Ensure `-p` is the final argument so the prompt is passed as the value. For non-interactive runs, include `--approval-mode yolo` and `--allowed-tools run_shell_command,...` so shell/file tools are not denied by policy.
+  - Note: when spawning Gemini CLI, agent-runner sets `GEMINI_CLI_SYSTEM_DEFAULTS_PATH` to disable `tools.shell.enableInteractiveShell` (avoids Windows node-pty/ConPTY noise like `AttachConsole failed`).
 - `amazonQ`: Optional Amazon Q CLI command and args for idle runs.
   - `amazonQ.promptMode`: Use `"arg"` when the prompt is passed as the last argument (recommended for WSL wrapper scripts).
 - `idle`: Optional idle task settings (runs when no queued issues exist)

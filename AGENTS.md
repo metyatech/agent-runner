@@ -44,6 +44,7 @@ Source: github:metyatech/agent-rules@HEAD/rules/global/autonomous-operations.md
 - Assume end-to-end autonomy for repository operations (issue triage, PRs, direct pushes to main/master, merges, releases, repo admin) unless the user restricts scope.
 - Do not preserve backward compatibility unless explicitly requested; avoid legacy aliases and compatibility shims by default.
 - When work reveals rule gaps, redundancy, or misplacement, proactively update rule modules/rulesets (including moves/renames) and regenerate AGENTS.md without waiting for explicit user requests.
+- After each task, run a brief retrospective; if you notice avoidable mistakes, missing checks, or recurring back-and-forth, encode the fix as a rule update and regenerate AGENTS.md.
 - When something is unclear, investigate to resolve it; do not proceed with unresolved material uncertainty. If still unclear, ask and include what you checked.
 - Do not proceed based on assumptions or guesses without explicit user approval; hypotheses may be discussed but must not drive action.
 - Ask only blocking questions; for non-material ambiguities, pick the lowest-risk option, state the assumption, and proceed.
@@ -92,20 +93,37 @@ Source: github:metyatech/agent-rules@HEAD/rules/global/quality-testing-and-error
 
 - Quality (correctness, safety, robustness, verifiability) takes priority over speed or convenience.
 
+## Definition of done
+
+- Do not claim "fixed"/"done" unless it is verified by reproducing the issue and/or running the relevant checks.
+- For code changes, treat "relevant checks" as the repo's full lint/typecheck/test/build suite (prefer CI results).
+- Prefer a green baseline: if relevant checks fail before you change anything, report it and get explicit user approval before proceeding.
+- If you cannot reproduce/verify, do not guess a fix; request missing info or create a failing regression test.
+- Always report verification: list the exact commands/steps run and their outcome; if anything is unverified, state why and how to verify.
+
 ## Verification
 
-- Run the smallest relevant set of lint/typecheck/test/build checks the repo supports using repo-standard commands.
-- Before committing code changes, run the applicable lint/test/build commands; if a relevant check is missing and feasible to add, add it in the same change set.
-- Ensure commit-time automation (pre-commit or repo-native) runs applicable lint/test/build checks for code changes when feasible.
-- If required checks cannot be run, explain why and list the exact commands for the user.
+- Run the repo's full lint/typecheck/test/build checks using repo-standard commands.
+- If you are unsure what constitutes the full suite, run the repo's default verify/CI commands rather than guessing.
+- Before committing code changes, run the full suite; if a relevant check is missing and feasible to add, add it in the same change set.
+- Enforce via CI: run the full suite on pull requests and on pushes to the default branch; if no CI harness exists, add one using repo-standard commands.
+- Configure required status checks on the default branch when you have permission; otherwise report the limitation.
+- Do not rely on smoke-only gating or scheduled-only full runs for correctness; merges must require the full suite.
+- Ensure commit-time automation (pre-commit or repo-native) runs the full suite when feasible.
+- If required checks cannot be run, treat it as an exception: explain why, provide exact commands/steps, and get explicit user approval before proceeding.
+- Never disable checks, weaken assertions, loosen types, or add retries solely to make checks pass.
 
 ## Tests (behavior changes)
 
-- Follow test-first: add/update tests and observe failure before implementing fixes.
+- Follow test-first: add/update tests, observe failure, implement the fix, then observe pass.
+- For bug fixes, add a regression test that fails before the fix at the level where the bug occurs (unit/integration/E2E).
 - Add/update automated tests for behavior changes and regression coverage.
-- Cover success, failure, boundary, invalid input, and key state transitions; include representative concurrency/retry/recovery when relevant.
+- Cover success, failure, boundary, invalid input, and key state transitions (including first-run/cold-start vs subsequent-run behavior when relevant); include representative concurrency/retry/recovery when relevant.
 - Keep tests deterministic; minimize time/random/external I/O; inject when needed.
 - For deterministic output files, use full-content snapshot/golden tests.
+- Prefer making nondeterministic failures reproducible over adding sleeps/retries; do not mask flakiness.
+- For integration boundaries (network/DB/external services/UI flows), add an integration/E2E/contract test that exercises the boundary; avoid unit-only coverage for integration bugs.
+- For non-trivial changes, create a small test matrix (scenarios × inputs × states) and cover the highest-risk combinations; document intentional gaps.
 
 ## Exceptions
 
@@ -117,6 +135,7 @@ Source: github:metyatech/agent-rules@HEAD/rules/global/quality-testing-and-error
 - Error messages must reflect actual state and include relevant input context.
 - Validate config and external inputs at boundaries; fail with actionable guidance.
 - Log minimally but with diagnostic context; never log secrets or personal data.
+- Remove temporary debugging/instrumentation before the final patch.
 
 Source: github:metyatech/agent-rules@HEAD/rules/global/user-identity-and-accounts.md
 
@@ -135,6 +154,7 @@ Source: github:metyatech/agent-rules@HEAD/rules/global/writing-and-documentation
 ## User responses
 
 - Respond in Japanese unless the user requests otherwise.
+- Always report whether you committed and whether you pushed; include repo(s), branch(es), and commit hash(es) when applicable.
 - After completing a response, emit the Windows SystemSounds.Asterisk sound via PowerShell when possible.
 
 ## Developer-facing writing

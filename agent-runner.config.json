@@ -121,6 +121,8 @@
     "args": [
       "--approval-mode",
       "yolo",
+      "--allowed-tools",
+      "glob,read_file,read_many_files,list_directory,search_file_content,replace,write_file,run_shell_command,save_memory",
       "-p"
     ]
   }
