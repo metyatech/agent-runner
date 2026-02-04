@@ -20,7 +20,7 @@ function fetchText(url: string): Promise<string> {
 }
 
 describe("status-server", () => {
-  it("renders notification controls", async () => {
+  it("renders status page", async () => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), "agent-runner-ui-"));
     const server = await startStatusServer({
       workdirRoot: root,
@@ -34,8 +34,7 @@ describe("status-server", () => {
         throw new Error("Expected TCP address.");
       }
       const html = await fetchText(`http://127.0.0.1:${address.port}/`);
-      expect(html).toContain('id="notifyButton"');
-      expect(html).toContain('id="notifyState"');
+      expect(html).toContain("Agent Runner Status");
       expect(html).toContain("Latest Logs");
     } finally {
       await new Promise<void>((resolve, reject) => {
@@ -44,4 +43,3 @@ describe("status-server", () => {
     }
   });
 });
-
