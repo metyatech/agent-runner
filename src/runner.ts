@@ -355,7 +355,8 @@ export async function runIssue(
   const statePath = resolveRunnerStatePath(config.workdirRoot);
   const activityPath = resolveActivityStatePath(config.workdirRoot);
 
-  const invocation = buildCodexInvocation(config, primaryPath, prompt);
+  const notifyEnv = await buildGitHubNotifyChildEnv(config.workdirRoot);
+  const invocation = buildCodexInvocation(config, primaryPath, prompt, notifyEnv);
 
   let recordWritten = false;
   let activityRecorded = false;
