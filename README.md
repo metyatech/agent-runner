@@ -193,18 +193,32 @@ Each idle run writes a report under `reports/` and streams the Codex output to `
 When changes are made, the idle prompt is expected to open a PR and leave it open
 for human review (no auto-merge/close).
 
-### GitHub notifications (bot token)
+### GitHub notifications (GitHub App / bot token)
 
 GitHub does not notify you about actions performed by your own account, so PR/issue
 comments created by a runner using your personal token may not generate notifications.
 
 If you want GitHub Notifications on the PR/issue itself, run agent-runner with a
-separate token that belongs to a bot account (or GitHub App):
+separate identity so the author is not your own account.
 
-- Set `AGENT_GITHUB_NOTIFY_TOKEN` to a token that can comment on your repos.
-- Or save it to `state/github-notify-token.txt` (ignored by git).
-- agent-runner will use that token to post completion/failure comments so the author
-  is not your own account, and GitHub will generate notifications as expected.
+Recommended: GitHub App (installation token auto-refresh).
+
+1. Create a GitHub App (Settings -> Developer settings -> GitHub Apps)
+2. Grant permissions:
+   - Issues: Read & write
+   - Pull requests: Read & write
+3. Install the app on the repositories you want to receive notifications for.
+4. Generate a private key (download the `.pem` file).
+5. Configure agent-runner with the app credentials:
+
+```powershell
+.\scripts\set-notify-app.ps1 -AppId "<app-id>" -InstallationId <installation-id> -PrivateKeyPath "<path-to-private-key.pem>"
+```
+
+Fallback option: Bot token (PAT).
+
+- Set `AGENT_GITHUB_NOTIFY_TOKEN` to a token that can comment on your repos, or save it to `state/github-notify-token.txt`.
+- agent-runner will use that token to post completion/failure comments.
 
 Helper script (writes `state/github-notify-token.txt`):
 

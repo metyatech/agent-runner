@@ -33,8 +33,8 @@ export class GitHubClient {
   private octokit: Octokit;
   private authLogin: string | null | undefined;
 
-  constructor(token: string) {
-    this.octokit = new Octokit({ auth: token });
+  constructor(tokenOrOctokit: string | Octokit) {
+    this.octokit = typeof tokenOrOctokit === "string" ? new Octokit({ auth: tokenOrOctokit }) : tokenOrOctokit;
   }
 
   async listRepos(owner: string): Promise<RepoInfo[]> {

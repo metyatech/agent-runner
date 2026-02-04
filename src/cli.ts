@@ -11,7 +11,7 @@ import { buildAgentLabels } from "./labels.js";
 import { log } from "./logger.js";
 import { acquireLock, releaseLock } from "./lock.js";
 import { buildAgentComment, hasUserReplySince, NEEDS_USER_MARKER } from "./notifications.js";
-import { resolveGitHubNotifyToken } from "./github-notify-token.js";
+import { createGitHubNotifyClient } from "./github-notify-client.js";
 import {
   evaluateUsageGate,
   fetchCodexRateLimits,
@@ -308,10 +308,17 @@ program
       throw error;
     }
     const client = new GitHubClient(token);
-    const notifyToken = resolveGitHubNotifyToken(config.workdirRoot);
-    const notifyClient = notifyToken ? new GitHubClient(notifyToken) : null;
+    const notify = createGitHubNotifyClient(config.workdirRoot);
+    const notifyClient = notify?.client ?? null;
+    const notifySource = notify?.source ?? null;
     if (notifyClient) {
-      log("info", "GitHub notify token detected. Completion comments will be posted as a bot user.", json);
+      log(
+        "info",
+        notifySource === "github-app"
+          ? "GitHub notify client configured via GitHub App. Completion comments will be posted as the app installation."
+          : "GitHub notify token detected. Completion comments will be posted as a bot user.",
+        json
+      );
     }
     const tryRemoveLabel = async (issue: IssueInfo, label: string): Promise<void> => {
       try {
