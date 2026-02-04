@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import fs from "node:fs";
 import path from "node:path";
 import process from "node:process";
 import { Command } from "commander";
@@ -25,8 +26,7 @@ import {
 import { commandExists } from "./command-exists.js";
 import { listTargetRepos, listQueuedIssues, pickNextIssues, queueNewRequests } from "./queue.js";
 import { planIdleTasks, runIdleTask, runIssue } from "./runner.js";
-import type { IdleEngine } from "./runner.js";
-import { maybeNotifyIdleCompletionGithub } from "./idle-github-notify.js";
+import type { IdleEngine, IdleTaskResult } from "./runner.js";
 import { listLocalRepos } from "./local-repos.js";
 import {
   evaluateRunningIssues,
@@ -297,6 +297,11 @@ program
 
     const lock = acquireLock(path.resolve(config.workdirRoot, "agent-runner", "state", "runner.lock"));
     const client = new GitHubClient(token);
+    const notifyToken = process.env.AGENT_GITHUB_NOTIFY_TOKEN;
+    const notifyClient = notifyToken ? new GitHubClient(notifyToken) : null;
+    if (notifyClient) {
+      log("info", "GitHub notify token detected. Completion comments will be posted as a bot user.", json);
+    }
     const tryRemoveLabel = async (issue: IssueInfo, label: string): Promise<void> => {
       try {
         await client.removeLabel(issue, label);
@@ -309,6 +314,94 @@ program
 
     const formatMention = (issue: IssueInfo): string =>
       issue.author ? `@${issue.author} ` : "";
+
+    const commentCompletion = async (issue: IssueInfo, body: string): Promise<void> => {
+      if (notifyClient) {
+        try {
+          await notifyClient.commentIssue(issue.repo, issue.number, body);
+          return;
+        } catch (error) {
+          log("warn", "Failed to post completion comment with notify token; falling back.", json, {
+            issue: issue.url,
+            error: error instanceof Error ? error.message : String(error)
+          });
+        }
+      }
+      await client.comment(issue, body);
+    };
+
+    const parsePullRequestUrl = (text: string): { repo: RepoInfo; number: number; url: string } | null => {
+      let last: { repo: RepoInfo; number: number; url: string } | null = null;
+      const pattern = /https:\/\/github\.com\/([^/\s]+)\/([^/\s]+)\/pull\/(\d+)/gi;
+      for (const match of text.matchAll(pattern)) {
+        const number = Number.parseInt(match[3], 10);
+        if (Number.isNaN(number) || number <= 0) {
+          continue;
+        }
+        last = {
+          repo: { owner: match[1], repo: match[2] },
+          number,
+          url: match[0]
+        };
+      }
+      return last;
+    };
+
+    const maybeNotifyIdlePullRequest = async (result: IdleTaskResult): Promise<void> => {
+      if (!notifyClient) {
+        return;
+      }
+
+      const truncate = (value: string, limit: number): string =>
+        value.length <= limit ? value : `${value.slice(0, Math.max(0, limit - 16))}\n…(truncated)…`;
+
+      const readLogTail = (logPath: string, maxBytes: number): string | null => {
+        if (!fs.existsSync(logPath)) {
+          return null;
+        }
+        try {
+          const stat = fs.statSync(logPath);
+          const size = stat.size;
+          if (size <= maxBytes) {
+            return fs.readFileSync(logPath, "utf8");
+          }
+
+          const fd = fs.openSync(logPath, "r");
+          try {
+            const buffer = Buffer.allocUnsafe(maxBytes);
+            const offset = Math.max(0, size - maxBytes);
+            const bytesRead = fs.readSync(fd, buffer, 0, maxBytes, offset);
+            return buffer.subarray(0, bytesRead).toString("utf8");
+          } finally {
+            fs.closeSync(fd);
+          }
+        } catch {
+          return null;
+        }
+      };
+
+      const summaryText = result.summary ?? "";
+      const pr = parsePullRequestUrl(summaryText) ?? parsePullRequestUrl(readLogTail(result.logPath, 512 * 1024) ?? "");
+      if (!pr) {
+        return;
+      }
+
+      const body = buildAgentComment(
+        `Agent runner idle ${result.success ? "completed" : "failed"}.\n\n` +
+          `Repo: ${result.repo.owner}/${result.repo.repo}\n` +
+          `Engine: ${result.engine}\n\n` +
+          `Summary:\n${truncate(summaryText || "(missing)", 6000)}`
+      );
+
+      try {
+        await notifyClient.commentIssue(pr.repo, pr.number, body);
+      } catch (error) {
+        log("warn", "Failed to post idle completion comment to PR.", json, {
+          pr: pr.url,
+          error: error instanceof Error ? error.message : String(error)
+        });
+      }
+    };
 
     const resumeAwaitingUser = async (repos: RepoInfo[]): Promise<number> => {
       let resumed = 0;
@@ -820,7 +913,7 @@ program
           scheduled.map((task) =>
             idleLimit(async () => {
               const result = await runIdleTask(config, task.repo, task.task, task.engine);
-              await maybeNotifyIdleCompletionGithub({ client, config, result, json });
+              await maybeNotifyIdlePullRequest(result);
               if (result.success) {
                 log("info", "Idle task completed.", json, {
                   repo: `${result.repo.owner}/${result.repo.repo}`,
@@ -880,10 +973,10 @@ program
               if (result.success) {
                 await client.addLabels(issue, [config.labels.done]);
                 await tryRemoveLabel(issue, config.labels.running);
-                await client.comment(
+                await commentCompletion(
                   issue,
                   buildAgentComment(
-                    `${formatMention(issue)}Agent runner completed successfully.` +
+                    `Agent runner completed successfully.` +
                       `${result.summary ? `\n\nSummary:\n${result.summary}` : ""}` +
                       `\n\nLog: ${result.logPath}`
                   )
@@ -893,10 +986,10 @@ program
 
               await client.addLabels(issue, [config.labels.failed, config.labels.needsUser]);
               await tryRemoveLabel(issue, config.labels.running);
-              await client.comment(
+              await commentCompletion(
                 issue,
                 buildAgentComment(
-                  `${formatMention(issue)}Agent runner failed.` +
+                  `Agent runner failed.` +
                     `${result.summary ? `\n\nSummary:\n${result.summary}` : ""}` +
                     `\n\nLog: ${result.logPath}\n\nPlease reply with any details or fixes; the runner will re-queue after detecting your response.`,
                   [NEEDS_USER_MARKER]
@@ -905,10 +998,10 @@ program
             } catch (error) {
               await client.addLabels(issue, [config.labels.failed, config.labels.needsUser]);
               await tryRemoveLabel(issue, config.labels.running);
-              await client.comment(
+              await commentCompletion(
                 issue,
                 buildAgentComment(
-                  `${formatMention(issue)}Agent runner failed with error: ${
+                  `Agent runner failed with error: ${
                     error instanceof Error ? error.message : String(error)
                   }\n\nPlease reply with any details or fixes; the runner will re-queue after detecting your response.`,
                   [NEEDS_USER_MARKER]

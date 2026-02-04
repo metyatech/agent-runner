@@ -154,28 +154,17 @@ export class GitHubClient {
     });
   }
 
-  async comment(issue: IssueInfo, body: string): Promise<void> {
+  async commentIssue(repo: RepoInfo, issueNumber: number, body: string): Promise<void> {
     await this.octokit.issues.createComment({
-      owner: issue.repo.owner,
-      repo: issue.repo.repo,
-      issue_number: issue.number,
+      owner: repo.owner,
+      repo: repo.repo,
+      issue_number: issueNumber,
       body
     });
   }
 
-  async dispatchWorkflow(options: {
-    repo: RepoInfo;
-    workflowFile: string;
-    ref: string;
-    inputs?: Record<string, string>;
-  }): Promise<void> {
-    await this.octokit.actions.createWorkflowDispatch({
-      owner: options.repo.owner,
-      repo: options.repo.repo,
-      workflow_id: options.workflowFile,
-      ref: options.ref,
-      inputs: options.inputs ?? {}
-    });
+  async comment(issue: IssueInfo, body: string): Promise<void> {
+    await this.commentIssue(issue.repo, issue.number, body);
   }
 
   async findIssueByTitle(repo: RepoInfo, title: string): Promise<IssueInfo | null> {
