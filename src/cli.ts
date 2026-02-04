@@ -60,8 +60,6 @@ import {
 } from "./agent-command-state.js";
 import { pruneLogs, resolveLogMaintenance, resolveLogsDir } from "./log-maintenance.js";
 import { pruneReports, resolveReportMaintenance, resolveReportsDir } from "./report-maintenance.js";
-import { resolveTargetRepos } from "./target-repos.js";
-import { acquireRepoLocks, releaseRepoLock } from "./repo-lock.js";
 
 const program = new Command();
 
@@ -1035,50 +1033,23 @@ program
         await Promise.all(
           scheduled.map((task) =>
             idleLimit(async () => {
-              let repoLocks: ReturnType<typeof acquireRepoLocks> | null = null;
-              try {
-                repoLocks = acquireRepoLocks(config.workdirRoot, [task.repo]);
-              } catch (error) {
-                const message = error instanceof Error ? error.message : String(error);
-                if (message.startsWith("Runner already active")) {
-                  log("info", "Skipping idle task because repo is busy.", json, {
-                    repo: `${task.repo.owner}/${task.repo.repo}`,
-                    engine: task.engine
-                  });
-                  return;
-                }
-                throw error;
-              }
-
-              try {
-                const result = await runIdleTask(config, task.repo, task.task, task.engine);
-                await maybeNotifyIdlePullRequest(result);
-                if (result.success) {
-                  log("info", "Idle task completed.", json, {
-                    repo: `${result.repo.owner}/${result.repo.repo}`,
-                    engine: result.engine,
-                    report: result.reportPath,
-                    log: result.logPath
-                  });
-                  return;
-                }
-                log("warn", "Idle task failed.", json, {
+              const result = await runIdleTask(config, task.repo, task.task, task.engine);
+              await maybeNotifyIdlePullRequest(result);
+              if (result.success) {
+                log("info", "Idle task completed.", json, {
                   repo: `${result.repo.owner}/${result.repo.repo}`,
                   engine: result.engine,
                   report: result.reportPath,
                   log: result.logPath
                 });
-              } finally {
-                if (repoLocks) {
-                  for (const lock of repoLocks) {
-                    try {
-                      releaseRepoLock(lock);
-                    } catch {
-                      // ignore
-                    }
-                  }
-                }
+                return;
               }
+              log("warn", "Idle task failed.", json, {
+                repo: `${result.repo.owner}/${result.repo.repo}`,
+                engine: result.engine,
+                report: result.reportPath,
+                log: result.logPath
+              });
             })
           )
         );
@@ -1098,22 +1069,6 @@ program
       await Promise.all(
         picked.map((issue) =>
           limit(async () => {
-            const targetRepos = resolveTargetRepos(issue, config.owner);
-            let repoLocks: ReturnType<typeof acquireRepoLocks> | null = null;
-            try {
-              repoLocks = acquireRepoLocks(config.workdirRoot, targetRepos);
-            } catch (error) {
-              const message = error instanceof Error ? error.message : String(error);
-              if (message.startsWith("Runner already active")) {
-                log("info", "Skipping request because repo is busy.", json, {
-                  issue: issue.url,
-                  repos: targetRepos.map((repo) => `${repo.owner}/${repo.repo}`)
-                });
-                return;
-              }
-              throw error;
-            }
-
             let activityId: string | null = null;
             try {
               await client.addLabels(issue, [config.labels.running]);
@@ -1170,15 +1125,6 @@ program
             } finally {
               if (activityId) {
                 removeActivity(activityPath, activityId);
-              }
-              if (repoLocks) {
-                for (const lock of repoLocks) {
-                  try {
-                    releaseRepoLock(lock);
-                  } catch {
-                    // ignore
-                  }
-                }
               }
             }
           })

@@ -4,6 +4,7 @@ import type { RepoInfo } from "./github.js";
 import { commandExists } from "./command-exists.js";
 import { runCommand } from "./git.js";
 import { buildGitAuthEnv } from "./git-auth-env.js";
+import { withGitCacheLock } from "./git-cache-lock.js";
 
 function resolveCacheDir(workdirRoot: string): string {
   return path.resolve(workdirRoot, "agent-runner", "git-cache");
@@ -65,47 +66,65 @@ export async function ensureRepoCache(workdirRoot: string, repo: RepoInfo): Prom
     return cachePath;
   }
 
-  fs.mkdirSync(path.dirname(cachePath), { recursive: true });
-  const env = buildAuthEnv();
-  const localPath = resolveLocalRepoPath(workdirRoot, repo);
+  return withGitCacheLock(
+    workdirRoot,
+    repo,
+    async () => {
+      if (fs.existsSync(cachePath)) {
+        return cachePath;
+      }
 
-  if (fs.existsSync(localPath)) {
-    if (!isGitRepo(localPath)) {
-      throw new Error(
-        `Local path exists but is not a git repo: ${localPath}. ` +
-          "Move it aside or clone the repo there so agent-runner can use it as the base clone."
-      );
-    }
-  } else {
-    fs.mkdirSync(path.dirname(localPath), { recursive: true });
-    const useGh = await commandExists("gh");
-    if (useGh) {
-      await runCommand("gh", ["repo", "clone", `${repo.owner}/${repo.repo}`, localPath, "--", "--recursive"], { env });
-    } else {
-      await runCommand("git", ["clone", "--recursive", repoHttpsUrl(repo), localPath], { env });
-    }
-  }
+      fs.mkdirSync(path.dirname(cachePath), { recursive: true });
+      const env = buildAuthEnv();
+      const localPath = resolveLocalRepoPath(workdirRoot, repo);
 
-  await ensureDirAbsent(cachePath);
-  await runCommand("git", ["clone", "--bare", localPath, cachePath], { env });
+      if (fs.existsSync(localPath)) {
+        if (!isGitRepo(localPath)) {
+          throw new Error(
+            `Local path exists but is not a git repo: ${localPath}. ` +
+              "Move it aside or clone the repo there so agent-runner can use it as the base clone."
+          );
+        }
+      } else {
+        fs.mkdirSync(path.dirname(localPath), { recursive: true });
+        const useGh = await commandExists("gh");
+        if (useGh) {
+          await runCommand("gh", ["repo", "clone", `${repo.owner}/${repo.repo}`, localPath, "--", "--recursive"], { env });
+        } else {
+          await runCommand("git", ["clone", "--recursive", repoHttpsUrl(repo), localPath], { env });
+        }
+      }
 
-  try {
-    await runCommand("git", ["-C", cachePath, "remote", "set-url", "origin", repoHttpsUrl(repo)], { env });
-  } catch {
-    // ignore
-  }
+      await ensureDirAbsent(cachePath);
+      await runCommand("git", ["clone", "--bare", localPath, cachePath], { env });
 
-  return cachePath;
+      try {
+        await runCommand("git", ["-C", cachePath, "remote", "set-url", "origin", repoHttpsUrl(repo)], { env });
+      } catch {
+        // ignore
+      }
+
+      return cachePath;
+    },
+    { timeoutMs: 15 * 60 * 1000 }
+  );
 }
 
-export async function refreshRepoCache(cachePath: string): Promise<void> {
-  const env = buildAuthEnv();
-  await runCommand("git", ["-C", cachePath, "fetch", "--prune", "--tags", "origin"], { env });
-  try {
-    await runCommand("git", ["-C", cachePath, "worktree", "prune"], { env });
-  } catch {
-    // ignore
-  }
+export async function refreshRepoCache(workdirRoot: string, repo: RepoInfo, cachePath: string): Promise<void> {
+  await withGitCacheLock(
+    workdirRoot,
+    repo,
+    async () => {
+      const env = buildAuthEnv();
+      await runCommand("git", ["-C", cachePath, "fetch", "--prune", "--tags", "origin"], { env });
+      try {
+        await runCommand("git", ["-C", cachePath, "worktree", "prune"], { env });
+      } catch {
+        // ignore
+      }
+    },
+    { timeoutMs: 15 * 60 * 1000 }
+  );
 }
 
 async function maybeUpdateSubmodules(worktreePath: string): Promise<void> {
@@ -117,62 +136,95 @@ async function maybeUpdateSubmodules(worktreePath: string): Promise<void> {
 }
 
 export async function createWorktreeFromDefaultBranch(options: {
+  workdirRoot: string;
+  repo: RepoInfo;
   cachePath: string;
   worktreePath: string;
   defaultBranch: string;
   newBranch: string;
 }): Promise<void> {
-  const env = buildAuthEnv();
   fs.mkdirSync(path.dirname(options.worktreePath), { recursive: true });
   await ensureDirAbsent(options.worktreePath);
-  const startRef = await resolveBranchStartRef(options.cachePath, options.defaultBranch);
-  await runCommand(
-    "git",
-    [
-      "-C",
-      options.cachePath,
-      "worktree",
-      "add",
-      options.worktreePath,
-      "-b",
-      options.newBranch,
-      startRef
-    ],
-    { env }
+
+  await withGitCacheLock(
+    options.workdirRoot,
+    options.repo,
+    async () => {
+      const env = buildAuthEnv();
+      const startRef = await resolveBranchStartRef(options.cachePath, options.defaultBranch);
+      await runCommand(
+        "git",
+        [
+          "-C",
+          options.cachePath,
+          "worktree",
+          "add",
+          options.worktreePath,
+          "-b",
+          options.newBranch,
+          startRef
+        ],
+        { env }
+      );
+    },
+    { timeoutMs: 15 * 60 * 1000 }
   );
   await maybeUpdateSubmodules(options.worktreePath);
 }
 
 export async function createWorktreeForRemoteBranch(options: {
+  workdirRoot: string;
+  repo: RepoInfo;
   cachePath: string;
   worktreePath: string;
   branch: string;
 }): Promise<void> {
-  const env = buildAuthEnv();
   fs.mkdirSync(path.dirname(options.worktreePath), { recursive: true });
   await ensureDirAbsent(options.worktreePath);
 
-  await runCommand("git", ["-C", options.cachePath, "fetch", "--prune", "origin", options.branch], { env });
-  const startRef = await resolveBranchStartRef(options.cachePath, options.branch);
-  await runCommand("git", ["-C", options.cachePath, "branch", "-f", options.branch, startRef], { env });
-  if (startRef.startsWith("refs/remotes/origin/")) {
-    await runCommand("git", ["-C", options.cachePath, "branch", "--set-upstream-to", `origin/${options.branch}`, options.branch], {
-      env
-    });
-  }
-  await runCommand("git", ["-C", options.cachePath, "worktree", "add", options.worktreePath, options.branch], { env });
+  await withGitCacheLock(
+    options.workdirRoot,
+    options.repo,
+    async () => {
+      const env = buildAuthEnv();
+      await runCommand("git", ["-C", options.cachePath, "fetch", "--prune", "origin", options.branch], { env });
+      const startRef = await resolveBranchStartRef(options.cachePath, options.branch);
+      await runCommand("git", ["-C", options.cachePath, "branch", "-f", options.branch, startRef], { env });
+      if (startRef.startsWith("refs/remotes/origin/")) {
+        await runCommand(
+          "git",
+          ["-C", options.cachePath, "branch", "--set-upstream-to", `origin/${options.branch}`, options.branch],
+          { env }
+        );
+      }
+      await runCommand("git", ["-C", options.cachePath, "worktree", "add", options.worktreePath, options.branch], { env });
+    },
+    { timeoutMs: 15 * 60 * 1000 }
+  );
   await maybeUpdateSubmodules(options.worktreePath);
 }
 
-export async function removeWorktree(cachePath: string, worktreePath: string): Promise<void> {
-  const env = buildAuthEnv();
+export async function removeWorktree(options: {
+  workdirRoot: string;
+  repo: RepoInfo;
+  cachePath: string;
+  worktreePath: string;
+}): Promise<void> {
   try {
-    await runCommand("git", ["-C", cachePath, "worktree", "remove", "--force", worktreePath], { env });
+    await withGitCacheLock(
+      options.workdirRoot,
+      options.repo,
+      async () => {
+        const env = buildAuthEnv();
+        await runCommand("git", ["-C", options.cachePath, "worktree", "remove", "--force", options.worktreePath], { env });
+      },
+      { timeoutMs: 15 * 60 * 1000 }
+    );
   } catch {
     // ignore
   }
   try {
-    await fs.promises.rm(worktreePath, { recursive: true, force: true });
+    await fs.promises.rm(options.worktreePath, { recursive: true, force: true });
   } catch {
     // ignore
   }

@@ -307,7 +307,7 @@ export async function runIssue(
 
   const runId = `issue-${issue.id}-${Date.now()}`;
   const workRoot = resolveRunWorkRoot(config.workdirRoot, runId);
-  const prepared: Array<{ cachePath: string; worktreePath: string }> = [];
+  const prepared: Array<{ repo: RepoInfo; cachePath: string; worktreePath: string }> = [];
 
   const prHead = isPullRequestUrl(issue.url) ? await client.getPullRequestHead(issue.repo, issue.number) : null;
 
@@ -317,7 +317,7 @@ export async function runIssue(
   try {
     for (const repo of repos) {
       const cachePath = await ensureRepoCache(config.workdirRoot, repo);
-      await refreshRepoCache(cachePath);
+      await refreshRepoCache(config.workdirRoot, repo, cachePath);
 
       const worktreePath = path.join(workRoot, resolveWorktreeDirName(repo));
       const isPrimary =
@@ -332,7 +332,7 @@ export async function runIssue(
               "PRs from forks are not supported for /agent run because the runner cannot push to the head branch."
           );
         }
-        await createWorktreeForRemoteBranch({ cachePath, worktreePath, branch: prHead.headRef });
+        await createWorktreeForRemoteBranch({ workdirRoot: config.workdirRoot, repo, cachePath, worktreePath, branch: prHead.headRef });
       } else {
         const defaultBranch = await client.getRepoDefaultBranch(repo);
         const branchSuffix = `${Date.now()}`;
@@ -340,6 +340,8 @@ export async function runIssue(
           ? `agent-runner/issue-${issue.number}-${branchSuffix}`
           : `agent-runner/issue-${issue.number}-${branchSuffix}/${repo.repo}`;
         await createWorktreeFromDefaultBranch({
+          workdirRoot: config.workdirRoot,
+          repo,
           cachePath,
           worktreePath,
           defaultBranch,
@@ -347,7 +349,7 @@ export async function runIssue(
         });
       }
 
-      prepared.push({ cachePath, worktreePath });
+      prepared.push({ repo, cachePath, worktreePath });
       if (isPrimary) {
         primaryPath = worktreePath;
       }
@@ -466,7 +468,12 @@ export async function runIssue(
   };
   } finally {
     for (const entry of prepared) {
-      await removeWorktree(entry.cachePath, entry.worktreePath);
+      await removeWorktree({
+        workdirRoot: config.workdirRoot,
+        repo: entry.repo,
+        cachePath: entry.cachePath,
+        worktreePath: entry.worktreePath
+      });
     }
     try {
       await fs.promises.rm(workRoot, { recursive: true, force: true });
@@ -555,7 +562,7 @@ export async function runIdleTask(
   const runId = `idle-${engine}-${repo.repo}-${Date.now()}`;
   const workRoot = resolveRunWorkRoot(config.workdirRoot, runId);
   const cachePath = await ensureRepoCache(config.workdirRoot, repo);
-  await refreshRepoCache(cachePath);
+  await refreshRepoCache(config.workdirRoot, repo, cachePath);
 
   const repoPath = path.join(workRoot, resolveWorktreeDirName(repo));
   let created = false;
@@ -572,7 +579,14 @@ export async function runIdleTask(
     const client = new GitHubClient(token);
     const defaultBranch = await client.getRepoDefaultBranch(repo);
     const newBranch = `agent-runner/idle-${engine}-${Date.now()}`;
-    await createWorktreeFromDefaultBranch({ cachePath, worktreePath: repoPath, defaultBranch, newBranch });
+    await createWorktreeFromDefaultBranch({
+      workdirRoot: config.workdirRoot,
+      repo,
+      cachePath,
+      worktreePath: repoPath,
+      defaultBranch,
+      newBranch
+    });
     created = true;
 
     const prompt = renderIdlePrompt(config.idle?.promptTemplate ?? "", repo, task);
@@ -685,7 +699,7 @@ export async function runIdleTask(
   };
   } finally {
     if (created) {
-      await removeWorktree(cachePath, repoPath);
+      await removeWorktree({ workdirRoot: config.workdirRoot, repo, cachePath, worktreePath: repoPath });
     }
     try {
       await fs.promises.rm(workRoot, { recursive: true, force: true });
