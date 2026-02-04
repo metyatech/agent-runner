@@ -3,5 +3,6 @@ dist/
 logs/
 reports/
 state/
+.worktrees/
 .env
 .DS_Store
