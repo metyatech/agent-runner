@@ -226,7 +226,7 @@ Recommended: GitHub App (installation token auto-refresh).
 .\scripts\set-notify-app.ps1 -AppId "<app-id>" -InstallationId <installation-id> -PrivateKeyPath "<path-to-private-key.pem>"
 ```
 
-When configured, agent-runner injects a fresh GitHub App installation token into idle tasks as `GH_TOKEN` / `GITHUB_TOKEN`,
+When configured, agent-runner injects a fresh GitHub App installation token into idle tasks and issue runs as `GH_TOKEN` / `GITHUB_TOKEN`,
 so `gh pr create` (and other `gh` GitHub operations) run as the app installation and PRs are created by `<app-name>[bot]`.
 
 Fallback option: Bot token (PAT).
