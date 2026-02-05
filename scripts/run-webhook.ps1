@@ -48,6 +48,13 @@ $process = Start-Process -FilePath $node -ArgumentList @(
   "webhook",
   "--config",
   $ConfigPath
-) -WorkingDirectory $RepoPath -RedirectStandardOutput $logPath -RedirectStandardError $errPath -NoNewWindow -PassThru -Wait
+) -WorkingDirectory $RepoPath -RedirectStandardOutput $logPath -RedirectStandardError $errPath -NoNewWindow -PassThru
 
-exit $process.ExitCode
+Start-Sleep -Milliseconds 300
+if (Test-WebhookServer) {
+  exit 0
+}
+if ($process.HasExited) {
+  exit $process.ExitCode
+}
+exit 1
