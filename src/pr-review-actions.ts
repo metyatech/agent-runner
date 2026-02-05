@@ -1,5 +1,6 @@
 import type { GitHubClient, IssueInfo, RepoInfo } from "./github.js";
 import { chooseMergeMethod, summarizeLatestReviews } from "./pr-review-automation.js";
+import { copilotLatestReviewIsNoNewCommentsApproval } from "./copilot-review.js";
 
 export type ResolveThreadsResult = {
   total: number;
@@ -79,16 +80,6 @@ export async function attemptAutoMergeApprovedPullRequest(options: {
   }
 
   try {
-    await resolveAllUnresolvedReviewThreads({
-      client: options.client,
-      repo: options.repo,
-      pullNumber: options.pullNumber
-    });
-  } catch {
-    // Best-effort: we'll still validate threads below.
-  }
-
-  try {
     const threads = await options.client.listPullRequestReviewThreads(options.repo, options.pullNumber);
     const unresolved = threads.filter((thread) => !thread.isResolved);
     if (unresolved.length > 0) {
@@ -107,7 +98,11 @@ export async function attemptAutoMergeApprovedPullRequest(options: {
     }))
   );
 
-  if (!summary.approved) {
+  const copilotNoNewComments = copilotLatestReviewIsNoNewCommentsApproval(reviews);
+  if (summary.changesRequested) {
+    return { merged: false, retry: false, reason: "not_approved" };
+  }
+  if (!summary.approved && !copilotNoNewComments) {
     return { merged: false, retry: false, reason: "not_approved" };
   }
 
@@ -160,4 +155,3 @@ export async function attemptAutoMergeApprovedPullRequest(options: {
 
   return { merged: true, branchDeleted, mergeMethod };
 }
-

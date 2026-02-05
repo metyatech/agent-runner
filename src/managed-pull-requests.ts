@@ -37,6 +37,20 @@ function buildKey(repo: RepoInfo, prNumber: number): string {
   return `${repo.owner}/${repo.repo}#${prNumber}`;
 }
 
+function parseKey(key: string): { repo: RepoInfo; prNumber: number; key: string } | null {
+  const trimmed = key.trim();
+  if (!trimmed) return null;
+  const match = /^([^/]+)\/([^#]+)#(\d+)$/.exec(trimmed);
+  if (!match) return null;
+  const prNumber = Number.parseInt(match[3]!, 10);
+  if (!Number.isFinite(prNumber) || prNumber <= 0) return null;
+  return {
+    repo: { owner: match[1]!, repo: match[2]! },
+    prNumber,
+    key: trimmed
+  };
+}
+
 function readState(statePath: string): ManagedPullRequestState {
   if (!fs.existsSync(statePath)) {
     return { managedPullRequests: [], updatedAt: null };
@@ -140,3 +154,19 @@ export async function markManagedPullRequest(statePath: string, repo: RepoInfo, 
   });
 }
 
+export async function listManagedPullRequests(
+  statePath: string,
+  options?: { limit?: number }
+): Promise<Array<{ repo: RepoInfo; prNumber: number; key: string }>> {
+  const limit = options?.limit ?? null;
+  return withLock(statePath, () => {
+    const state = readState(statePath);
+    const parsed = state.managedPullRequests
+      .map((value) => parseKey(value))
+      .filter((value): value is { repo: RepoInfo; prNumber: number; key: string } => Boolean(value));
+    if (!limit || limit <= 0 || parsed.length <= limit) {
+      return parsed;
+    }
+    return parsed.slice(parsed.length - limit);
+  });
+}

@@ -14,6 +14,7 @@ import {
 } from "./managed-pull-requests.js";
 import { enqueueWebhookIssue } from "./webhook-queue.js";
 import { enqueueReviewTask, resolveReviewQueuePath } from "./review-queue.js";
+import { copilotReviewIndicatesNoNewComments, isCopilotReviewerLogin } from "./copilot-review.js";
 import type { WebhookEvent } from "./webhook-server.js";
 
 type IssuePayload = {
@@ -127,6 +128,10 @@ function isAgentRunnerBotLogin(login: string | null): boolean {
   const normalized = login.trim().toLowerCase();
   if (!normalized.endsWith("[bot]")) return false;
   return normalized.includes("agent-runner");
+}
+
+function isCopilotBotLogin(login: string | null): boolean {
+  return isCopilotReviewerLogin(login);
 }
 
 async function isManagedPullRequest(issue: IssueInfo, config: AgentRunnerConfig): Promise<boolean> {
@@ -365,14 +370,15 @@ export async function handleWebhookEvent(options: {
     }
     const comment = payload.comment ?? {};
     const commentUserType = (comment.user as { type?: string } | undefined)?.type ?? null;
-    if (commentUserType === "Bot" || isAgentRunnerBotLogin(comment.user?.login ?? null)) {
+    const commentLogin = comment.user?.login ?? null;
+    if ((commentUserType === "Bot" && !isCopilotBotLogin(commentLogin)) || isAgentRunnerBotLogin(commentLogin)) {
       return;
     }
-    if (!isAllowedAuthorAssociation(comment.author_association)) {
+    if (!isCopilotBotLogin(commentLogin) && !isAllowedAuthorAssociation(comment.author_association)) {
       onLog?.("info", "Ignoring PR review comment from non-collaborator.", {
         repo: `${repo.owner}/${repo.repo}`,
         authorAssociation: comment.author_association ?? null,
-        user: comment.user?.login ?? null
+        user: commentLogin
       });
       return;
     }
@@ -435,14 +441,16 @@ export async function handleWebhookEvent(options: {
     }
     const review = payload.review ?? {};
     const reviewUserType = (review.user as { type?: string } | undefined)?.type ?? null;
-    if (reviewUserType === "Bot" || isAgentRunnerBotLogin(review.user?.login ?? null)) {
+    const reviewLogin = review.user?.login ?? null;
+    const isCopilotReview = isCopilotBotLogin(reviewLogin);
+    if ((reviewUserType === "Bot" && !isCopilotReview) || isAgentRunnerBotLogin(reviewLogin)) {
       return;
     }
-    if (!isAllowedAuthorAssociation(review.author_association)) {
+    if (!isCopilotReview && !isAllowedAuthorAssociation(review.author_association)) {
       onLog?.("info", "Ignoring PR review from non-collaborator.", {
         repo: `${repo.owner}/${repo.repo}`,
         authorAssociation: review.author_association ?? null,
-        user: review.user?.login ?? null
+        user: reviewLogin
       });
       return;
     }
@@ -457,6 +465,19 @@ export async function handleWebhookEvent(options: {
     const body = review.body?.trim() ?? "";
 
     if (state === "approved") {
+      await handleReviewFollowup({
+        client,
+        config,
+        repo,
+        prNumber,
+        reason: "approval",
+        requiresEngine: false,
+        onLog
+      });
+      return;
+    }
+
+    if (isCopilotReview && state === "commented" && copilotReviewIndicatesNoNewComments(body)) {
       await handleReviewFollowup({
         client,
         config,

@@ -72,7 +72,7 @@ Only repo collaborators (OWNER/MEMBER/COLLABORATOR) are accepted for `/agent run
 When the target is a PR, agent-runner treats the PR as "managed" after `/agent run` (and for bot-authored PRs). Managed PRs:
 
 - Re-run the agent automatically on PR review feedback (review comments / changes requested).
-- Auto-merge after approval and best-effort delete the remote PR branch.
+- Auto-merge after approval (including Copilot reviews that report "no new comments") and best-effort delete the remote PR branch.
 
 ## E2E (GitHub API)
 

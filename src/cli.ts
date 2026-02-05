@@ -71,7 +71,13 @@ import {
 import { scheduleReviewFollowups } from "./review-scheduler.js";
 import type { ScheduledReviewFollowup } from "./review-scheduler.js";
 import { attemptAutoMergeApprovedPullRequest, resolveAllUnresolvedReviewThreads } from "./pr-review-actions.js";
-import { markManagedPullRequest, resolveManagedPullRequestsStatePath } from "./managed-pull-requests.js";
+import { summarizeLatestReviews } from "./pr-review-automation.js";
+import { copilotLatestReviewIsNoNewCommentsApproval } from "./copilot-review.js";
+import {
+  listManagedPullRequests,
+  markManagedPullRequest,
+  resolveManagedPullRequestsStatePath
+} from "./managed-pull-requests.js";
 
 const program = new Command();
 
@@ -210,6 +216,172 @@ async function maybeRunWebhookCatchup(options: {
 
   if (!hadErrors) {
     saveWebhookCatchupState(statePath, { lastRunAt: now.toISOString() });
+  }
+}
+
+async function maybeEnqueueManagedPullRequestReviewFollowups(options: {
+  client: GitHubClient;
+  config: AgentRunnerConfig;
+  json: boolean;
+  dryRun: boolean;
+  maxEntries: number;
+}): Promise<void> {
+  const { client, config, json, dryRun } = options;
+  const limit = Math.max(0, Math.floor(options.maxEntries));
+  if (limit <= 0) {
+    return;
+  }
+  if (!config.idle?.enabled) {
+    return;
+  }
+
+  const managedStatePath = resolveManagedPullRequestsStatePath(config.workdirRoot);
+  let managed: Array<{ repo: RepoInfo; prNumber: number; key: string }> = [];
+  try {
+    managed = await listManagedPullRequests(managedStatePath, { limit: 50 });
+  } catch (error) {
+    log("warn", "Managed PR catch-up scan failed to read state.", json, {
+      error: error instanceof Error ? error.message : String(error)
+    });
+    return;
+  }
+
+  if (managed.length === 0) {
+    return;
+  }
+
+  const reviewQueuePath = resolveReviewQueuePath(config.workdirRoot);
+  let enqueued = 0;
+  for (const entry of managed.slice().reverse()) {
+    if (enqueued >= limit) {
+      break;
+    }
+
+    let issue: IssueInfo | null;
+    try {
+      issue = await client.getIssue(entry.repo, entry.prNumber);
+    } catch (error) {
+      log("warn", "Managed PR catch-up scan failed to resolve issue.", json, {
+        pr: entry.key,
+        error: error instanceof Error ? error.message : String(error)
+      });
+      continue;
+    }
+    if (!issue || !issue.isPullRequest) {
+      continue;
+    }
+    if (!issue.labels.includes(config.labels.done)) {
+      continue;
+    }
+    if (
+      issue.labels.includes(config.labels.queued) ||
+      issue.labels.includes(config.labels.running) ||
+      issue.labels.includes(config.labels.needsUser) ||
+      issue.labels.includes(config.labels.failed)
+    ) {
+      continue;
+    }
+
+    const pr = await client.getPullRequest(entry.repo, entry.prNumber);
+    if (!pr || pr.state !== "open" || pr.merged || pr.draft) {
+      continue;
+    }
+
+    try {
+      const threads = await client.listPullRequestReviewThreads(entry.repo, entry.prNumber);
+      const unresolved = threads.filter((thread) => !thread.isResolved);
+      if (unresolved.length > 0) {
+        if (dryRun) {
+          log("info", "Dry-run: would enqueue managed PR review follow-up due to unresolved review threads.", json, {
+            url: issue.url,
+            unresolved: unresolved.length
+          });
+          enqueued += 1;
+          continue;
+        }
+        const added = await enqueueReviewTask(reviewQueuePath, {
+          issueId: issue.id,
+          prNumber: entry.prNumber,
+          repo: entry.repo,
+          url: issue.url,
+          reason: "review_comment",
+          requiresEngine: true
+        });
+        if (added) {
+          enqueued += 1;
+        }
+        continue;
+      }
+    } catch (error) {
+      log("warn", "Managed PR catch-up scan failed to read review threads.", json, {
+        url: issue.url,
+        error: error instanceof Error ? error.message : String(error)
+      });
+      continue;
+    }
+
+    let reviews;
+    try {
+      reviews = await client.listPullRequestReviews(entry.repo, entry.prNumber);
+    } catch (error) {
+      log("warn", "Managed PR catch-up scan failed to read PR reviews.", json, {
+        url: issue.url,
+        error: error instanceof Error ? error.message : String(error)
+      });
+      continue;
+    }
+
+    const summary = summarizeLatestReviews(
+      reviews.map((review) => ({
+        author: review.author,
+        state: review.state,
+        submittedAt: review.submittedAt
+      }))
+    );
+    const copilotNoNewComments = copilotLatestReviewIsNoNewCommentsApproval(reviews);
+
+    if (summary.changesRequested) {
+      if (dryRun) {
+        log("info", "Dry-run: would enqueue managed PR review follow-up due to changes requested.", json, { url: issue.url });
+        enqueued += 1;
+        continue;
+      }
+      const added = await enqueueReviewTask(reviewQueuePath, {
+        issueId: issue.id,
+        prNumber: entry.prNumber,
+        repo: entry.repo,
+        url: issue.url,
+        reason: "review",
+        requiresEngine: true
+      });
+      if (added) {
+        enqueued += 1;
+      }
+      continue;
+    }
+
+    if (summary.approved || copilotNoNewComments) {
+      if (dryRun) {
+        log("info", "Dry-run: would enqueue managed PR merge follow-up after approval.", json, { url: issue.url });
+        enqueued += 1;
+        continue;
+      }
+      const added = await enqueueReviewTask(reviewQueuePath, {
+        issueId: issue.id,
+        prNumber: entry.prNumber,
+        repo: entry.repo,
+        url: issue.url,
+        reason: "approval",
+        requiresEngine: false
+      });
+      if (added) {
+        enqueued += 1;
+      }
+    }
+  }
+
+  if (enqueued > 0) {
+    log("info", `Managed PR catch-up scan enqueued ${enqueued} follow-up(s).`, json);
   }
 }
 
@@ -857,6 +1029,16 @@ program
           return false;
         }
       };
+
+      if (idleEnabled && picked.length < config.concurrency) {
+        await maybeEnqueueManagedPullRequestReviewFollowups({
+          client,
+          config,
+          json,
+          dryRun,
+          maxEntries: config.concurrency - picked.length
+        });
+      }
 
       let scheduledReviewFollowups: ScheduledReviewFollowup[] = [];
       if (idleEnabled && picked.length < config.concurrency) {

@@ -94,4 +94,91 @@ describe("webhook-handler review followup", () => {
     const reviewQueuePath = resolveReviewQueuePath(config.workdirRoot);
     expect(loadReviewQueue(reviewQueuePath)).toHaveLength(1);
   });
+
+  it("treats Copilot 'no new comments' review as approval (merge-only follow-up)", async () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "agent-runner-webhook-copilot-approval-"));
+    const config = makeConfig(root);
+    const repo = makeRepo();
+    const pr = makePullRequestIssue(repo);
+    const queuePath = path.join(root, "agent-runner", "state", "webhook-queue.json");
+
+    const client = {
+      addLabels: async () => {},
+      removeLabel: async () => {},
+      comment: async () => {},
+      listIssueComments: async () => [],
+      getIssue: async (_repo: RepoInfo, number: number) => (number === pr.number ? pr : null)
+    };
+
+    await handleWebhookEvent({
+      event: {
+        event: "pull_request_review",
+        delivery: "z",
+        payload: {
+          action: "submitted",
+          repository: { name: repo.repo, owner: { login: repo.owner } },
+          pull_request: { number: pr.number, id: pr.id, html_url: pr.url },
+          review: {
+            id: 42,
+            state: "commented",
+            body: "Copilot reviewed the PR and generated no new comments.",
+            author_association: "NONE",
+            user: { login: "copilot-pull-request-reviewer", type: "Bot" }
+          }
+        }
+      },
+      client: client as any,
+      config,
+      queuePath
+    });
+
+    const reviewQueuePath = resolveReviewQueuePath(config.workdirRoot);
+    const queued = loadReviewQueue(reviewQueuePath);
+    expect(queued).toHaveLength(1);
+    expect(queued[0]?.reason).toBe("approval");
+    expect(queued[0]?.requiresEngine).toBe(false);
+  });
+
+  it("enqueues engine follow-up for Copilot inline review comments", async () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "agent-runner-webhook-copilot-review-comment-"));
+    const config = makeConfig(root);
+    const repo = makeRepo();
+    const pr = makePullRequestIssue(repo);
+    const queuePath = path.join(root, "agent-runner", "state", "webhook-queue.json");
+
+    const client = {
+      addLabels: async () => {},
+      removeLabel: async () => {},
+      comment: async () => {},
+      listIssueComments: async () => [],
+      getIssue: async (_repo: RepoInfo, number: number) => (number === pr.number ? pr : null)
+    };
+
+    await handleWebhookEvent({
+      event: {
+        event: "pull_request_review_comment",
+        delivery: "z",
+        payload: {
+          action: "created",
+          repository: { name: repo.repo, owner: { login: repo.owner } },
+          pull_request: { number: pr.number, id: pr.id, html_url: pr.url },
+          comment: {
+            id: 9004,
+            body: "Copilot review comment.",
+            author_association: "NONE",
+            user: { login: "copilot-pull-request-reviewer", type: "Bot" }
+          }
+        }
+      },
+      client: client as any,
+      config,
+      queuePath
+    });
+
+    const reviewQueuePath = resolveReviewQueuePath(config.workdirRoot);
+    const queued = loadReviewQueue(reviewQueuePath);
+    expect(queued).toHaveLength(1);
+    expect(queued[0]?.reason).toBe("review_comment");
+    expect(queued[0]?.requiresEngine).toBe(true);
+  });
 });
