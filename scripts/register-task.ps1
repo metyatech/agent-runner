@@ -8,9 +8,10 @@ param(
 $powershell = (Get-Command powershell -ErrorAction Stop).Source
 $script = Join-Path $RepoPath "scripts\\run-task.ps1"
 
-$action = New-ScheduledTaskAction -Execute $powershell -Argument "-NoProfile -ExecutionPolicy Bypass -File `"$script`" -RepoPath `"$RepoPath`" -ConfigPath `"$ConfigPath`""
+$action = New-ScheduledTaskAction -Execute $powershell -Argument "-NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -File `"$script`" -RepoPath `"$RepoPath`" -ConfigPath `"$ConfigPath`""
 $trigger = New-ScheduledTaskTrigger -Once -At (Get-Date).AddMinutes(1) -RepetitionInterval (New-TimeSpan -Minutes $IntervalMinutes) -RepetitionDuration (New-TimeSpan -Days 3650)
 $principal = New-ScheduledTaskPrincipal -UserId $env:USERNAME -LogonType S4U -RunLevel Limited
 
-Register-ScheduledTask -TaskName $TaskName -Action $action -Trigger $trigger -Principal $principal -Force
+$settings = New-ScheduledTaskSettingsSet -Hidden
+Register-ScheduledTask -TaskName $TaskName -Action $action -Trigger $trigger -Principal $principal -Settings $settings -Force
 Write-Host "Registered task $TaskName"
