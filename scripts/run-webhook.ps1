@@ -57,4 +57,4 @@ if (Test-WebhookServer) {
 if ($process.HasExited) {
   exit $process.ExitCode
 }
-exit 1
+exit 0
