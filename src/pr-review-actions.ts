@@ -106,12 +106,6 @@ export async function attemptAutoMergeApprovedPullRequest(options: {
     return { merged: false, retry: false, reason: "not_approved" };
   }
 
-  const mergeOptions = await options.client.getRepoMergeOptions(options.repo);
-  const mergeMethod = chooseMergeMethod(mergeOptions);
-  if (!mergeMethod) {
-    return { merged: false, retry: false, reason: "no_merge_method_enabled" };
-  }
-
   const mergeable = await waitForMergeable({
     client: options.client,
     repo: options.repo,
@@ -130,16 +124,78 @@ export async function attemptAutoMergeApprovedPullRequest(options: {
     };
   }
 
-  const mergeResult = await options.client.mergePullRequest({
-    repo: options.repo,
-    pullNumber: options.pullNumber,
-    sha: mergeable.headSha,
-    mergeMethod,
-    commitTitle: `agent-runner: merge #${options.pullNumber}`,
-    commitMessage: `Auto-merged after approval: ${options.issue.url}`
-  });
-  if (!mergeResult.merged) {
-    return { merged: false, retry: true, reason: `merge_failed:${mergeResult.message ?? "unknown"}` };
+  const mergeOptions = await options.client.getRepoMergeOptions(options.repo);
+  const preferredMergeMethod = chooseMergeMethod(mergeOptions);
+  const mergeMethods: Array<"merge" | "squash" | "rebase"> = preferredMergeMethod
+    ? [preferredMergeMethod]
+    : ["squash", "merge", "rebase"];
+
+  const commitTitle = `agent-runner: merge #${options.pullNumber}`;
+  const commitMessage = `Auto-merged after approval: ${options.issue.url}`;
+
+  const tryMerge = async (
+    mergeMethod: "merge" | "squash" | "rebase"
+  ): Promise<{ merged: boolean; message?: string | null }> => {
+    try {
+      return await options.client.mergePullRequest({
+        repo: options.repo,
+        pullNumber: options.pullNumber,
+        sha: mergeable.headSha,
+        mergeMethod,
+        commitTitle,
+        commitMessage
+      });
+    } catch (error) {
+      const message =
+        error instanceof Error
+          ? error.message
+          : typeof error === "string"
+            ? error
+            : null;
+      return { merged: false, message };
+    }
+  };
+
+  let lastMessage: string | null = null;
+  let chosenMergeMethod: "merge" | "squash" | "rebase" | null = null;
+  for (const method of mergeMethods) {
+    const mergeResult = await tryMerge(method);
+    if (mergeResult.merged) {
+      chosenMergeMethod = method;
+      break;
+    }
+    lastMessage = mergeResult.message ?? lastMessage;
+
+    const normalized = (mergeResult.message ?? "").toLowerCase();
+    const looksLikeMethodNotAllowed =
+      normalized.includes("merge method") ||
+      normalized.includes("not allowed") ||
+      normalized.includes("method is not") ||
+      normalized.includes("merge_method");
+    if (looksLikeMethodNotAllowed && !preferredMergeMethod) {
+      continue;
+    }
+
+    const looksRetryable =
+      normalized.includes("mergeable") ||
+      normalized.includes("not mergeable") ||
+      normalized.includes("head branch was modified") ||
+      normalized.includes("base branch was modified") ||
+      normalized.includes("try again") ||
+      normalized.includes("timed out");
+    return {
+      merged: false,
+      retry: looksRetryable,
+      reason: `merge_failed:${mergeResult.message ?? "unknown"}`
+    };
+  }
+
+  if (!chosenMergeMethod) {
+    return {
+      merged: false,
+      retry: false,
+      reason: preferredMergeMethod ? "merge_failed:unknown" : "no_merge_method_enabled"
+    };
   }
 
   let branchDeleted = false;
@@ -153,5 +209,5 @@ export async function attemptAutoMergeApprovedPullRequest(options: {
     }
   }
 
-  return { merged: true, branchDeleted, mergeMethod };
+  return { merged: true, branchDeleted, mergeMethod: chosenMergeMethod };
 }
