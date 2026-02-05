@@ -4,6 +4,7 @@ param(
   [string]$LogDir = ""
 )
 
+$ErrorActionPreference = "Stop"
 Set-StrictMode -Version Latest
 
 $hideConsole = {
@@ -36,11 +37,11 @@ function Test-WebhookServer {
     if ($null -eq $config.webhooks -or $config.webhooks.enabled -ne $true) {
       return $false
     }
-    $host = if ($config.webhooks.host) { $config.webhooks.host } else { "127.0.0.1" }
-    $port = if ($config.webhooks.port) { [int]$config.webhooks.port } else { 4312 }
+    $probeHost = if ($config.webhooks.host) { $config.webhooks.host } else { "127.0.0.1" }
+    $probePort = if ($config.webhooks.port) { [int]$config.webhooks.port } else { 4312 }
     $client = New-Object System.Net.Sockets.TcpClient
-    $async = $client.BeginConnect($host, $port, $null, $null)
-    $connected = $async.AsyncWaitHandle.WaitOne(200)
+    $async = $client.BeginConnect($probeHost, $probePort, $null, $null)
+    $connected = $async.AsyncWaitHandle.WaitOne(500)
     if (-not $connected) {
       $client.Close()
       return $false
@@ -53,28 +54,64 @@ function Test-WebhookServer {
   }
 }
 
-if (Test-WebhookServer) {
-  exit 0
+New-Item -ItemType Directory -Force -Path $resolvedLogDir | Out-Null
+$date = Get-Date -Format "yyyyMMdd"
+$outPath = Join-Path $resolvedLogDir "webhook-run-$date.log"
+$errPath = Join-Path $resolvedLogDir "webhook-run-$date.err.log"
+$metaPath = Join-Path $resolvedLogDir "webhook-meta-$date.log"
+$latestPath = Join-Path $resolvedLogDir "latest-webhook-run.path"
+$latestMetaPath = Join-Path $resolvedLogDir "latest-webhook-meta.path"
+
+function Append-MetaLog {
+  param([string]$Line)
+  $Line | Out-File -FilePath $metaPath -Append -Encoding utf8
 }
 
-New-Item -ItemType Directory -Force -Path $resolvedLogDir | Out-Null
-$timestamp = Get-Date -Format "yyyyMMdd-HHmmss"
-$logPath = Join-Path $resolvedLogDir "webhook-run-$timestamp.out.log"
-$errPath = Join-Path $resolvedLogDir "webhook-run-$timestamp.err.log"
+try {
+  Set-Content -Path $latestPath -Value "$outPath`n" -Encoding utf8
+} catch {
+  # best-effort
+}
+
+try {
+  Set-Content -Path $latestMetaPath -Value "$metaPath`n" -Encoding utf8
+} catch {
+  # best-effort
+}
+
+Append-MetaLog ""
+Append-MetaLog "=== AgentRunner webhook task start: $(Get-Date -Format o) ==="
+Append-MetaLog "Mode: daemon (scheduled task stays running; TaskScheduler MultipleInstancesPolicy=IgnoreNew prevents per-minute relaunch)"
+Append-MetaLog "User: $env:USERNAME"
+Append-MetaLog "Computer: $env:COMPUTERNAME"
+Append-MetaLog "RepoPath: $RepoPath"
+Append-MetaLog "ConfigPath: $ConfigPath"
+Append-MetaLog "Node: $node"
+Append-MetaLog "OutPath: $outPath"
+Append-MetaLog "ErrPath: $errPath"
 
 Set-Location -Path $RepoPath
-$process = Start-Process -FilePath $node -ArgumentList @(
-  $script,
-  "webhook",
-  "--config",
-  $ConfigPath
-) -WorkingDirectory $RepoPath -RedirectStandardOutput $logPath -RedirectStandardError $errPath -WindowStyle Hidden -PassThru
+Append-MetaLog "CWD: $(Get-Location)"
 
-Start-Sleep -Milliseconds 300
-if (Test-WebhookServer) {
-  exit 0
+while ($true) {
+  try {
+    if (Test-WebhookServer) {
+      Start-Sleep -Seconds 30
+      continue
+    }
+
+    Append-MetaLog ""
+    Append-MetaLog "=== Webhook server start: $(Get-Date -Format o) ==="
+    $prevErrorActionPreference = $ErrorActionPreference
+    $ErrorActionPreference = "Continue"
+    & $node $script webhook --config $ConfigPath 1>> $outPath 2>> $errPath
+    $ErrorActionPreference = $prevErrorActionPreference
+    $exitCode = $LASTEXITCODE
+    Append-MetaLog "WebhookExitCode: $exitCode"
+    Append-MetaLog "=== Webhook server end: $(Get-Date -Format o) ==="
+  } catch {
+    Append-MetaLog "WebhookException: $($_.Exception.Message)"
+  }
+
+  Start-Sleep -Seconds 5
 }
-if ($process.HasExited) {
-  exit $process.ExitCode
-}
-exit 0
