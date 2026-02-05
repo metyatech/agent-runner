@@ -5,12 +5,12 @@ param(
   [string]$DailyAt = "03:00"
 )
 
-$powershell = (Get-Command powershell -ErrorAction Stop).Source
+$wscript = (Get-Command wscript -ErrorAction Stop).Source
 $resolvedRepoPath = (Resolve-Path -Path $RepoPath).Path
 $resolvedConfigPath = (Resolve-Path -Path $ConfigPath).Path
-$script = Join-Path $resolvedRepoPath "scripts\\run-label-sync.ps1"
+$vbs = Join-Path $resolvedRepoPath "scripts\\run-label-sync.vbs"
 
-$action = New-ScheduledTaskAction -Execute $powershell -Argument "-NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -File `"$script`" -RepoPath `"$resolvedRepoPath`" -ConfigPath `"$resolvedConfigPath`"" -WorkingDirectory $resolvedRepoPath
+$action = New-ScheduledTaskAction -Execute $wscript -Argument "//B //NoLogo `"$vbs`"" -WorkingDirectory $resolvedRepoPath
 $trigger = New-ScheduledTaskTrigger -Daily -At $DailyAt
 $principal = New-ScheduledTaskPrincipal -UserId $env:USERNAME -LogonType S4U -RunLevel Limited
 $settings = New-ScheduledTaskSettingsSet -Hidden -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries

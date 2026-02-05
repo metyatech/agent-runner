@@ -4,11 +4,11 @@ param(
   [string]$TokenEnv = "CLOUDFLARED_TUNNEL_TOKEN"
 )
 
-$powershell = (Get-Command powershell -ErrorAction Stop).Source
+$wscript = (Get-Command wscript -ErrorAction Stop).Source
 $resolvedRepoPath = (Resolve-Path -Path $RepoPath).Path
-$script = Join-Path $resolvedRepoPath "scripts\\run-cloudflared.ps1"
+$vbs = Join-Path $resolvedRepoPath "scripts\\run-cloudflared.vbs"
 
-$action = New-ScheduledTaskAction -Execute $powershell -Argument "-NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -File `"$script`" -RepoPath `"$resolvedRepoPath`" -TokenEnv `"$TokenEnv`"" -WorkingDirectory $resolvedRepoPath
+$action = New-ScheduledTaskAction -Execute $wscript -Argument "//B //NoLogo `"$vbs`"" -WorkingDirectory $resolvedRepoPath
 $trigger = New-ScheduledTaskTrigger -AtLogOn -User $env:USERNAME
 $principal = New-ScheduledTaskPrincipal -UserId $env:USERNAME -LogonType S4U -RunLevel Limited
 $settings = New-ScheduledTaskSettingsSet -Hidden -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -RestartCount 3 -RestartInterval (New-TimeSpan -Minutes 1)

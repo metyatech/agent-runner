@@ -4,12 +4,12 @@ param(
   [string]$ConfigPath = (Join-Path (Split-Path -Parent $PSScriptRoot) "agent-runner.config.json")
 )
 
-$powershell = (Get-Command powershell -ErrorAction Stop).Source
+$wscript = (Get-Command wscript -ErrorAction Stop).Source
 $resolvedRepoPath = (Resolve-Path -Path $RepoPath).Path
 $resolvedConfigPath = (Resolve-Path -Path $ConfigPath).Path
-$script = Join-Path $resolvedRepoPath "scripts\\run-webhook.ps1"
+$vbs = Join-Path $resolvedRepoPath "scripts\\run-webhook.vbs"
 
-$action = New-ScheduledTaskAction -Execute $powershell -Argument "-NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -File `"$script`" -RepoPath `"$resolvedRepoPath`" -ConfigPath `"$resolvedConfigPath`"" -WorkingDirectory $resolvedRepoPath
+$action = New-ScheduledTaskAction -Execute $wscript -Argument "//B //NoLogo `"$vbs`"" -WorkingDirectory $resolvedRepoPath
 $trigger = New-ScheduledTaskTrigger -Once -At (Get-Date) -RepetitionInterval (New-TimeSpan -Minutes 1) -RepetitionDuration (New-TimeSpan -Days 3650)
 $principal = New-ScheduledTaskPrincipal -UserId $env:USERNAME -LogonType S4U -RunLevel Limited
 $settings = New-ScheduledTaskSettingsSet -Hidden -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -RestartCount 3 -RestartInterval (New-TimeSpan -Minutes 1)
