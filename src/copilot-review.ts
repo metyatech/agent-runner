@@ -17,7 +17,7 @@ export function isCopilotReviewerLogin(login: string | null): boolean {
 export function copilotReviewIndicatesNoNewComments(body: string | null): boolean {
   const text = (body ?? "").trim();
   if (!text) return false;
-  return /\b(generated\s+no\s+new\s+comments|no\s+new\s+comments)\b/i.test(text);
+  return /\bgenerated\s+no(?:\s+new)?\s+comments?\b/i.test(text) || /\bno\s+new\s+comments\b/i.test(text);
 }
 
 function parseSubmittedAt(value: string | null): number {
@@ -50,4 +50,3 @@ export function copilotLatestReviewIsNoNewCommentsApproval(reviews: PullRequestR
   if (review.state.trim().toUpperCase() !== "COMMENTED") return false;
   return copilotReviewIndicatesNoNewComments(review.body ?? null);
 }
-

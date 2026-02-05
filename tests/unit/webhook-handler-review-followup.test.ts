@@ -121,7 +121,7 @@ describe("webhook-handler review followup", () => {
           review: {
             id: 42,
             state: "commented",
-            body: "Copilot reviewed the PR and generated no new comments.",
+            body: "Copilot reviewed the PR and generated no comments.",
             author_association: "NONE",
             user: { login: "copilot-pull-request-reviewer", type: "Bot" }
           }
