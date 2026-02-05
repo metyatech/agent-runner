@@ -6,7 +6,39 @@ param(
   [string]$RunnerTaskName = "AgentRunner"
 )
 
+$ErrorActionPreference = "Stop"
 Set-StrictMode -Version Latest
+
+$hideConsole = {
+  try {
+    Add-Type -Namespace AgentRunner -Name Win32 -MemberDefinition @"
+using System;
+using System.Runtime.InteropServices;
+public static class Win32 {
+  [DllImport("kernel32.dll")] public static extern IntPtr GetConsoleWindow();
+  [DllImport("user32.dll")] public static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);
+}
+"@
+    $hwnd = [AgentRunner.Win32]::GetConsoleWindow()
+    if ($hwnd -ne [IntPtr]::Zero) {
+      [void][AgentRunner.Win32]::ShowWindow($hwnd, 0)
+    }
+  } catch {
+    # best-effort
+  }
+}
+& $hideConsole
+
+$script:trayMutex = $null
+try {
+  $script:trayMutex = New-Object System.Threading.Mutex($false, "Local\\AgentRunnerTray")
+  $hasHandle = $script:trayMutex.WaitOne(0, $false)
+  if (-not $hasHandle) {
+    exit 0
+  }
+} catch {
+  # best-effort; continue without single-instance enforcement
+}
 
 Add-Type -AssemblyName System.Windows.Forms
 Add-Type -AssemblyName System.Drawing
