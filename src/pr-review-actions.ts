@@ -161,3 +161,92 @@ export async function attemptAutoMergeApprovedPullRequest(options: {
   return { merged: true, branchDeleted, mergeMethod };
 }
 
+export async function attemptAutoMergeManagedPullRequest(options: {
+  client: GitHubClient;
+  repo: RepoInfo;
+  pullNumber: number;
+  issue: IssueInfo;
+}): Promise<AutoMergeResult> {
+  const pr = await options.client.getPullRequest(options.repo, options.pullNumber);
+  if (!pr) {
+    return { merged: false, retry: false, reason: "pr_not_found" };
+  }
+  if (pr.state !== "open") {
+    return { merged: false, retry: false, reason: `pr_not_open:${pr.state}` };
+  }
+  if (pr.merged) {
+    return { merged: false, retry: false, reason: "already_merged" };
+  }
+  if (pr.draft) {
+    return { merged: false, retry: true, reason: "draft" };
+  }
+
+  try {
+    await resolveAllUnresolvedReviewThreads({
+      client: options.client,
+      repo: options.repo,
+      pullNumber: options.pullNumber
+    });
+  } catch {
+    // Best-effort: we'll still validate threads below.
+  }
+
+  try {
+    const threads = await options.client.listPullRequestReviewThreads(options.repo, options.pullNumber);
+    const unresolved = threads.filter((thread) => !thread.isResolved);
+    if (unresolved.length > 0) {
+      return { merged: false, retry: true, reason: "unresolved_review_threads" };
+    }
+  } catch {
+    return { merged: false, retry: true, reason: "review_threads_unavailable" };
+  }
+
+  const mergeOptions = await options.client.getRepoMergeOptions(options.repo);
+  const mergeMethod = chooseMergeMethod(mergeOptions);
+  if (!mergeMethod) {
+    return { merged: false, retry: false, reason: "no_merge_method_enabled" };
+  }
+
+  const mergeable = await waitForMergeable({
+    client: options.client,
+    repo: options.repo,
+    pullNumber: options.pullNumber,
+    attempts: 10,
+    delayMs: 500
+  });
+  if (!mergeable) {
+    return { merged: false, retry: true, reason: "mergeable_unavailable" };
+  }
+  if (!mergeable.mergeable || !isMergeableStateClean(mergeable.mergeableState)) {
+    return {
+      merged: false,
+      retry: true,
+      reason: `not_mergeable:${mergeable.mergeableState ?? "unknown"}`
+    };
+  }
+
+  const mergeResult = await options.client.mergePullRequest({
+    repo: options.repo,
+    pullNumber: options.pullNumber,
+    sha: mergeable.headSha,
+    mergeMethod,
+    commitTitle: `agent-runner: merge #${options.pullNumber}`,
+    commitMessage: `Auto-merged (managed mode): ${options.issue.url}`
+  });
+  if (!mergeResult.merged) {
+    return { merged: false, retry: true, reason: `merge_failed:${mergeResult.message ?? "unknown"}` };
+  }
+
+  let branchDeleted = false;
+  const expectedRepo = `${options.repo.owner}/${options.repo.repo}`.toLowerCase();
+  if (pr.headRepoFullName?.toLowerCase() === expectedRepo) {
+    try {
+      await options.client.deleteBranchRef(options.repo, `heads/${pr.headRef}`);
+      branchDeleted = true;
+    } catch {
+      // ignore
+    }
+  }
+
+  return { merged: true, branchDeleted, mergeMethod };
+}

@@ -10,6 +10,10 @@ export type AgentRunnerConfig = {
   workdirRoot: string;
   pollIntervalSeconds: number;
   concurrency: number;
+  autoMerge?: {
+    enabled: boolean;
+    mode: "approved" | "managed";
+  };
   logMaintenance?: {
     enabled: boolean;
     maxAgeDays?: number;

@@ -4,6 +4,10 @@
   "workdirRoot": "D:\\ghws",
   "pollIntervalSeconds": 60,
   "concurrency": 8,
+  "autoMerge": {
+    "enabled": true,
+    "mode": "managed"
+  },
   "logMaintenance": {
     "enabled": true,
     "maxAgeDays": 30,
