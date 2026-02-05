@@ -60,10 +60,18 @@ import {
 } from "./agent-command-state.js";
 import { pruneLogs, resolveLogMaintenance, resolveLogsDir } from "./log-maintenance.js";
 import { pruneReports, resolveReportMaintenance, resolveReportsDir } from "./report-maintenance.js";
-import { enqueueReviewTask, loadReviewQueue, resolveReviewQueuePath, takeReviewTasks } from "./review-queue.js";
+import {
+  enqueueReviewTask,
+  loadReviewQueue,
+  resolveReviewQueuePath,
+  takeReviewTasks,
+  takeReviewTasksWhere,
+  type ReviewQueueEntry
+} from "./review-queue.js";
 import { scheduleReviewFollowups } from "./review-scheduler.js";
 import type { ScheduledReviewFollowup } from "./review-scheduler.js";
 import { attemptAutoMergeApprovedPullRequest, resolveAllUnresolvedReviewThreads } from "./pr-review-actions.js";
+import { markManagedPullRequest, resolveManagedPullRequestsStatePath } from "./managed-pull-requests.js";
 
 const program = new Command();
 
@@ -855,17 +863,44 @@ program
         const reviewQueuePath = resolveReviewQueuePath(config.workdirRoot);
         const backlog = loadReviewQueue(reviewQueuePath);
         if (backlog.length > 0) {
-          const codexAllowed = await evaluateCodexIdleAllowed();
-          if (!codexAllowed) {
-            log(
-              "info",
-              "Review follow-up backlog detected but Codex idle gate is blocked. Skipping review follow-ups.",
-              json,
-              { queued: backlog.length }
-            );
+          const maxEntries = config.concurrency - picked.length;
+          const mergeOnlyBacklog = backlog.filter((entry) => !entry.requiresEngine);
+          const engineBacklog = backlog.filter((entry) => entry.requiresEngine);
+
+          let queue: ReviewQueueEntry[] = [];
+          if (dryRun) {
+            queue = backlog.slice(0, maxEntries);
           } else {
-            const maxEntries = config.concurrency - picked.length;
-            const queue = dryRun ? backlog : await takeReviewTasks(reviewQueuePath, maxEntries);
+            const mergeOnly = await takeReviewTasksWhere(reviewQueuePath, maxEntries, (entry) => !entry.requiresEngine);
+            queue.push(...mergeOnly);
+            const remaining = maxEntries - mergeOnly.length;
+            if (remaining > 0 && engineBacklog.length > 0) {
+              const codexAllowed = await evaluateCodexIdleAllowed();
+              if (!codexAllowed) {
+                log(
+                  "info",
+                  "Review follow-up backlog detected but Codex idle gate is blocked. Skipping engine-required review follow-ups.",
+                  json,
+                  { queued: engineBacklog.length }
+                );
+              } else {
+                const engineTasks = await takeReviewTasksWhere(reviewQueuePath, remaining, (entry) => entry.requiresEngine);
+                queue.push(...engineTasks);
+              }
+            }
+          }
+
+          if (queue.length === 0) {
+            if (mergeOnlyBacklog.length > 0) {
+              log("info", "Review follow-up merge-only backlog detected but nothing was scheduled.", json, {
+                queued: mergeOnlyBacklog.length
+              });
+            } else if (engineBacklog.length > 0) {
+              log("info", "Review follow-up backlog detected but nothing was scheduled.", json, {
+                queued: engineBacklog.length
+              });
+            }
+          } else {
             scheduledReviewFollowups = scheduleReviewFollowups({
               normalRunning: picked.length,
               concurrency: config.concurrency,
@@ -1159,6 +1194,11 @@ program
           limit(async () => {
             let activityId: string | null = null;
             try {
+              if (issue.isPullRequest) {
+                const managedStatePath = resolveManagedPullRequestsStatePath(config.workdirRoot);
+                await markManagedPullRequest(managedStatePath, issue.repo, issue.number);
+              }
+
               await client.addLabels(issue, [config.labels.running]);
               await tryRemoveLabel(issue, config.labels.queued);
               await commentCompletion(

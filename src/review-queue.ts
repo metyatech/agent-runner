@@ -178,3 +178,31 @@ export async function takeReviewTasks(queuePath: string, maxEntries: number): Pr
     return taken;
   });
 }
+
+export async function takeReviewTasksWhere(
+  queuePath: string,
+  maxEntries: number,
+  predicate: (entry: ReviewQueueEntry) => boolean
+): Promise<ReviewQueueEntry[]> {
+  const limit = Math.max(0, Math.floor(maxEntries));
+  if (limit <= 0) {
+    return [];
+  }
+  return withQueueLock(queuePath, () => {
+    const state = readQueueState(queuePath);
+    const taken: ReviewQueueEntry[] = [];
+    const remaining: ReviewQueueEntry[] = [];
+    for (const entry of state.queued) {
+      if (taken.length < limit && predicate(entry)) {
+        taken.push(entry);
+      } else {
+        remaining.push(entry);
+      }
+    }
+    if (taken.length === 0) {
+      return [];
+    }
+    writeQueueState(queuePath, remaining);
+    return taken;
+  });
+}
