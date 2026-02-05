@@ -70,11 +70,7 @@ import {
 } from "./review-queue.js";
 import { scheduleReviewFollowups } from "./review-scheduler.js";
 import type { ScheduledReviewFollowup } from "./review-scheduler.js";
-import {
-  attemptAutoMergeApprovedPullRequest,
-  attemptAutoMergeManagedPullRequest,
-  resolveAllUnresolvedReviewThreads
-} from "./pr-review-actions.js";
+import { attemptAutoMergeApprovedPullRequest, resolveAllUnresolvedReviewThreads } from "./pr-review-actions.js";
 import { markManagedPullRequest, resolveManagedPullRequestsStatePath } from "./managed-pull-requests.js";
 
 const program = new Command();
@@ -1226,59 +1222,6 @@ program
                       `\n\nLog: ${result.logPath}`
                   )
                 );
-
-                const autoMerge = config.autoMerge;
-                if (issue.isPullRequest && autoMerge?.enabled) {
-                  try {
-                    const merge =
-                      autoMerge.mode === "managed"
-                        ? await attemptAutoMergeManagedPullRequest({
-                            client,
-                            repo: issue.repo,
-                            pullNumber: issue.number,
-                            issue
-                          })
-                        : await attemptAutoMergeApprovedPullRequest({
-                            client,
-                            repo: issue.repo,
-                            pullNumber: issue.number,
-                            issue
-                          });
-
-                    if (merge.merged) {
-                      await commentCompletion(
-                        issue,
-                        buildAgentComment(
-                          `Agent runner auto-merged (mode: ${autoMerge.mode}, method: ${merge.mergeMethod}).` +
-                            `${merge.branchDeleted ? "\n\nDeleted remote branch." : ""}`
-                        )
-                      );
-                    } else if (merge.retry) {
-                      const reviewQueuePath = resolveReviewQueuePath(config.workdirRoot);
-                      await enqueueReviewTask(reviewQueuePath, {
-                        issueId: issue.id,
-                        prNumber: issue.number,
-                        repo: issue.repo,
-                        url: issue.url,
-                        reason: "approval",
-                        requiresEngine: false
-                      });
-                      log("info", "Auto-merge not ready yet; queued follow-up.", json, {
-                        url: issue.url,
-                        mode: autoMerge.mode,
-                        reason: merge.reason
-                      });
-                    } else {
-                      log("info", "Auto-merge skipped.", json, { url: issue.url, mode: autoMerge.mode, reason: merge.reason });
-                    }
-                  } catch (error) {
-                    log("warn", "Auto-merge failed.", json, {
-                      url: issue.url,
-                      mode: autoMerge.mode,
-                      error: error instanceof Error ? error.message : String(error)
-                    });
-                  }
-                }
                 return;
               }
 
@@ -1322,28 +1265,19 @@ program
 
             if (!followup.requiresEngine) {
               try {
-                const mode = config.autoMerge?.enabled ? config.autoMerge.mode : "approved";
-                const merge =
-                  mode === "managed"
-                    ? await attemptAutoMergeManagedPullRequest({
-                        client,
-                        repo: followup.repo,
-                        pullNumber: followup.prNumber,
-                        issue
-                      })
-                    : await attemptAutoMergeApprovedPullRequest({
-                        client,
-                        repo: followup.repo,
-                        pullNumber: followup.prNumber,
-                        issue
-                      });
+                const merge = await attemptAutoMergeApprovedPullRequest({
+                  client,
+                  repo: followup.repo,
+                  pullNumber: followup.prNumber,
+                  issue
+                });
 
                 if (merge.merged) {
                   await client.addLabels(issue, [config.labels.done]);
                   await commentCompletion(
                     issue,
                     buildAgentComment(
-                      `Agent runner auto-merged (mode: ${mode}, method: ${merge.mergeMethod}).` +
+                      `Agent runner auto-merged after approval (method: ${merge.mergeMethod}).` +
                         `${merge.branchDeleted ? "\n\nDeleted remote branch." : ""}`
                     )
                   );

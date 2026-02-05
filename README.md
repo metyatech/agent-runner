@@ -72,14 +72,7 @@ Only repo collaborators (OWNER/MEMBER/COLLABORATOR) are accepted for `/agent run
 When the target is a PR, agent-runner treats the PR as "managed" after `/agent run` (and for bot-authored PRs). Managed PRs:
 
 - Re-run the agent automatically on PR review feedback (review comments / changes requested).
-- Auto-merge (optional) and best-effort delete the remote PR branch.
-
-Auto-merge is controlled by `autoMerge` in `agent-runner.config.json`:
-
-- `mode: "approved"`: merge only after an `APPROVED` PR review exists.
-- `mode: "managed"`: merge after a successful `/agent run` on a managed PR (no approval required).
-
-Note: GitHub Copilot code review posts `COMMENTED` reviews and does not submit `APPROVED`, and PR authors cannot approve their own PRs. Use `mode: "managed"` if you want fully automatic progression for self-authored PRs.
+- Auto-merge after approval and best-effort delete the remote PR branch.
 
 ## E2E (GitHub API)
 
@@ -120,9 +113,6 @@ Config file: `agent-runner.config.json`
 - `workdirRoot`: Local workspace root containing repos
 - `pollIntervalSeconds`: Polling interval
 - `concurrency`: Max concurrent requests
-- `autoMerge`: Optional auto-merge behavior for managed PRs
-  - `autoMerge.enabled`: Turn auto-merge on/off
-  - `autoMerge.mode`: `"approved"` (requires `APPROVED`) or `"managed"` (merge after `/agent run` success)
 - `repos`: If `"all"`, the runner caches the repository list and refreshes periodically to avoid GitHub rate limits. When rate-limited and no cache is available, it will fall back to local workspace repositories (directories with a `.git` folder).
 - `logMaintenance`: Optional log pruning settings (applied automatically on startup and via `agent-runner logs prune`)
 - `reportMaintenance`: Optional report pruning settings (applied automatically on startup and via `agent-runner reports prune`)

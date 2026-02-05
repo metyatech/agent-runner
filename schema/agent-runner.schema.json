@@ -33,15 +33,6 @@
       "minimum": 1,
       "maximum": 16
     },
-    "autoMerge": {
-      "type": "object",
-      "required": ["enabled", "mode"],
-      "properties": {
-        "enabled": { "type": "boolean" },
-        "mode": { "type": "string", "enum": ["approved", "managed"] }
-      },
-      "additionalProperties": false
-    },
     "logMaintenance": {
       "type": "object",
       "required": ["enabled"],
