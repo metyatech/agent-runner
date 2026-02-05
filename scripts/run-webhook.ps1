@@ -48,7 +48,7 @@ $process = Start-Process -FilePath $node -ArgumentList @(
   "webhook",
   "--config",
   $ConfigPath
-) -WorkingDirectory $RepoPath -RedirectStandardOutput $logPath -RedirectStandardError $errPath -NoNewWindow -PassThru
+) -WorkingDirectory $RepoPath -RedirectStandardOutput $logPath -RedirectStandardError $errPath -WindowStyle Hidden -PassThru
 
 Start-Sleep -Milliseconds 300
 if (Test-WebhookServer) {
