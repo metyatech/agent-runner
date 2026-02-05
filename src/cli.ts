@@ -1448,7 +1448,7 @@ program
             if (!followup.requiresEngine) {
               try {
                 const merge = await attemptAutoMergeApprovedPullRequest({
-                  client,
+                  client: notifyClient ?? client,
                   repo: followup.repo,
                   pullNumber: followup.prNumber,
                   issue
