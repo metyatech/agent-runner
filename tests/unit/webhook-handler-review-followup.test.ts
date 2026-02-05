@@ -15,7 +15,6 @@ function makeConfig(workdirRoot: string): AgentRunnerConfig {
     pollIntervalSeconds: 60,
     concurrency: 1,
     labels: {
-      request: "agent:request",
       queued: "agent:queued",
       running: "agent:running",
       done: "agent:done",
@@ -46,7 +45,8 @@ function makePullRequestIssue(repo: RepoInfo): IssueInfo {
     author: "agent-runner-bot[bot]",
     repo,
     labels: [],
-    url: "https://github.com/metyatech/demo/pull/5"
+    url: "https://github.com/metyatech/demo/pull/5",
+    isPullRequest: true
   };
 }
 
@@ -90,9 +90,8 @@ describe("webhook-handler review followup", () => {
       queuePath
     });
 
-    expect(calls.addLabels.flat()).toContain(config.labels.request);
+    expect(calls.addLabels.flat()).toHaveLength(0);
     const reviewQueuePath = resolveReviewQueuePath(config.workdirRoot);
     expect(loadReviewQueue(reviewQueuePath)).toHaveLength(1);
   });
 });
-

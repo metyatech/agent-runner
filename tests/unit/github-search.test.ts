@@ -21,7 +21,7 @@ describe("GitHubClient.searchOpenIssuesByLabelAcrossOwner", () => {
                   html_url: "https://github.com/metyatech/demo/issues/123",
                   repository_url: "https://api.github.com/repos/metyatech/demo",
                   user: { login: "metyatech" },
-                  labels: [{ name: "agent:request" }]
+                  labels: [{ name: "agent:queued" }]
                 }
               ]
             }
@@ -30,17 +30,18 @@ describe("GitHubClient.searchOpenIssuesByLabelAcrossOwner", () => {
       }
     };
 
-    const issues = await client.searchOpenIssuesByLabelAcrossOwner("metyatech", "agent:request", {
+    const issues = await client.searchOpenIssuesByLabelAcrossOwner("metyatech", "agent:queued", {
       excludeLabels: ["agent:queued", "agent:running"],
       perPage: 100,
       maxPages: 1
     });
 
-    expect(seenQuery).toContain('user:metyatech is:issue state:open label:"agent:request"');
+    expect(seenQuery).toContain('user:metyatech is:issue state:open label:"agent:queued"');
     expect(seenQuery).toContain('-label:"agent:queued"');
     expect(seenQuery).toContain('-label:"agent:running"');
     expect(issues).toHaveLength(1);
     expect(issues[0].repo.owner).toBe("metyatech");
     expect(issues[0].repo.repo).toBe("demo");
+    expect(issues[0].isPullRequest).toBe(false);
   });
 });

@@ -20,7 +20,8 @@ function createIssue(id: number): IssueInfo {
     author: "metyatech",
     repo: { owner: "metyatech", repo: "repo" },
     labels: [],
-    url: `https://example.com/${id}`
+    url: `https://example.com/${id}`,
+    isPullRequest: false
   };
 }
 

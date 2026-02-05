@@ -13,7 +13,8 @@ describe("runner prompt includes PR review comments", () => {
       author: "agent-runner-bot[bot]",
       repo,
       labels: [],
-      url: "https://github.com/metyatech/demo/pull/5"
+      url: "https://github.com/metyatech/demo/pull/5",
+      isPullRequest: true
     };
     const issueComments: IssueComment[] = [];
     const reviewComments = [
@@ -30,4 +31,3 @@ describe("runner prompt includes PR review comments", () => {
     expect(text).toContain("Please update this.");
   });
 });
-

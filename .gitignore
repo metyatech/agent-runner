@@ -4,5 +4,7 @@ logs/
 reports/
 state/
 .worktrees/
+git-cache/
+work/
 .env
 .DS_Store

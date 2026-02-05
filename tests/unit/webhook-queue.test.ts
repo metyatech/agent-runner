@@ -21,7 +21,8 @@ describe("webhook-queue", () => {
       author: "metyatech",
       repo: { owner: "metyatech", repo: "demo" },
       labels: [],
-      url: "https://example.com/issues/42"
+      url: "https://example.com/issues/42",
+      isPullRequest: false
     };
 
     const first = await enqueueWebhookIssue(queuePath, issue);

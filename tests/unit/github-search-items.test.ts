@@ -23,7 +23,7 @@ describe("GitHubClient.searchOpenItemsByLabelAcrossOwner", () => {
                         html_url: "https://github.com/metyatech/demo/issues/123",
                         repository_url: "https://api.github.com/repos/metyatech/demo",
                         user: { login: "metyatech" },
-                        labels: [{ name: "agent:request" }]
+                        labels: [{ name: "agent:queued" }]
                       }
                     ]
                   : qualifier === "pr"
@@ -36,7 +36,7 @@ describe("GitHubClient.searchOpenItemsByLabelAcrossOwner", () => {
                         html_url: "https://github.com/metyatech/demo/pull/456",
                         repository_url: "https://api.github.com/repos/metyatech/demo",
                         user: { login: "metyatech" },
-                        labels: [{ name: "agent:request" }],
+                        labels: [{ name: "agent:queued" }],
                         pull_request: { url: "https://api.github.com/repos/metyatech/demo/pulls/456" }
                       }
                     ]
@@ -47,19 +47,21 @@ describe("GitHubClient.searchOpenItemsByLabelAcrossOwner", () => {
       }
     };
 
-    const items = await client.searchOpenItemsByLabelAcrossOwner("metyatech", "agent:request", {
+    const items = await client.searchOpenItemsByLabelAcrossOwner("metyatech", "agent:queued", {
       excludeLabels: ["agent:queued"],
       perPage: 100,
       maxPages: 1
     });
 
     expect(seenQueries).toHaveLength(2);
-    expect(seenQueries[0]).toContain('user:metyatech state:open label:"agent:request"');
+    expect(seenQueries[0]).toContain('user:metyatech state:open label:"agent:queued"');
     expect(seenQueries[0]).toContain('-label:"agent:queued"');
     expect(seenQueries.join("\n")).toContain("is:issue");
     expect(seenQueries.join("\n")).toContain("is:pull-request");
     expect(items).toHaveLength(2);
     expect(items.map((item) => item.number).sort()).toEqual([123, 456]);
+    expect(items.find((item) => item.number === 123)?.isPullRequest).toBe(false);
+    expect(items.find((item) => item.number === 456)?.isPullRequest).toBe(true);
   });
 });
 
@@ -122,5 +124,7 @@ describe("GitHubClient.searchOpenItemsByCommentPhraseAcrossOwner", () => {
     expect(seenQueries.join("\n")).toContain("is:pull-request");
     expect(items).toHaveLength(2);
     expect(items.map((item) => item.number).sort()).toEqual([456, 789]);
+    expect(items.find((item) => item.number === 456)?.isPullRequest).toBe(false);
+    expect(items.find((item) => item.number === 789)?.isPullRequest).toBe(true);
   });
 });

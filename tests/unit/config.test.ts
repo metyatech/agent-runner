@@ -54,7 +54,6 @@ describe("loadConfig", () => {
             }
           },
           labels: {
-            request: "agent:request",
             queued: "agent:queued",
             running: "agent:running",
             done: "agent:done",

@@ -17,11 +17,11 @@ describe("resolveTargetRepos", () => {
       author: "metyatech",
       repo: { owner: "metyatech", repo: "demo" },
       labels: [],
-      url: "https://github.com/metyatech/demo/issues/1"
+      url: "https://github.com/metyatech/demo/issues/1",
+      isPullRequest: false
     };
 
     const repos = resolveTargetRepos(issue, "metyatech");
     expect(repos.map((r) => r.repo)).toEqual(["demo", "other"]);
   });
 });
-

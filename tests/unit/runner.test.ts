@@ -17,7 +17,6 @@ describe("buildCodexInvocation", () => {
       {
         workdirRoot: "D:\\ghws",
         labels: {
-          request: "agent:request",
           queued: "agent:queued",
           running: "agent:running",
           done: "agent:done",
@@ -58,7 +57,6 @@ describe("buildCodexInvocation", () => {
         {
           workdirRoot: "D:\\ghws",
         labels: {
-          request: "agent:request",
           queued: "agent:queued",
           running: "agent:running",
           done: "agent:done",
@@ -106,7 +104,6 @@ describe("buildCodexInvocation", () => {
         {
           workdirRoot: "D:\\ghws",
           labels: {
-            request: "agent:request",
             queued: "agent:queued",
             running: "agent:running",
             done: "agent:done",
@@ -143,7 +140,6 @@ describe("buildAmazonQInvocation", () => {
       {
         workdirRoot: "D:\\ghws",
         labels: {
-          request: "agent:request",
           queued: "agent:queued",
           running: "agent:running",
           done: "agent:done",
@@ -180,7 +176,6 @@ describe("buildAmazonQInvocation", () => {
       {
         workdirRoot: "D:\\ghws",
         labels: {
-          request: "agent:request",
           queued: "agent:queued",
           running: "agent:running",
           done: "agent:done",
@@ -222,7 +217,6 @@ describe("buildGeminiInvocation", () => {
         {
           workdirRoot: tempDir,
           labels: {
-            request: "agent:request",
             queued: "agent:queued",
             running: "agent:running",
             done: "agent:done",
@@ -272,7 +266,8 @@ describe("buildIssueTaskText", () => {
     author: "metyatech",
     repo: { owner: "metyatech", repo: "agent-runner" },
     labels: [],
-    url: "https://github.com/metyatech/agent-runner/issues/123"
+    url: "https://github.com/metyatech/agent-runner/issues/123",
+    isPullRequest: false
   };
 
   it("includes issue title/body and omits agent-runner comments", () => {

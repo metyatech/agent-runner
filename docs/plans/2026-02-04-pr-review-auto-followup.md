@@ -14,7 +14,7 @@
 
 - **Managed PR**:
   - PR author is a bot (`*[*]bot`), OR
-  - PR already has `config.labels.request` (meaning it was previously run via `/agent run` / agent-runner flow).
+  - PR is recorded as managed in the runner state (set after `/agent run`, persisted under `state/managed-pull-requests.json`).
 - **Review feedback event**:
   - `pull_request_review_comment` (created), OR
   - `pull_request_review` (submitted with state `approved` or `changes_requested`, or non-empty body).
@@ -106,7 +106,7 @@ Run:
 Create a test that:
 - Sends a `pull_request_review_comment` webhook payload (not containing `/agent run`)
 - Mocks `client.getIssue()` to return an IssueInfo for a PR with `author: "agent-runner-bot[bot]"` (managed)
-- Asserts the PR is enqueued into review-queue and labels are refreshed for re-run (at minimum: `agent:request`)
+- Asserts the PR is enqueued into review-queue and labels are refreshed for re-run (e.g. clears terminal/busy labels and re-queues)
 
 **Step 2: Run test to verify it fails**
 
@@ -273,4 +273,3 @@ Run:
 - `npm run build`
 
 Expected: all green.
-

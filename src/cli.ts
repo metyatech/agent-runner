@@ -25,7 +25,7 @@ import {
   resolveAmazonQUsageStatePath
 } from "./amazon-q-usage.js";
 import { commandExists } from "./command-exists.js";
-import { listTargetRepos, listQueuedIssues, pickNextIssues, queueNewRequests } from "./queue.js";
+import { listTargetRepos, listQueuedIssues, pickNextIssues } from "./queue.js";
 import { planIdleTasks, runIdleTask, runIssue } from "./runner.js";
 import type { IdleEngine, IdleTaskResult } from "./runner.js";
 import { listLocalRepos } from "./local-repos.js";
@@ -113,35 +113,22 @@ async function maybeRunWebhookCatchup(options: {
     config.labels.needsUser
   ];
 
-  log("info", "Webhook catch-up scan: searching for missed /agent run comment requests and agent:request labels.", json, {
+  log("info", "Webhook catch-up scan: searching for missed /agent run comment requests.", json, {
     intervalMinutes: catchup.intervalMinutes,
     maxIssuesPerRun: maxIssues
   });
 
-  const lastRunAt = state.lastRunAt ? Date.parse(state.lastRunAt) : Number.NaN;
+  const parsedLastRunAt = state.lastRunAt ? Date.parse(state.lastRunAt) : Number.NaN;
+  const lastRunAt = Number.isNaN(parsedLastRunAt) ? now.getTime() - intervalMs : parsedLastRunAt;
   const commandStatePath = resolveAgentCommandStatePath(config.workdirRoot);
   let found: IssueInfo[] = [];
   try {
-    const byLabel = await client.searchOpenItemsByLabelAcrossOwner(config.owner, config.labels.request, {
-      excludeLabels,
-      perPage: 100,
-      maxPages: 1
-    });
     const byCommand = await client.searchOpenItemsByCommentPhraseAcrossOwner(config.owner, "/agent run", {
       excludeLabels,
       perPage: 100,
       maxPages: 1
     });
-    const seen = new Set<number>();
-    const merged: IssueInfo[] = [];
-    for (const item of [...byLabel, ...byCommand]) {
-      if (seen.has(item.id)) {
-        continue;
-      }
-      seen.add(item.id);
-      merged.push(item);
-    }
-    found = merged;
+    found = byCommand;
   } catch (error) {
     log("warn", "Webhook catch-up scan failed.", json, {
       error: error instanceof Error ? error.message : String(error)
@@ -166,62 +153,31 @@ async function maybeRunWebhookCatchup(options: {
       continue;
     }
 
-    if (Number.isNaN(lastRunAt)) {
-      if (!issue.labels.includes(config.labels.request)) {
+    let triggerCommentId: number | null = null;
+    const comments = await client.listIssueComments(issue);
+    for (const comment of comments) {
+      const createdAt = Date.parse(comment.createdAt);
+      if (Number.isNaN(createdAt) || createdAt <= lastRunAt) {
         continue;
       }
-      try {
-        await client.addLabels(issue, [config.labels.queued]);
-      } catch (error) {
-        hadErrors = true;
-        log("warn", "Failed to add queued label during catch-up.", json, {
-          issue: issue.url,
-          error: error instanceof Error ? error.message : String(error)
-        });
+      if (!isAllowedAuthorAssociation(comment.authorAssociation)) {
         continue;
       }
-      try {
-        await enqueueWebhookIssue(queuePath, issue);
-      } catch (error) {
-        hadErrors = true;
-        log("warn", "Failed to enqueue catch-up issue.", json, {
-          issue: issue.url,
-          error: error instanceof Error ? error.message : String(error)
-        });
+      if (parseAgentCommand(comment.body)?.kind !== "run") {
+        continue;
       }
+      const already = await hasProcessedAgentCommandComment(commandStatePath, comment.id);
+      if (already) {
+        continue;
+      }
+      triggerCommentId = comment.id;
+      break;
+    }
+    if (!triggerCommentId) {
       continue;
     }
-
-    const hasRequestLabel = issue.labels.includes(config.labels.request);
-    let shouldQueueByCommand = false;
-    let triggerCommentId: number | null = null;
-    if (!hasRequestLabel) {
-      const comments = await client.listIssueComments(issue);
-      for (const comment of comments) {
-        const createdAt = Date.parse(comment.createdAt);
-        if (Number.isNaN(createdAt) || createdAt <= lastRunAt) {
-          continue;
-        }
-        if (!isAllowedAuthorAssociation(comment.authorAssociation)) {
-          continue;
-        }
-        if (parseAgentCommand(comment.body)?.kind !== "run") {
-          continue;
-        }
-        const already = await hasProcessedAgentCommandComment(commandStatePath, comment.id);
-        if (already) {
-          continue;
-        }
-        shouldQueueByCommand = true;
-        triggerCommentId = comment.id;
-        break;
-      }
-      if (!shouldQueueByCommand) {
-        continue;
-      }
-    }
     try {
-      await client.addLabels(issue, hasRequestLabel ? [config.labels.queued] : [config.labels.request, config.labels.queued]);
+      await client.addLabels(issue, [config.labels.queued]);
     } catch (error) {
       hadErrors = true;
       log("warn", "Failed to add queued label during catch-up.", json, {
@@ -241,9 +197,7 @@ async function maybeRunWebhookCatchup(options: {
       continue;
     }
 
-    if (triggerCommentId) {
-      await markAgentCommandCommentProcessed(commandStatePath, triggerCommentId);
-    }
+    await markAgentCommandCommentProcessed(commandStatePath, triggerCommentId);
   }
 
   if (!hadErrors) {
@@ -298,7 +252,7 @@ async function resolveWebhookQueuedIssues(
       continue;
     }
 
-    if (!issue.labels.includes(config.labels.queued) && issue.labels.includes(config.labels.request)) {
+    if (!issue.labels.includes(config.labels.queued)) {
       if (dryRun) {
         log("info", `Dry-run: would add queued label to ${issue.url}`, json);
         issue.labels = [...issue.labels, config.labels.queued];
@@ -544,11 +498,11 @@ program
             continue;
           }
 
-          await client.addLabels(issue, [config.labels.request]);
+          await client.addLabels(issue, [config.labels.queued]);
           await tryRemoveLabel(issue, config.labels.needsUser);
           await tryRemoveLabel(issue, config.labels.failed);
+          await tryRemoveLabel(issue, config.labels.done);
           await tryRemoveLabel(issue, config.labels.running);
-          await tryRemoveLabel(issue, config.labels.queued);
           await client.comment(
             issue,
             buildAgentComment(
@@ -560,6 +514,97 @@ program
         }
       }
       return resumed;
+    };
+
+    const queueNewRequestsByAgentRunComment = async (repos: RepoInfo[]): Promise<IssueInfo[]> => {
+      const excludeLabels = [
+        config.labels.queued,
+        config.labels.running,
+        config.labels.done,
+        config.labels.failed,
+        config.labels.needsUser
+      ];
+      const commandStatePath = resolveAgentCommandStatePath(config.workdirRoot);
+      const allowedRepos = new Set(repos.map((repo) => `${repo.owner.toLowerCase()}/${repo.repo.toLowerCase()}`));
+
+      let found: IssueInfo[] = [];
+      try {
+        found = await client.searchOpenItemsByCommentPhraseAcrossOwner(config.owner, "/agent run", {
+          excludeLabels,
+          perPage: 100,
+          maxPages: 1
+        });
+      } catch (error) {
+        log("warn", "Failed to search for /agent run comment requests.", json, {
+          error: error instanceof Error ? error.message : String(error)
+        });
+        return [];
+      }
+
+      const queued: IssueInfo[] = [];
+      for (const issue of found) {
+        const key = `${issue.repo.owner.toLowerCase()}/${issue.repo.repo.toLowerCase()}`;
+        if (!allowedRepos.has(key)) {
+          continue;
+        }
+
+        let triggerCommentId: number | null = null;
+        try {
+          const comments = await client.listIssueComments(issue);
+          for (const comment of comments) {
+            if (!isAllowedAuthorAssociation(comment.authorAssociation)) {
+              continue;
+            }
+            if (parseAgentCommand(comment.body)?.kind !== "run") {
+              continue;
+            }
+            if (await hasProcessedAgentCommandComment(commandStatePath, comment.id)) {
+              continue;
+            }
+            triggerCommentId = comment.id;
+            break;
+          }
+        } catch (error) {
+          log("warn", "Failed to inspect /agent run comments; will retry.", json, {
+            issue: issue.url,
+            error: error instanceof Error ? error.message : String(error)
+          });
+          continue;
+        }
+
+        if (!triggerCommentId) {
+          continue;
+        }
+
+        if (dryRun) {
+          log("info", `Dry-run: would queue ${issue.url} via /agent run comment`, json);
+          queued.push(issue);
+          continue;
+        }
+
+        try {
+          await client.addLabels(issue, [config.labels.queued]);
+          queued.push(issue);
+        } catch (error) {
+          log("warn", "Failed to add queued label for /agent run request.", json, {
+            issue: issue.url,
+            error: error instanceof Error ? error.message : String(error)
+          });
+          continue;
+        }
+
+        try {
+          await markAgentCommandCommentProcessed(commandStatePath, triggerCommentId);
+        } catch (error) {
+          log("warn", "Failed to mark /agent run comment as processed.", json, {
+            issue: issue.url,
+            commentId: triggerCommentId,
+            error: error instanceof Error ? error.message : String(error)
+          });
+        }
+      }
+
+      return queued;
     };
 
     const runCycle = async (): Promise<void> => {
@@ -705,18 +750,16 @@ program
       const queuedIssues: IssueInfo[] = [];
       const queuedIds = new Set<number>();
       if (shouldPollIssues && !rateLimitedUntil) {
-        for (const repo of repos) {
-          const queued = await queueNewRequests(client, repo, config);
-          if (queued.length > 0) {
-            log("info", `Queued ${queued.length} requests in ${repo.repo}.`, json);
+        const queued = await queueNewRequestsByAgentRunComment(repos);
+        if (queued.length > 0) {
+          log("info", `Queued ${queued.length} request(s) via /agent run comments.`, json);
+        }
+        for (const issue of queued) {
+          if (queuedIds.has(issue.id)) {
+            continue;
           }
-          for (const issue of queued) {
-            if (queuedIds.has(issue.id)) {
-              continue;
-            }
-            queuedIds.add(issue.id);
-            queuedIssues.push(issue);
-          }
+          queuedIds.add(issue.id);
+          queuedIssues.push(issue);
         }
 
         for (const repo of repos) {

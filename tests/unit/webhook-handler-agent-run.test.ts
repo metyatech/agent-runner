@@ -15,7 +15,6 @@ function makeConfig(workdirRoot: string): AgentRunnerConfig {
     pollIntervalSeconds: 60,
     concurrency: 1,
     labels: {
-      request: "agent:request",
       queued: "agent:queued",
       running: "agent:running",
       done: "agent:done",
@@ -39,7 +38,8 @@ function makeIssueInfo(repo: RepoInfo): IssueInfo {
     author: "metyatech",
     repo,
     labels: [],
-    url: "https://github.com/metyatech/demo/issues/5"
+    url: "https://github.com/metyatech/demo/issues/5",
+    isPullRequest: false
   };
 }
 
@@ -101,17 +101,20 @@ describe("webhook-handler /agent run", () => {
       queuePath
     });
 
-    expect(calls.addLabels.flat()).toContain(config.labels.request);
     expect(calls.addLabels.flat()).toContain(config.labels.queued);
     expect(calls.comments.length).toBeGreaterThan(0);
     expect(loadWebhookQueue(queuePath)).toHaveLength(1);
+
+    const managedPath = path.join(root, "agent-runner", "state", "managed-pull-requests.json");
+    const managed = JSON.parse(fs.readFileSync(managedPath, "utf8")) as { managedPullRequests?: string[] };
+    expect(managed.managedPullRequests ?? []).toContain("metyatech/demo#5");
   });
 
   it("queues a PR review comment /agent run", async () => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), "agent-runner-webhook-agent-run-review-"));
     const config = makeConfig(root);
     const repo = makeRepo();
-    const issue = makeIssueInfo(repo);
+    const issue = { ...makeIssueInfo(repo), isPullRequest: true, url: "https://github.com/metyatech/demo/pull/5" };
     const queuePath = path.join(root, "agent-runner", "state", "webhook-queue.json");
 
     const calls: { comments: string[] } = { comments: [] };
@@ -148,6 +151,9 @@ describe("webhook-handler /agent run", () => {
 
     expect(calls.comments.length).toBeGreaterThan(0);
     expect(loadWebhookQueue(queuePath)).toHaveLength(1);
+
+    const managedPath = path.join(root, "agent-runner", "state", "managed-pull-requests.json");
+    const managed = JSON.parse(fs.readFileSync(managedPath, "utf8")) as { managedPullRequests?: string[] };
+    expect(managed.managedPullRequests ?? []).toContain("metyatech/demo#5");
   });
 });
-

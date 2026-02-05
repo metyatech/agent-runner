@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { buildAgentLabels } from "../../src/labels.js";
 
 describe("buildAgentLabels", () => {
-  it("returns six labeled definitions", () => {
+  it("returns five labeled definitions", () => {
     const labels = buildAgentLabels({
       owner: "metyatech",
       repos: "all",
@@ -10,7 +10,6 @@ describe("buildAgentLabels", () => {
       pollIntervalSeconds: 60,
       concurrency: 8,
       labels: {
-        request: "agent:request",
         queued: "agent:queued",
         running: "agent:running",
         done: "agent:done",
@@ -25,7 +24,6 @@ describe("buildAgentLabels", () => {
     });
 
     expect(labels.map((label) => label.name)).toEqual([
-      "agent:request",
       "agent:queued",
       "agent:running",
       "agent:done",

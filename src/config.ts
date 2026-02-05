@@ -80,7 +80,6 @@ export type AgentRunnerConfig = {
     };
   };
   labels: {
-    request: string;
     queued: string;
     running: string;
     done: string;

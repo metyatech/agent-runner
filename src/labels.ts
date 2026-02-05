@@ -9,11 +9,6 @@ export type LabelDefinition = {
 export function buildAgentLabels(config: AgentRunnerConfig): LabelDefinition[] {
   return [
     {
-      name: config.labels.request,
-      color: "0E8A16",
-      description: "Agent request awaiting triage."
-    },
-    {
       name: config.labels.queued,
       color: "FBCA04",
       description: "Queued for agent execution."

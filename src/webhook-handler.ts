@@ -7,6 +7,11 @@ import {
   markAgentCommandCommentProcessed,
   resolveAgentCommandStatePath
 } from "./agent-command-state.js";
+import {
+  isManagedPullRequest as isManagedPullRequestState,
+  markManagedPullRequest,
+  resolveManagedPullRequestsStatePath
+} from "./managed-pull-requests.js";
 import { enqueueWebhookIssue } from "./webhook-queue.js";
 import { enqueueReviewTask, resolveReviewQueuePath } from "./review-queue.js";
 import type { WebhookEvent } from "./webhook-server.js";
@@ -93,29 +98,9 @@ function parseIssue(payload: WebhookPayload, repo: RepoInfo): IssueInfo | null {
     author: issue.user?.login ?? null,
     repo,
     labels: parseLabels(issue.labels),
-    url: issue.html_url
+    url: issue.html_url,
+    isPullRequest: Boolean(issue.pull_request)
   };
-}
-
-function shouldQueueIssue(issue: IssueInfo, config: AgentRunnerConfig, labelHint?: string): boolean {
-  const requestLabel = config.labels.request;
-  const hasRequest = issue.labels.includes(requestLabel) || labelHint === requestLabel;
-  if (!hasRequest) {
-    return false;
-  }
-  if (issue.labels.includes(config.labels.running)) {
-    return false;
-  }
-  if (issue.labels.includes(config.labels.needsUser)) {
-    return false;
-  }
-  if (issue.labels.includes(config.labels.done)) {
-    return false;
-  }
-  if (issue.labels.includes(config.labels.failed)) {
-    return false;
-  }
-  return true;
 }
 
 function isBusyOrTerminal(issue: IssueInfo, config: AgentRunnerConfig): "running" | "queued" | "terminal" | null {
@@ -144,11 +129,15 @@ function isAgentRunnerBotLogin(login: string | null): boolean {
   return normalized.includes("agent-runner");
 }
 
-function isManagedPullRequest(issue: IssueInfo, config: AgentRunnerConfig): boolean {
-  if (issue.labels.includes(config.labels.request)) {
+async function isManagedPullRequest(issue: IssueInfo, config: AgentRunnerConfig): Promise<boolean> {
+  if (!issue.isPullRequest) {
+    return false;
+  }
+  if (isAgentRunnerBotLogin(issue.author ?? null)) {
     return true;
   }
-  return isAgentRunnerBotLogin(issue.author ?? null);
+  const statePath = resolveManagedPullRequestsStatePath(config.workdirRoot);
+  return isManagedPullRequestState(statePath, issue.repo, issue.number);
 }
 
 async function ensureQueued(
@@ -226,7 +215,10 @@ async function handleAgentRunCommand(options: {
     return;
   }
 
-  await client.addLabels(issue, [config.labels.request]);
+  if (issue.isPullRequest) {
+    const managedStatePath = resolveManagedPullRequestsStatePath(config.workdirRoot);
+    await markManagedPullRequest(managedStatePath, issue.repo, issue.number);
+  }
   await safeRemoveLabel(client, issue, config.labels.needsUser, onLog);
   await safeRemoveLabel(client, issue, config.labels.failed, onLog);
   await safeRemoveLabel(client, issue, config.labels.done, onLog);
@@ -260,11 +252,10 @@ async function handleReviewFollowup(options: {
     return;
   }
 
-  if (!isManagedPullRequest(issue, config)) {
+  if (!(await isManagedPullRequest(issue, config))) {
     return;
   }
 
-  await client.addLabels(issue, [config.labels.request]);
   await safeRemoveLabel(client, issue, config.labels.needsUser, onLog);
   await safeRemoveLabel(client, issue, config.labels.failed, onLog);
   await safeRemoveLabel(client, issue, config.labels.done, onLog);
@@ -310,25 +301,6 @@ export async function handleWebhookEvent(options: {
   }
 
   if (event.event === "issues") {
-    const issue = parseIssue(payload, repo);
-    if (!issue) {
-      return;
-    }
-    const action = payload.action ?? "";
-    const labelHint = payload.label?.name;
-    if (!["opened", "reopened", "labeled"].includes(action)) {
-      return;
-    }
-    if (!shouldQueueIssue(issue, config, labelHint)) {
-      return;
-    }
-    const queued = await ensureQueued(client, config, queuePath, issue);
-    if (queued) {
-      onLog?.("info", "Webhook queued issue.", {
-        issue: issue.url,
-        action
-      });
-    }
     return;
   }
 
@@ -364,7 +336,10 @@ export async function handleWebhookEvent(options: {
       return;
     }
 
-    await client.addLabels(issue, [config.labels.request]);
+    if (issue.isPullRequest) {
+      const managedStatePath = resolveManagedPullRequestsStatePath(config.workdirRoot);
+      await markManagedPullRequest(managedStatePath, issue.repo, issue.number);
+    }
     await safeRemoveLabel(client, issue, config.labels.needsUser, onLog);
     await safeRemoveLabel(client, issue, config.labels.failed, onLog);
     await safeRemoveLabel(client, issue, config.labels.running, onLog);

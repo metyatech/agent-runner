@@ -109,31 +109,6 @@ export async function listTargetRepos(
   }
 }
 
-export async function queueNewRequests(
-  client: GitHubClient,
-  repo: RepoInfo,
-  config: AgentRunnerConfig
-): Promise<IssueInfo[]> {
-  const requestIssues = await client.listIssuesByLabel(repo, config.labels.request);
-  const queued: IssueInfo[] = [];
-
-  for (const issue of requestIssues) {
-    if (
-      issue.labels.includes(config.labels.queued) ||
-      issue.labels.includes(config.labels.running) ||
-      issue.labels.includes(config.labels.done) ||
-      issue.labels.includes(config.labels.failed) ||
-      issue.labels.includes(config.labels.needsUser)
-    ) {
-      continue;
-    }
-    await client.addLabels(issue, [config.labels.queued]);
-    queued.push(issue);
-  }
-
-  return queued;
-}
-
 export async function listQueuedIssues(
   client: GitHubClient,
   repo: RepoInfo,

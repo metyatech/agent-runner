@@ -14,6 +14,7 @@ export type IssueInfo = {
   repo: RepoInfo;
   labels: string[];
   url: string;
+  isPullRequest: boolean;
 };
 
 export type IssueComment = {
@@ -182,6 +183,7 @@ export class GitHubClient {
         state: "open"
       });
       for (const issue of response.data) {
+        const isPullRequest = Boolean((issue as unknown as { pull_request?: unknown }).pull_request);
         issues.push({
           id: issue.id,
           number: issue.number,
@@ -190,7 +192,8 @@ export class GitHubClient {
           author: issue.user?.login ?? null,
           repo,
           labels: issue.labels.map((item) => (typeof item === "string" ? item : item.name ?? "")),
-          url: issue.html_url
+          url: issue.html_url,
+          isPullRequest
         });
       }
       if (response.data.length < 100) {
@@ -254,7 +257,8 @@ export class GitHubClient {
       author: match.user?.login ?? null,
       repo,
       labels: match.labels.map((item: any) => (typeof item === "string" ? item : item.name ?? "")),
-      url: match.html_url
+      url: match.html_url,
+      isPullRequest: false
     };
   }
 
@@ -309,7 +313,8 @@ export class GitHubClient {
           author: item.user?.login ?? null,
           repo,
           labels: item.labels.map((label: any) => (typeof label === "string" ? label : label.name ?? "")),
-          url: item.html_url
+          url: item.html_url,
+          isPullRequest: false
         });
       }
 
@@ -380,7 +385,8 @@ export class GitHubClient {
             author: item.user?.login ?? null,
             repo,
             labels: item.labels.map((label: any) => (typeof label === "string" ? label : label.name ?? "")),
-            url: item.html_url
+            url: item.html_url,
+            isPullRequest: "pull_request" in item
           });
           seen.add(item.id);
         }
@@ -453,7 +459,8 @@ export class GitHubClient {
             author: item.user?.login ?? null,
             repo,
             labels: item.labels.map((label: any) => (typeof label === "string" ? label : label.name ?? "")),
-            url: item.html_url
+            url: item.html_url,
+            isPullRequest: "pull_request" in item
           });
           seen.add(item.id);
         }
@@ -486,7 +493,8 @@ export class GitHubClient {
       author: response.data.user?.login ?? null,
       repo,
       labels: response.data.labels.map((item) => (typeof item === "string" ? item : item.name ?? "")),
-      url: response.data.html_url
+      url: response.data.html_url,
+      isPullRequest: false
     };
   }
 
@@ -567,7 +575,8 @@ export class GitHubClient {
         author: response.data.user?.login ?? null,
         repo,
         labels: response.data.labels.map((item) => (typeof item === "string" ? item : item.name ?? "")),
-        url: response.data.html_url
+        url: response.data.html_url,
+        isPullRequest: Boolean((response.data as unknown as { pull_request?: unknown }).pull_request)
       };
     } catch (error) {
       if (error instanceof Error && "status" in error) {

@@ -62,7 +62,6 @@ describe("repo-cache", () => {
         pollIntervalSeconds: 60,
         concurrency: 1,
         labels: {
-          request: "agent:request",
           queued: "agent:queued",
           running: "agent:running",
           done: "agent:done",

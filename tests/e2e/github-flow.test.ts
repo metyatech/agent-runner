@@ -179,7 +179,6 @@ describe("github flow", () => {
         pollIntervalSeconds: 60,
         concurrency: 1,
         labels: {
-          request: "agent:e2e-request",
           queued: "agent:e2e-queued",
           running: "agent:e2e-running",
           done: "agent:e2e-done",
@@ -205,13 +204,18 @@ describe("github flow", () => {
         repo: env.repo,
         title: `${titlePrefix} ${Date.now()}`,
         body: `### Goal\nValidate needs-user flow\n\n### Scope\nThis repository only\n\n### Repository list (if applicable)\n_No response_\n\n### Constraints\nNone\n\n### Autonomy\n- [x] Yes, proceed autonomously\n\n### Acceptance criteria\nNone`,
-        labels: [config.labels.request]
+        labels: []
       });
 
       const issueNumber = issue.data.number;
 
       try {
-        await waitForIssueLabel(octokit, issueNumber, config.labels.request);
+        await octokit.issues.createComment({
+          owner: env.owner,
+          repo: env.repo,
+          issue_number: issueNumber,
+          body: "/agent run"
+        });
 
         const failedLabels = await runUntilLabels(
           octokit,

@@ -5,7 +5,6 @@ Local agent runner that queues and executes GitHub Agent requests using Codex.
 ## Overview
 
 - Accepts requests from GitHub Issues / PRs via an issue comment: `/agent run` (recommended with webhooks).
-- Also supports label-based requests via `agent:request` (useful when polling without webhooks).
 - Queues requests, runs up to the configured concurrency, and posts results back to GitHub.
 - Runs each request in an isolated git worktree under `workdirRoot/agent-runner/work/` to avoid mixing changes across concurrent runs.
 - Runs idle maintenance tasks when no queued issues are available.
@@ -132,7 +131,7 @@ Config file: `agent-runner.config.json`
 - `webhooks.secretEnv`: Environment variable name holding the webhook secret
 - `webhooks.maxPayloadBytes`: Optional max payload size (bytes)
 - `webhooks.queueFile`: Optional path for the webhook queue file
-- `webhooks.catchup`: Optional low-frequency fallback scan (Search API) to catch requests missed while the webhook listener was down (looks for `/agent run` comments and `agent:request` labels)
+- `webhooks.catchup`: Optional low-frequency fallback scan (Search API) to catch requests missed while the webhook listener was down (looks for `/agent run` comments)
   - `webhooks.catchup.enabled`: Turn the catch-up scan on/off
   - `webhooks.catchup.intervalMinutes`: Minimum minutes between scans
 - `webhooks.catchup.maxIssuesPerRun`: Maximum issues to queue per scan
@@ -327,7 +326,7 @@ Recommended to avoid repo-wide polling and GitHub rate limits.
    for example `https://<tunnel-host>/webhooks/github`.
 2. Configure the webhook secret and store it in an environment variable
    (example: `AGENT_GITHUB_WEBHOOK_SECRET`).
-3. Subscribe to events: **Issues** and **Issue comment**.
+3. Subscribe to events: **Issue comment**, **Pull request review**, and **Pull request review comment**.
 4. Install the App on the repositories you want the runner to watch.
 5. Enable `webhooks` in `agent-runner.config.json` and start the webhook listener.
 
