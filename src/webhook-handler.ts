@@ -111,7 +111,7 @@ function isBusyOrTerminal(issue: IssueInfo, config: AgentRunnerConfig): "running
   if (issue.labels.includes(config.labels.queued)) {
     return "queued";
   }
-  if (issue.labels.includes(config.labels.needsUser)) {
+  if (issue.labels.includes(config.labels.needsUserReply)) {
     return "terminal";
   }
   if (issue.labels.includes(config.labels.done)) {
@@ -224,7 +224,7 @@ async function handleAgentRunCommand(options: {
     const managedStatePath = resolveManagedPullRequestsStatePath(config.workdirRoot);
     await markManagedPullRequest(managedStatePath, issue.repo, issue.number);
   }
-  await safeRemoveLabel(client, issue, config.labels.needsUser, onLog);
+  await safeRemoveLabel(client, issue, config.labels.needsUserReply, onLog);
   await safeRemoveLabel(client, issue, config.labels.failed, onLog);
   await safeRemoveLabel(client, issue, config.labels.done, onLog);
   await safeRemoveLabel(client, issue, config.labels.running, onLog);
@@ -261,7 +261,7 @@ async function handleReviewFollowup(options: {
     return;
   }
 
-  await safeRemoveLabel(client, issue, config.labels.needsUser, onLog);
+  await safeRemoveLabel(client, issue, config.labels.needsUserReply, onLog);
   await safeRemoveLabel(client, issue, config.labels.failed, onLog);
   await safeRemoveLabel(client, issue, config.labels.done, onLog);
   await safeRemoveLabel(client, issue, config.labels.running, onLog);
@@ -332,7 +332,7 @@ export async function handleWebhookEvent(options: {
       return;
     }
 
-    if (!issue.labels.includes(config.labels.needsUser)) {
+    if (!issue.labels.includes(config.labels.needsUserReply)) {
       return;
     }
 
@@ -345,7 +345,7 @@ export async function handleWebhookEvent(options: {
       const managedStatePath = resolveManagedPullRequestsStatePath(config.workdirRoot);
       await markManagedPullRequest(managedStatePath, issue.repo, issue.number);
     }
-    await safeRemoveLabel(client, issue, config.labels.needsUser, onLog);
+    await safeRemoveLabel(client, issue, config.labels.needsUserReply, onLog);
     await safeRemoveLabel(client, issue, config.labels.failed, onLog);
     await safeRemoveLabel(client, issue, config.labels.running, onLog);
     await safeRemoveLabel(client, issue, config.labels.queued, onLog);
@@ -503,3 +503,4 @@ export async function handleWebhookEvent(options: {
     }
   }
 }
+

@@ -4,6 +4,7 @@ import os from "node:os";
 import path from "node:path";
 import { spawn } from "node:child_process";
 import {
+  loadActivityState,
   recordActivity,
   resolveActivityStatePath
 } from "../../src/activity-state.js";
@@ -11,6 +12,28 @@ import { resolveRunnerStatePath } from "../../src/runner-state.js";
 import { buildStatusSnapshot } from "../../src/status-snapshot.js";
 
 describe("status-snapshot", () => {
+  it("prunes stale activity records from state", () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "agent-runner-status-"));
+    const statePath = resolveActivityStatePath(root);
+
+    recordActivity(statePath, {
+      id: "idle:stale",
+      kind: "idle",
+      repo: { owner: "metyatech", repo: "demo" },
+      startedAt: new Date().toISOString(),
+      pid: 0,
+      logPath: path.join(root, "stale.log"),
+      task: "demo"
+    });
+
+    const snapshot = buildStatusSnapshot(root);
+    expect(snapshot.running).toHaveLength(0);
+    expect(snapshot.stale).toHaveLength(0);
+
+    const state = loadActivityState(statePath);
+    expect(state.running).toHaveLength(0);
+  });
+
   it("marks busy when activity record is alive", async () => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), "agent-runner-status-"));
     const statePath = resolveActivityStatePath(root);

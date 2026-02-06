@@ -196,13 +196,13 @@
     },
     "labels": {
       "type": "object",
-      "required": ["queued", "running", "done", "failed", "needsUser"],
+      "required": ["queued", "running", "done", "failed", "needsUserReply"],
       "properties": {
         "queued": { "type": "string", "minLength": 1 },
         "running": { "type": "string", "minLength": 1 },
         "done": { "type": "string", "minLength": 1 },
         "failed": { "type": "string", "minLength": 1 },
-        "needsUser": { "type": "string", "minLength": 1 }
+        "needsUserReply": { "type": "string", "minLength": 1 }
       },
       "additionalProperties": false
     },
@@ -271,3 +271,4 @@
   },
   "additionalProperties": false
 }
+

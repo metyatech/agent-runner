@@ -4,6 +4,7 @@ import os from "node:os";
 import path from "node:path";
 import {
   loadActivityState,
+  pruneDeadActivityRecords,
   recordActivity,
   removeActivity,
   resolveActivityStatePath
@@ -32,5 +33,36 @@ describe("activity-state", () => {
     removeActivity(statePath, "issue:1");
     const cleared = loadActivityState(statePath);
     expect(cleared.running).toHaveLength(0);
+  });
+
+  it("prunes stale records while keeping alive records", () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "agent-runner-activity-"));
+    const statePath = resolveActivityStatePath(root);
+
+    recordActivity(statePath, {
+      id: "idle:alive",
+      kind: "idle",
+      repo: { owner: "metyatech", repo: "demo" },
+      startedAt: new Date().toISOString(),
+      pid: 100,
+      logPath: path.join(root, "alive.log"),
+      task: "alive"
+    });
+    recordActivity(statePath, {
+      id: "idle:dead",
+      kind: "idle",
+      repo: { owner: "metyatech", repo: "demo" },
+      startedAt: new Date().toISOString(),
+      pid: 200,
+      logPath: path.join(root, "dead.log"),
+      task: "dead"
+    });
+
+    const removed = pruneDeadActivityRecords(statePath, (pid) => pid === 100);
+    expect(removed).toBe(1);
+
+    const state = loadActivityState(statePath);
+    expect(state.running).toHaveLength(1);
+    expect(state.running[0].id).toBe("idle:alive");
   });
 });

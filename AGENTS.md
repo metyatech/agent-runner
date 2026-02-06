@@ -45,6 +45,7 @@ Source: github:metyatech/agent-rules@HEAD/rules/global/autonomous-operations.md
 - Do not preserve backward compatibility unless explicitly requested; avoid legacy aliases and compatibility shims by default.
 - When work reveals rule gaps, redundancy, or misplacement, proactively update rule modules/rulesets (including moves/renames) and regenerate AGENTS.md without waiting for explicit user requests.
 - After each task, run a brief retrospective; if you notice avoidable mistakes, missing checks, or recurring back-and-forth, encode the fix as a rule update and regenerate AGENTS.md.
+- Because session memory resets between tasks, treat rule files as persistent memory; when any issue or avoidable mistake occurs, update rules in the same task to prevent recurrence.
 - Treat these rules as the source of truth; do not override them with repository conventions. If a repo conflicts, update the repo to comply or update the rules to encode the exception; do not make undocumented exceptions.
 - When something is unclear, investigate to resolve it; do not proceed with unresolved material uncertainty. If still unclear, ask and include what you checked.
 - Do not proceed based on assumptions or guesses without explicit user approval; hypotheses may be discussed but must not drive action.
@@ -260,6 +261,8 @@ Source: github:metyatech/agent-rules@HEAD/rules/global/planning-and-approval-gat
   - Restate the request as concrete acceptance criteria (explicit goal, success/failure conditions).
   - Produce a written plan (use your planning tool when available) focused on the goal, approach, and verification checkpoints (do not enumerate per-file implementation details or exact commands unless the requester asks).
   - Confirm the plan with the requester, ask for approval explicitly, and wait for a clear “yes” before executing.
+  - Do not treat the original task request as plan approval; approval must be an explicit response to the presented plan.
+- If state-changing execution starts without the required post-plan “yes”, stop immediately, report the gate miss, add/update a prevention rule, regenerate AGENTS.md, and then restart from the approval gate.
 - No other exceptions: even if the user requests immediate execution (e.g., “skip planning”, “just do it”), treat that as a request to move quickly through this gate, not to bypass it.
 
 Source: github:metyatech/agent-rules@HEAD/rules/global/quality-testing-and-errors.md
@@ -427,3 +430,10 @@ Source: github:metyatech/agent-rules@HEAD/rules/domains/release/release-and-publ
 - Populate package metadata (name, description, repository, issues, homepage, engines).
 - Validate executable entrypoints and required shebangs so installed commands work.
 - If a repo represents a single tool/product, publish a single package (bundle related scripts).
+
+Source: agent-rules-local/operations.md
+
+# Local operations rules
+
+- After any change that requires a process or task restart to take effect, restart the affected local components before concluding.
+- Verify post-restart state and report which components were restarted and their final status.

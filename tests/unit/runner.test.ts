@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   buildAmazonQInvocation,
   buildCodexInvocation,
+  buildCodexResumeInvocation,
   buildGeminiInvocation,
   buildIssueTaskText
 } from "../../src/runner.js";
@@ -21,7 +22,7 @@ describe("buildCodexInvocation", () => {
           running: "agent:running",
           done: "agent:done",
           failed: "agent:failed",
-          needsUser: "agent:needs-user"
+          needsUserReply: "agent:needs-user"
         },
         owner: "metyatech",
         repos: "all",
@@ -39,6 +40,38 @@ describe("buildCodexInvocation", () => {
 
     expect(invocation.args.at(-1)).toBe("You are running an autonomous task.");
     expect(invocation.options.shell).toBe(false);
+  });
+
+  it("builds resume invocation with exec options", () => {
+    const invocation = buildCodexResumeInvocation(
+      {
+        workdirRoot: "D:\\ghws",
+        labels: {
+          queued: "agent:queued",
+          running: "agent:running",
+          done: "agent:done",
+          failed: "agent:failed",
+          needsUserReply: "agent:needs-user-reply"
+        },
+        owner: "metyatech",
+        repos: "all",
+        pollIntervalSeconds: 60,
+        concurrency: 1,
+        codex: {
+          command: "codex",
+          args: ["exec", "--dangerously-bypass-approvals-and-sandbox", "--model", "gpt-5.2"],
+          promptTemplate: "Template {{repos}} {{task}}"
+        }
+      },
+      "D:\\ghws\\repo",
+      "019c30f6-2bc4-7923-9d61-131e96ed35a9",
+      "Continue"
+    );
+
+    expect(invocation.args).toContain("resume");
+    expect(invocation.args).toContain("--dangerously-bypass-approvals-and-sandbox");
+    expect(invocation.args.at(-2)).toBe("019c30f6-2bc4-7923-9d61-131e96ed35a9");
+    expect(invocation.args.at(-1)).toBe("Continue");
   });
 
   it("resolves cmd shim on Windows when available", () => {
@@ -61,7 +94,7 @@ describe("buildCodexInvocation", () => {
           running: "agent:running",
           done: "agent:done",
           failed: "agent:failed",
-          needsUser: "agent:needs-user"
+          needsUserReply: "agent:needs-user"
         },
           owner: "metyatech",
           repos: "all",
@@ -108,7 +141,7 @@ describe("buildCodexInvocation", () => {
             running: "agent:running",
             done: "agent:done",
             failed: "agent:failed",
-            needsUser: "agent:needs-user"
+            needsUserReply: "agent:needs-user"
           },
           owner: "metyatech",
           repos: "all",
@@ -144,7 +177,7 @@ describe("buildAmazonQInvocation", () => {
           running: "agent:running",
           done: "agent:done",
           failed: "agent:failed",
-          needsUser: "agent:needs-user"
+          needsUserReply: "agent:needs-user"
         },
         owner: "metyatech",
         repos: "all",
@@ -180,7 +213,7 @@ describe("buildAmazonQInvocation", () => {
           running: "agent:running",
           done: "agent:done",
           failed: "agent:failed",
-          needsUser: "agent:needs-user"
+          needsUserReply: "agent:needs-user"
         },
         owner: "metyatech",
         repos: "all",
@@ -221,7 +254,7 @@ describe("buildGeminiInvocation", () => {
             running: "agent:running",
             done: "agent:done",
             failed: "agent:failed",
-            needsUser: "agent:needs-user"
+            needsUserReply: "agent:needs-user"
           },
           owner: "metyatech",
           repos: "all",
@@ -338,3 +371,4 @@ describe("buildIssueTaskText", () => {
     expect(text).toContain("…[truncated]");
   });
 });
+

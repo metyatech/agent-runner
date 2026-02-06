@@ -88,7 +88,7 @@
     "running": "agent:running",
     "done": "agent:done",
     "failed": "agent:failed",
-    "needsUser": "agent:needs-user"
+    "needsUserReply": "agent:needs-user-reply"
   },
   "codex": {
     "command": "codex",
@@ -132,3 +132,4 @@
     ]
   }
 }
+

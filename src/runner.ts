@@ -25,6 +25,7 @@ import { normalizeLogChunk } from "./log-normalize.js";
 import { resolveLogMaintenance, writeLatestPointer } from "./log-maintenance.js";
 import { buildGitHubNotifyChildEnv } from "./github-notify-env.js";
 import { resolveTargetRepos } from "./target-repos.js";
+import { fetchCodexRateLimits, rateLimitSnapshotToStatus } from "./codex-status.js";
 import {
   createWorktreeForRemoteBranch,
   createWorktreeFromDefaultBranch,
@@ -34,12 +35,20 @@ import {
   resolveRunWorkRoot
 } from "./git-worktree.js";
 
+export type RunFailureKind = "quota" | "needs_user_reply" | "execution_error";
+export type RunFailureStage = "before_session" | "after_session";
+
 export type RunResult = {
   success: boolean;
   logPath: string;
   repos: RepoInfo[];
   summary: string | null;
   activityId: string | null;
+  sessionId: string | null;
+  failureKind: RunFailureKind | null;
+  failureStage: RunFailureStage | null;
+  failureDetail: string | null;
+  quotaResumeAt: string | null;
 };
 
 export type IdleEngine = "codex" | "copilot" | "gemini-pro" | "gemini-flash" | "amazon-q";
@@ -329,6 +338,44 @@ export function buildCodexInvocation(
   };
 }
 
+function resolveCodexExecArgs(config: AgentRunnerConfig): string[] {
+  if (config.codex.args.length === 0) {
+    return [];
+  }
+  return config.codex.args[0] === "exec" ? config.codex.args.slice(1) : config.codex.args.slice();
+}
+
+export function buildCodexResumeInvocation(
+  config: AgentRunnerConfig,
+  primaryPath: string,
+  sessionId: string,
+  prompt: string,
+  options: { envOverrides?: NodeJS.ProcessEnv } = {}
+): EngineInvocation {
+  const resolved = resolveCodexCommand(config.codex.command, process.env.PATH);
+  const execArgs = resolveCodexExecArgs(config);
+  const envOverrides = options.envOverrides ?? {};
+  const args = [
+    ...resolved.prefixArgs,
+    "exec",
+    "resume",
+    ...execArgs,
+    "--skip-git-repo-check",
+    sessionId,
+    prompt
+  ];
+
+  return {
+    command: resolved.command,
+    args,
+    options: {
+      cwd: primaryPath,
+      shell: false,
+      env: { ...process.env, ...envOverrides }
+    }
+  };
+}
+
 export function buildCopilotInvocation(
   config: AgentRunnerConfig,
   primaryPath: string,
@@ -352,10 +399,221 @@ export function buildCopilotInvocation(
   };
 }
 
+type IssueRunMode = "new" | "resume";
+
+type IssueAttemptResult = {
+  exitCode: number;
+  outputTail: string;
+  sessionId: string | null;
+};
+
+const SESSION_ID_REGEX = /session id:\s*([0-9a-z-]{8,})/i;
+const QUOTA_ERROR_PATTERNS = [
+  /usage limit/i,
+  /quota[^.\n]*(exceeded|reached|exhausted)/i,
+  /rate limit/i,
+  /too many requests/i,
+  /insufficient credits/i,
+  /credits?[^.\n]*(depleted|exhausted)/i
+];
+const NEEDS_USER_REPLY_PATTERNS = [
+  /need(?:s)?(?:\s+more)?\s+(?:input|details|clarification|reply|response)/i,
+  /waiting for (?:the )?user/i,
+  /awaiting (?:the )?user/i,
+  /please reply/i,
+  /ask (?:the )?user/i
+];
+const MISSING_SESSION_PATTERNS = [
+  /session[^.\n]*not found/i,
+  /no matching session/i,
+  /could not find[^.\n]*session/i,
+  /unknown session/i
+];
+const MAX_OUTPUT_TAIL_CHARS = 200_000;
+const MAX_RESUME_ATTEMPTS = 30;
+
+function keepTail(value: string, limit: number = MAX_OUTPUT_TAIL_CHARS): string {
+  if (value.length <= limit) {
+    return value;
+  }
+  return value.slice(value.length - limit);
+}
+
+function stripAnsi(value: string): string {
+  return value.replace(/\u001b\[[0-9;]*m/g, "");
+}
+
+function detectSessionId(value: string): string | null {
+  const match = stripAnsi(value).match(SESSION_ID_REGEX);
+  return match?.[1] ?? null;
+}
+
+function hasPattern(value: string, patterns: RegExp[]): boolean {
+  const cleaned = stripAnsi(value);
+  return patterns.some((pattern) => pattern.test(cleaned));
+}
+
+function extractFailureDetail(value: string): string | null {
+  const lines = stripAnsi(value)
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter((line) => line.length > 0);
+  if (lines.length === 0) {
+    return null;
+  }
+  const candidates = lines.filter(
+    (line) =>
+      /error|failed|limit|quota|denied|timeout|exception/i.test(line) &&
+      !/^exec$/i.test(line) &&
+      !/^thinking$/i.test(line)
+  );
+  const chosen = (candidates.at(-1) ?? lines.at(-1) ?? "").trim();
+  return chosen.length > 0 ? chosen : null;
+}
+
+function isLikelyMissingSessionError(value: string): boolean {
+  return hasPattern(value, MISSING_SESSION_PATTERNS);
+}
+
+function resolveQuotaRunAfter(statusRaw: ReturnType<typeof rateLimitSnapshotToStatus>): Date | null {
+  if (!statusRaw || statusRaw.windows.length === 0) {
+    return null;
+  }
+  const weekly = statusRaw.windows.find((window) => window.key === "weekly");
+  const fiveHour = statusRaw.windows.find((window) => window.key === "fiveHour");
+
+  if (weekly && weekly.percentLeft <= 0) {
+    return weekly.resetAt;
+  }
+  if (fiveHour && fiveHour.percentLeft <= 0) {
+    return fiveHour.resetAt;
+  }
+
+  const sorted = statusRaw.windows
+    .map((window) => window.resetAt)
+    .filter((date) => Number.isFinite(date.getTime()))
+    .sort((a, b) => a.getTime() - b.getTime());
+  return sorted[0] ?? null;
+}
+
+async function resolveQuotaResumeAt(config: AgentRunnerConfig): Promise<string | null> {
+  const gate = config.idle?.usageGate;
+  const command = gate?.command ?? config.codex.command;
+  const args = gate?.args ?? [];
+  const timeoutSeconds = gate?.timeoutSeconds ?? 20;
+  const snapshot = await fetchCodexRateLimits(command, args, timeoutSeconds, config.workdirRoot);
+  const status = snapshot ? rateLimitSnapshotToStatus(snapshot, new Date()) : null;
+  const runAfter = resolveQuotaRunAfter(status);
+  return runAfter ? runAfter.toISOString() : null;
+}
+
+async function runCodexAttempt(options: {
+  mode: IssueRunMode;
+  config: AgentRunnerConfig;
+  issue: IssueInfo;
+  primaryPath: string;
+  workRoot: string;
+  prompt: string;
+  resumeSessionId: string | null;
+  logPath: string;
+  activityPath: string;
+  statePath: string;
+  activityId: string;
+  envOverrides: NodeJS.ProcessEnv;
+}): Promise<IssueAttemptResult> {
+  const invocation =
+    options.mode === "resume" && options.resumeSessionId
+      ? buildCodexResumeInvocation(
+          options.config,
+          options.primaryPath,
+          options.resumeSessionId,
+          options.prompt,
+          { envOverrides: options.envOverrides }
+        )
+      : buildCodexInvocation(options.config, options.primaryPath, options.prompt, {
+          envOverrides: options.envOverrides,
+          addDir: options.workRoot
+        });
+
+  const appendLog = (value: string): void => {
+    fs.appendFileSync(options.logPath, value);
+  };
+
+  return new Promise<IssueAttemptResult>((resolve, reject) => {
+    const child = spawn(invocation.command, invocation.args, invocation.options);
+    let outputTail = "";
+    let sessionId: string | null = null;
+
+    if (invocation.stdin && child.stdin) {
+      try {
+        child.stdin.write(invocation.stdin);
+        child.stdin.end();
+      } catch {
+        // best-effort: proceed without stdin if writing fails
+      }
+    }
+
+    if (typeof child.pid === "number") {
+      const startedAt = new Date().toISOString();
+      recordRunningIssue(options.statePath, {
+        issueId: options.issue.id,
+        issueNumber: options.issue.number,
+        repo: options.issue.repo,
+        startedAt,
+        pid: child.pid,
+        logPath: options.logPath
+      });
+      recordActivity(options.activityPath, {
+        id: options.activityId,
+        kind: "issue",
+        engine: "codex",
+        repo: options.issue.repo,
+        startedAt,
+        pid: child.pid,
+        logPath: options.logPath,
+        issueId: options.issue.id,
+        issueNumber: options.issue.number
+      });
+    }
+
+    const handleChunk = (chunk: Buffer): string => {
+      const normalized = normalizeLogChunk(chunk);
+      appendLog(normalized);
+      outputTail = keepTail(outputTail + normalized);
+      const detected = detectSessionId(normalized);
+      if (detected) {
+        sessionId = detected;
+      }
+      return normalized;
+    };
+
+    child.stdout.on("data", (chunk: Buffer) => {
+      process.stdout.write(handleChunk(chunk));
+    });
+    child.stderr.on("data", (chunk: Buffer) => {
+      process.stderr.write(handleChunk(chunk));
+    });
+
+    child.on("error", (error) => {
+      removeRunningIssue(options.statePath, options.issue.id);
+      reject(error);
+    });
+    child.on("close", (code) => {
+      removeRunningIssue(options.statePath, options.issue.id);
+      resolve({
+        exitCode: code ?? 1,
+        outputTail,
+        sessionId: sessionId ?? detectSessionId(outputTail)
+      });
+    });
+  });
+}
+
 export async function runIssue(
   client: GitHubClient,
   config: AgentRunnerConfig,
-  issue: IssueInfo
+  issue: IssueInfo,
+  options: { resumeSessionId?: string | null; resumePrompt?: string | null } = {}
 ): Promise<RunResult> {
   const repos = resolveTargetRepos(issue, config.owner);
   const comments = await client.listIssueComments(issue);
@@ -418,112 +676,142 @@ export async function runIssue(
     }
 
     const prompt = renderPrompt(config.codex.promptTemplate, repos, issue, comments, reviewComments);
+    const resumePrompt = options.resumePrompt?.trim() ? options.resumePrompt : prompt;
 
-  const logDir = path.resolve(config.workdirRoot, "agent-runner", "logs");
-  fs.mkdirSync(logDir, { recursive: true });
-  const logPath = path.join(
-    logDir,
-    `${issue.repo.repo}-issue-${issue.number}-${Date.now()}.log`
-  );
-  if (resolveLogMaintenance(config).writeLatestPointers) {
-    writeLatestPointer(logDir, "issue", logPath);
-  }
+    const logDir = path.resolve(config.workdirRoot, "agent-runner", "logs");
+    fs.mkdirSync(logDir, { recursive: true });
+    const logPath = path.join(
+      logDir,
+      `${issue.repo.repo}-issue-${issue.number}-${Date.now()}.log`
+    );
+    if (resolveLogMaintenance(config).writeLatestPointers) {
+      writeLatestPointer(logDir, "issue", logPath);
+    }
 
-  const appendLog = (value: string): void => {
-    fs.appendFileSync(logPath, value);
-  };
-  const statePath = resolveRunnerStatePath(config.workdirRoot);
-  const activityPath = resolveActivityStatePath(config.workdirRoot);
-
-  const notifyEnv = await buildGitHubNotifyChildEnv(config.workdirRoot);
-  const invocation = buildCodexInvocation(config, primaryPath, prompt, {
-    envOverrides: {
+    const statePath = resolveRunnerStatePath(config.workdirRoot);
+    const activityPath = resolveActivityStatePath(config.workdirRoot);
+    const activityId = `issue:${issue.id}`;
+    const notifyEnv = await buildGitHubNotifyChildEnv(config.workdirRoot);
+    const envOverrides: NodeJS.ProcessEnv = {
       ...notifyEnv,
       AGENT_RUNNER_WORKROOT: workRoot,
       AGENT_RUNNER_PRIMARY_REPO: `${primaryRepo.owner}/${primaryRepo.repo}`,
       AGENT_RUNNER_PRIMARY_REPO_PATH: primaryPath
-    },
-    addDir: workRoot
-  });
+    };
 
-  let recordWritten = false;
-  let activityRecorded = false;
-  let activityId: string | null = null;
-  let exitCode = 1;
+    let mode: IssueRunMode = options.resumeSessionId ? "resume" : "new";
+    let latestSessionId: string | null = options.resumeSessionId ?? null;
+    let currentPrompt = mode === "resume" ? resumePrompt : prompt;
+    let attempt = 0;
 
-  try {
-    exitCode = await new Promise<number>((resolve, reject) => {
-      const child = spawn(invocation.command, invocation.args, invocation.options);
-      if (invocation.stdin && child.stdin) {
-        try {
-          child.stdin.write(invocation.stdin);
-          child.stdin.end();
-        } catch {
-          // best-effort: proceed without stdin if writing fails
-        }
-      }
-
-      if (typeof child.pid === "number") {
-        const startedAt = new Date().toISOString();
-        recordRunningIssue(statePath, {
-          issueId: issue.id,
-          issueNumber: issue.number,
-          repo: issue.repo,
-          startedAt,
-          pid: child.pid,
-          logPath
-        });
-        recordWritten = true;
-        activityId = `issue:${issue.id}`;
-        recordActivity(activityPath, {
-          id: activityId,
-          kind: "issue",
-          engine: "codex",
-          repo: issue.repo,
-          startedAt,
-          pid: child.pid,
+    try {
+      while (true) {
+        attempt += 1;
+        const result = await runCodexAttempt({
+          mode,
+          config,
+          issue,
+          primaryPath,
+          workRoot,
+          prompt: currentPrompt,
+          resumeSessionId: latestSessionId,
           logPath,
-          issueId: issue.id,
-          issueNumber: issue.number
+          activityPath,
+          statePath,
+          activityId,
+          envOverrides
         });
-        activityRecorded = true;
+
+        if (result.sessionId) {
+          latestSessionId = result.sessionId;
+        }
+
+        const summary = extractSummaryFromLog(logPath);
+        if (result.exitCode === 0) {
+          return {
+            success: true,
+            logPath,
+            repos,
+            summary,
+            activityId,
+            sessionId: latestSessionId,
+            failureKind: null,
+            failureStage: null,
+            failureDetail: null,
+            quotaResumeAt: null
+          };
+        }
+
+        const stage: RunFailureStage = latestSessionId ? "after_session" : "before_session";
+        const quotaFailure = hasPattern(result.outputTail, QUOTA_ERROR_PATTERNS);
+        if (quotaFailure) {
+          let quotaResumeAt: string | null = null;
+          try {
+            quotaResumeAt = await resolveQuotaResumeAt(config);
+          } catch {
+            quotaResumeAt = null;
+          }
+          return {
+            success: false,
+            logPath,
+            repos,
+            summary,
+            activityId,
+            sessionId: latestSessionId,
+            failureKind: "quota",
+            failureStage: stage,
+            failureDetail: extractFailureDetail(result.outputTail),
+            quotaResumeAt
+          };
+        }
+
+        if (hasPattern(result.outputTail, NEEDS_USER_REPLY_PATTERNS)) {
+          return {
+            success: false,
+            logPath,
+            repos,
+            summary,
+            activityId,
+            sessionId: latestSessionId,
+            failureKind: "needs_user_reply",
+            failureStage: stage,
+            failureDetail: extractFailureDetail(result.outputTail),
+            quotaResumeAt: null
+          };
+        }
+
+        if (mode === "resume" && isLikelyMissingSessionError(result.outputTail) && attempt < MAX_RESUME_ATTEMPTS) {
+          mode = "new";
+          latestSessionId = null;
+          currentPrompt = prompt;
+          continue;
+        }
+
+        if (stage === "after_session" && attempt < MAX_RESUME_ATTEMPTS) {
+          mode = "resume";
+          currentPrompt =
+            "The previous execution ended unexpectedly. Continue this same session and complete the original task. " +
+            "If additional user input is required, explicitly ask for it.";
+          continue;
+        }
+
+        return {
+          success: false,
+          logPath,
+          repos,
+          summary,
+          activityId,
+          sessionId: latestSessionId,
+          failureKind: "execution_error",
+          failureStage: stage,
+          failureDetail: extractFailureDetail(result.outputTail),
+          quotaResumeAt: null
+        };
       }
-
-      child.stdout.on("data", (chunk) => {
-        const normalized = normalizeLogChunk(chunk);
-        appendLog(normalized);
-        process.stdout.write(normalized);
-      });
-
-      child.stderr.on("data", (chunk) => {
-        const normalized = normalizeLogChunk(chunk);
-        appendLog(normalized);
-        process.stderr.write(normalized);
-      });
-
-      child.on("error", (error) => reject(error));
-      child.on("close", (code) => resolve(code ?? 1));
-    });
-  } catch (error) {
-    if (activityRecorded && activityId) {
+    } catch (error) {
       removeActivity(activityPath, activityId);
+      throw error;
     }
-    throw error;
-  } finally {
-    if (recordWritten) {
-      removeRunningIssue(statePath, issue.id);
-    }
-  }
-
-  const summary = extractSummaryFromLog(logPath);
-
-  return {
-    success: exitCode === 0,
-    logPath,
-    repos,
-    summary,
-    activityId
-  };
   } finally {
     for (const entry of prepared) {
       await removeWorktree({

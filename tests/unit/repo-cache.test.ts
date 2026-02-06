@@ -66,7 +66,7 @@ describe("repo-cache", () => {
           running: "agent:running",
           done: "agent:done",
           failed: "agent:failed",
-          needsUser: "agent:needs-user"
+          needsUserReply: "agent:needs-user"
         },
         codex: {
           command: "codex",
@@ -83,3 +83,4 @@ describe("repo-cache", () => {
     expect(result.repos[0].repo).toBe("demo");
   });
 });
+

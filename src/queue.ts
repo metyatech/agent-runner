@@ -118,7 +118,7 @@ export async function listQueuedIssues(
   return queuedIssues.filter(
     (issue) =>
       !issue.labels.includes(config.labels.running) &&
-      !issue.labels.includes(config.labels.needsUser)
+      !issue.labels.includes(config.labels.needsUserReply)
   );
 }
 
@@ -128,3 +128,4 @@ export function pickNextIssues(issues: IssueInfo[], limit: number): IssueInfo[] 
     .sort((a, b) => a.number - b.number)
     .slice(0, limit);
 }
+

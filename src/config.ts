@@ -84,7 +84,7 @@ export type AgentRunnerConfig = {
     running: string;
     done: string;
     failed: string;
-    needsUser: string;
+    needsUserReply: string;
   };
   codex: {
     command: string;
@@ -140,3 +140,6 @@ export function loadConfig(configPath: string): AgentRunnerConfig {
 
   return json as AgentRunnerConfig;
 }
+
+
+

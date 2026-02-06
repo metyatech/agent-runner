@@ -7,6 +7,11 @@ param(
 $ErrorActionPreference = "Stop"
 Set-StrictMode -Version Latest
 
+$utf8 = New-Object System.Text.UTF8Encoding($false)
+[Console]::OutputEncoding = $utf8
+$OutputEncoding = $utf8
+$PSDefaultParameterValues["Out-File:Encoding"] = "utf8"
+
 $hideConsole = {
   try {
     Add-Type -Namespace AgentRunner -Name Win32 -MemberDefinition @"

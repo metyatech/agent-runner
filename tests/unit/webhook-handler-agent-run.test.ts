@@ -19,7 +19,7 @@ function makeConfig(workdirRoot: string): AgentRunnerConfig {
       running: "agent:running",
       done: "agent:done",
       failed: "agent:failed",
-      needsUser: "agent:needs-user"
+      needsUserReply: "agent:needs-user"
     },
     codex: { command: "codex", args: [], promptTemplate: "" }
   };
@@ -157,3 +157,4 @@ describe("webhook-handler /agent run", () => {
     expect(managed.managedPullRequests ?? []).toContain("metyatech/demo#5");
   });
 });
+

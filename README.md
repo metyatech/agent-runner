@@ -117,7 +117,8 @@ Config file: `agent-runner.config.json`
 - `logMaintenance`: Optional log pruning settings (applied automatically on startup and via `agent-runner logs prune`)
 - `reportMaintenance`: Optional report pruning settings (applied automatically on startup and via `agent-runner reports prune`)
 - `labels`: Workflow labels
-- `labels.needsUser`: Label for requests awaiting user reply after a failure
+- `labels.failed`: Label for execution failures
+- `labels.needsUserReply`: Label for paused runs that require a user reply
 - `codex`: Codex CLI command and prompt template
 - `codex.args`: Default config runs with full access (`--dangerously-bypass-approvals-and-sandbox`); change this if you want approvals or sandboxing.
 - `codex.promptTemplate`: The runner expects a summary block in the output to post to the issue thread.
@@ -351,18 +352,24 @@ Ensure required agent labels exist in all repositories:
 node dist/cli.js labels sync --yes
 ```
 
-## Failure replies
+## Failure and pause behavior
 
-When a run fails, the runner adds `agent:needs-user` and comments with a reply request.
-Reply on the issue with any fixes or details; the runner will detect your response,
-remove the failure labels, and re-queue the request automatically.
+- `queued`: waiting for an available worker slot
+- `running`: currently executing in Codex
+- `failed`: execution failed (error path)
+- `needsUserReply`: execution paused because the agent explicitly needs user input
 
-The runner also includes recent user replies from the issue comments in the next prompt
-(limited and truncated to avoid prompt bloat), so you typically do not need to edit the
-original issue body when providing additional details.
+Quota handling:
+- If Codex usage limit is hit, the runner marks the issue as `failed`, posts the next retry time, and automatically re-queues at or after that time.
+- Retry scheduling is persisted on disk, so it still resumes correctly after host restart/offline periods.
 
-If a request is labeled `agent:running` but the tracked process exits,
-the runner marks it as failed + needs-user and asks for a reply.
+User-reply handling:
+- When a run pauses for user input, the runner applies `needsUserReply`.
+- After the user replies, the runner re-queues and resumes from the previous Codex session when available.
+
+The runner includes recent user replies in the next prompt (limited and truncated) so the issue body usually does not need edits.
+
+If a request is labeled `agent:running` but the tracked process exits, the runner marks it as `failed` and asks to re-run with `/agent run`.
 
 ## Windows Task Scheduler
 
@@ -561,4 +568,5 @@ is running in the background.
 ## Release / deploy
 
 Not applicable. This repository is intended to run locally.
+
 

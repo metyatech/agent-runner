@@ -2,6 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import {
   loadActivityState,
+  pruneDeadActivityRecords,
   resolveActivityStatePath,
   type ActivityRecord
 } from "./activity-state.js";
@@ -152,6 +153,7 @@ export function buildStatusSnapshot(workdirRoot: string): StatusSnapshot {
 
   if (fs.existsSync(statePath)) {
     try {
+      pruneDeadActivityRecords(statePath);
       const state = loadActivityState(statePath);
       activityUpdatedAt = state.updatedAt;
       records = state.running.slice();

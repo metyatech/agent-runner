@@ -14,4 +14,10 @@ describe("normalizeLogChunk", () => {
     expect(output).toBe("Status OK\n");
     expect(output).not.toContain("\u0000");
   });
+
+  it("normalizes carriage-return-only line breaks", () => {
+    const input = "line1\rline2\r\nline3\r";
+    const output = normalizeLogChunk(input);
+    expect(output).toBe("line1\nline2\r\nline3\n");
+  });
 });

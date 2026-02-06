@@ -1,10 +1,11 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import type { IssueInfo } from "../../src/github.js";
 import {
   evaluateRunningIssues,
+  isProcessAlive,
   loadRunnerState,
   recordRunningIssue,
   removeRunningIssue,
@@ -69,5 +70,19 @@ describe("runner-state", () => {
     const result = evaluateRunningIssues([issueA, issueB], state, (pid) => pid === 123);
     expect(result.deadProcess.map((entry) => entry.issue.id)).toEqual([issueA.id]);
     expect(result.missingRecord.map((entry) => entry.id)).toEqual([issueB.id]);
+  });
+
+  it("treats EPERM from process.kill(pid, 0) as alive", () => {
+    const spy = vi.spyOn(process, "kill").mockImplementation(() => {
+      const error = new Error("permission denied") as NodeJS.ErrnoException;
+      error.code = "EPERM";
+      throw error;
+    });
+
+    try {
+      expect(isProcessAlive(123)).toBe(true);
+    } finally {
+      spy.mockRestore();
+    }
   });
 });

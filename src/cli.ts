@@ -37,7 +37,7 @@ import {
 } from "./runner-state.js";
 import { startStatusServer } from "./status-server.js";
 import { buildStatusSnapshot } from "./status-snapshot.js";
-import { removeActivity, resolveActivityStatePath } from "./activity-state.js";
+import { pruneDeadActivityRecords, removeActivity, resolveActivityStatePath } from "./activity-state.js";
 import { clearStopRequest, isStopRequested, requestStop } from "./stop-flag.js";
 import { handleWebhookEvent } from "./webhook-handler.js";
 import { startWebhookServer } from "./webhook-server.js";
@@ -78,6 +78,18 @@ import {
   markManagedPullRequest,
   resolveManagedPullRequestsStatePath
 } from "./managed-pull-requests.js";
+import {
+  clearIssueSession,
+  getIssueSession,
+  resolveIssueSessionStatePath,
+  setIssueSession
+} from "./issue-session-state.js";
+import {
+  clearRetry,
+  resolveScheduledRetryStatePath,
+  scheduleRetry,
+  takeDueRetries
+} from "./scheduled-retry-state.js";
 
 const program = new Command();
 
@@ -124,7 +136,7 @@ async function maybeRunWebhookCatchup(options: {
     config.labels.running,
     config.labels.done,
     config.labels.failed,
-    config.labels.needsUser
+    config.labels.needsUserReply
   ];
 
   log("info", "Webhook catch-up scan: searching for missed /agent run comment requests.", json, {
@@ -276,7 +288,7 @@ async function maybeEnqueueManagedPullRequestReviewFollowups(options: {
     if (
       issue.labels.includes(config.labels.queued) ||
       issue.labels.includes(config.labels.running) ||
-      issue.labels.includes(config.labels.needsUser) ||
+      issue.labels.includes(config.labels.needsUserReply) ||
       issue.labels.includes(config.labels.failed)
     ) {
       continue;
@@ -424,7 +436,7 @@ async function resolveWebhookQueuedIssues(
 
     if (
       issue.labels.includes(config.labels.running) ||
-      issue.labels.includes(config.labels.needsUser) ||
+      issue.labels.includes(config.labels.needsUserReply) ||
       issue.labels.includes(config.labels.done) ||
       issue.labels.includes(config.labels.failed)
     ) {
@@ -555,6 +567,8 @@ program
     const notify = createGitHubNotifyClient(config.workdirRoot);
     const notifyClient = notify?.client ?? null;
     const notifySource = notify?.source ?? null;
+    const issueSessionStatePath = resolveIssueSessionStatePath(config.workdirRoot);
+    const scheduledRetryStatePath = resolveScheduledRetryStatePath(config.workdirRoot);
     if (notifyClient) {
       log(
         "info",
@@ -662,10 +676,65 @@ program
       }
     };
 
+    const formatResumeTime = (isoText: string): { iso: string; local: string } => {
+      const parsed = new Date(isoText);
+      if (Number.isNaN(parsed.getTime())) {
+        return { iso: isoText, local: isoText };
+      }
+      return {
+        iso: parsed.toISOString(),
+        local: parsed.toLocaleString(undefined, { timeZoneName: "short" })
+      };
+    };
+
+    const enqueueDueScheduledRetries = async (): Promise<number> => {
+      if (dryRun) {
+        return 0;
+      }
+
+      const due = takeDueRetries(scheduledRetryStatePath, new Date());
+      if (due.length === 0) {
+        return 0;
+      }
+
+      let resumed = 0;
+      for (const entry of due) {
+        const issue = await client.getIssue(entry.repo, entry.issueNumber);
+        if (!issue) {
+          clearIssueSession(issueSessionStatePath, entry.issueId);
+          continue;
+        }
+
+        await client.addLabels(issue, [config.labels.queued]);
+        await tryRemoveLabel(issue, config.labels.running);
+        await tryRemoveLabel(issue, config.labels.failed);
+        await tryRemoveLabel(issue, config.labels.done);
+        await tryRemoveLabel(issue, config.labels.needsUserReply);
+
+        if (entry.sessionId) {
+          setIssueSession(issueSessionStatePath, issue, entry.sessionId);
+        }
+
+        if (webhooksEnabled && webhookQueuePath) {
+          try {
+            await enqueueWebhookIssue(webhookQueuePath, issue);
+          } catch (error) {
+            log("warn", "Failed to enqueue scheduled retry in webhook queue.", json, {
+              issue: issue.url,
+              error: error instanceof Error ? error.message : String(error)
+            });
+          }
+        }
+        resumed += 1;
+      }
+
+      return resumed;
+    };
+
     const resumeAwaitingUser = async (repos: RepoInfo[]): Promise<number> => {
       let resumed = 0;
       for (const repo of repos) {
-        const awaiting = await client.listIssuesByLabel(repo, config.labels.needsUser);
+        const awaiting = await client.listIssuesByLabel(repo, config.labels.needsUserReply);
         for (const issue of awaiting) {
           const comments = await client.listIssueComments(issue);
           if (!hasUserReplySince(comments, NEEDS_USER_MARKER)) {
@@ -679,21 +748,126 @@ program
           }
 
           await client.addLabels(issue, [config.labels.queued]);
-          await tryRemoveLabel(issue, config.labels.needsUser);
+          await tryRemoveLabel(issue, config.labels.needsUserReply);
           await tryRemoveLabel(issue, config.labels.failed);
           await tryRemoveLabel(issue, config.labels.done);
           await tryRemoveLabel(issue, config.labels.running);
+          clearRetry(scheduledRetryStatePath, issue.id);
           await client.comment(
             issue,
             buildAgentComment(
-              `Reply received. Re-queued for execution.`,
+              `Reply received. Re-queued for execution from the previous Codex session when available.`,
               []
             )
           );
+          if (webhooksEnabled && webhookQueuePath) {
+            try {
+              await enqueueWebhookIssue(webhookQueuePath, issue);
+            } catch (error) {
+              log("warn", "Failed to enqueue resumed issue in webhook queue.", json, {
+                issue: issue.url,
+                error: error instanceof Error ? error.message : String(error)
+              });
+            }
+          }
           resumed += 1;
         }
       }
       return resumed;
+    };
+
+    const runIssueWithSessionResume = async (issue: IssueInfo): Promise<Awaited<ReturnType<typeof runIssue>>> => {
+      let resumeSessionId = getIssueSession(issueSessionStatePath, issue);
+      let resumePrompt: string | null =
+        resumeSessionId
+          ? "Continue from the previous Codex session and complete the pending task with the latest issue comments."
+          : null;
+      while (true) {
+        const result = await runIssue(client, config, issue, {
+          resumeSessionId,
+          resumePrompt
+        });
+        if (result.sessionId) {
+          setIssueSession(issueSessionStatePath, issue, result.sessionId);
+        }
+        const shouldRetryInSameSession =
+          !result.success &&
+          result.failureKind === "execution_error" &&
+          result.failureStage === "after_session" &&
+          Boolean(result.sessionId);
+        if (!shouldRetryInSameSession) {
+          return result;
+        }
+        resumeSessionId = result.sessionId;
+        resumePrompt =
+          "The previous attempt stopped unexpectedly. Continue this same session and finish the original task.";
+      }
+    };
+
+    const handleRunFailure = async (
+      issue: IssueInfo,
+      result: Awaited<ReturnType<typeof runIssue>>,
+      contextLabel: "issue" | "review-followup"
+    ): Promise<void> => {
+      const title = contextLabel === "review-followup" ? "Agent runner failed review follow-up." : "Agent runner failed.";
+      const detailLine = result.failureDetail ? `\n\nDetail: ${result.failureDetail}` : "";
+
+      if (result.failureKind === "quota") {
+        const fallback = new Date(Date.now() + 60 * 60 * 1000).toISOString();
+        const runAfter = result.quotaResumeAt ?? fallback;
+        scheduleRetry(scheduledRetryStatePath, issue, runAfter, result.sessionId);
+        await client.addLabels(issue, [config.labels.failed]);
+        await tryRemoveLabel(issue, config.labels.running);
+        await tryRemoveLabel(issue, config.labels.needsUserReply);
+        const when = formatResumeTime(runAfter);
+        await commentCompletion(
+          issue,
+          buildAgentComment(
+            `${title}\n\nCause: Codex usage limit reached.${detailLine}` +
+              `\n\nNext automatic retry: ${when.iso} (${when.local}).` +
+              `\nThe runner will automatically resume at or after that time.` +
+              `\n\nLog: ${result.logPath}`
+          )
+        );
+        return;
+      }
+
+      if (result.failureKind === "needs_user_reply") {
+        clearRetry(scheduledRetryStatePath, issue.id);
+        await client.addLabels(issue, [config.labels.needsUserReply]);
+        await tryRemoveLabel(issue, config.labels.running);
+        await tryRemoveLabel(issue, config.labels.failed);
+        await commentCompletion(
+          issue,
+          buildAgentComment(
+            `${contextLabel === "review-followup" ? "Agent runner paused review follow-up." : "Agent runner paused."}` +
+              `${detailLine}` +
+              `\n\nPlease reply on this thread. The runner will resume from the same Codex session after your reply.` +
+              `\n\nLog: ${result.logPath}`,
+            [NEEDS_USER_MARKER]
+          )
+        );
+        return;
+      }
+
+      clearRetry(scheduledRetryStatePath, issue.id);
+      if (result.failureStage === "after_session" && result.sessionId) {
+        setIssueSession(issueSessionStatePath, issue, result.sessionId);
+        return;
+      }
+
+      clearIssueSession(issueSessionStatePath, issue.id);
+      await client.addLabels(issue, [config.labels.failed]);
+      await tryRemoveLabel(issue, config.labels.running);
+      await tryRemoveLabel(issue, config.labels.needsUserReply);
+      await commentCompletion(
+        issue,
+        buildAgentComment(
+          `${title}${detailLine}` +
+            `${result.summary ? `\n\nSummary:\n${result.summary}` : ""}` +
+            `\n\nLog: ${result.logPath}`
+        )
+      );
     };
 
     const queueNewRequestsByAgentRunComment = async (repos: RepoInfo[]): Promise<IssueInfo[]> => {
@@ -702,7 +876,7 @@ program
         config.labels.running,
         config.labels.done,
         config.labels.failed,
-        config.labels.needsUser
+        config.labels.needsUserReply
       ];
       const commandStatePath = resolveAgentCommandStatePath(config.workdirRoot);
       const allowedRepos = new Set(repos.map((repo) => `${repo.owner.toLowerCase()}/${repo.repo.toLowerCase()}`));
@@ -764,6 +938,7 @@ program
 
         try {
           await client.addLabels(issue, [config.labels.queued]);
+          clearRetry(scheduledRetryStatePath, issue.id);
           queued.push(issue);
         } catch (error) {
           log("warn", "Failed to add queued label for /agent run request.", json, {
@@ -797,6 +972,10 @@ program
 
       let repos: RepoInfo[] = [];
       let rateLimitedUntil: string | null = null;
+      const prunedActivityCount = pruneDeadActivityRecords(activityPath, isProcessAlive);
+      if (prunedActivityCount > 0) {
+        log("info", "Pruned stale activity records.", json, { removed: prunedActivityCount });
+      }
       if (shouldListRepos) {
         const repoResult = await listTargetRepos(client, config, config.workdirRoot);
         rateLimitedUntil = repoResult.blockedUntil;
@@ -852,32 +1031,32 @@ program
                 continue;
               }
 
-              await client.addLabels(issue.issue, [config.labels.failed, config.labels.needsUser]);
+              await client.addLabels(issue.issue, [config.labels.failed]);
               await tryRemoveLabel(issue.issue, config.labels.running);
+              await tryRemoveLabel(issue.issue, config.labels.needsUserReply);
               await client.comment(
                 issue.issue,
                 buildAgentComment(
                   `Detected runner process exit (pid ${issue.record.pid}). ` +
-                    "Please reply with details or requeue instructions.",
-                  [NEEDS_USER_MARKER]
+                    "Please re-run with `/agent run` after checking the log."
                 )
               );
             }
 
             for (const issue of evaluation.missingRecord) {
               if (dryRun) {
-                log("info", `Dry-run: would mark ${issue.url} needs-user (missing state).`, json);
+                log("info", `Dry-run: would mark ${issue.url} failed (missing state).`, json);
                 continue;
               }
 
-              await client.addLabels(issue, [config.labels.failed, config.labels.needsUser]);
+              await client.addLabels(issue, [config.labels.failed]);
               await tryRemoveLabel(issue, config.labels.running);
+              await tryRemoveLabel(issue, config.labels.needsUserReply);
               await client.comment(
                 issue,
                 buildAgentComment(
                   `Runner state was missing for this request. ` +
-                    "Please reply to re-queue the request.",
-                  [NEEDS_USER_MARKER]
+                    "Please re-run with `/agent run`."
                 )
               );
             }
@@ -895,14 +1074,14 @@ program
               log("info", `Dry-run: would mark ${issue.url} failed (process exited).`, json);
               continue;
             }
-            await client.addLabels(issue, [config.labels.failed, config.labels.needsUser]);
+            await client.addLabels(issue, [config.labels.failed]);
             await tryRemoveLabel(issue, config.labels.running);
+            await tryRemoveLabel(issue, config.labels.needsUserReply);
             await client.comment(
               issue,
               buildAgentComment(
                 `Detected runner process exit (pid ${record.pid}). ` +
-                  "Please reply with details or requeue instructions.",
-                [NEEDS_USER_MARKER]
+                  "Please re-run with `/agent run` after checking the log."
               )
             );
           }
@@ -913,6 +1092,11 @@ program
         shouldPollIssues && !rateLimitedUntil ? await resumeAwaitingUser(repos) : 0;
       if (resumed > 0) {
         log("info", `Re-queued ${resumed} request(s) after user reply.`, json);
+      }
+
+      const resumedBySchedule = await enqueueDueScheduledRetries();
+      if (resumedBySchedule > 0) {
+        log("info", `Re-queued ${resumedBySchedule} request(s) after scheduled retry time.`, json);
       }
 
       if (webhooksEnabled && webhookQueuePath && webhookConfig) {
@@ -1387,15 +1571,20 @@ program
                 issue,
                 buildAgentComment(`Agent runner started on ${new Date().toISOString()}. Concurrency ${config.concurrency}.`)
               );
+              clearRetry(scheduledRetryStatePath, issue.id);
               if (webhooksEnabled && webhookQueuePath) {
                 await removeWebhookIssues(webhookQueuePath, [issue.id]);
               }
 
-              const result = await runIssue(client, config, issue);
+              const result = await runIssueWithSessionResume(issue);
               activityId = result.activityId;
               if (result.success) {
+                clearRetry(scheduledRetryStatePath, issue.id);
+                clearIssueSession(issueSessionStatePath, issue.id);
                 await client.addLabels(issue, [config.labels.done]);
                 await tryRemoveLabel(issue, config.labels.running);
+                await tryRemoveLabel(issue, config.labels.failed);
+                await tryRemoveLabel(issue, config.labels.needsUserReply);
                 await commentCompletion(
                   issue,
                   buildAgentComment(
@@ -1407,27 +1596,19 @@ program
                 return;
               }
 
-              await client.addLabels(issue, [config.labels.failed, config.labels.needsUser]);
-              await tryRemoveLabel(issue, config.labels.running);
-              await commentCompletion(
-                issue,
-                buildAgentComment(
-                  `Agent runner failed.` +
-                    `${result.summary ? `\n\nSummary:\n${result.summary}` : ""}` +
-                    `\n\nLog: ${result.logPath}\n\nPlease reply with any details or fixes; the runner will re-queue after detecting your response.`,
-                  [NEEDS_USER_MARKER]
-                )
-              );
+              await handleRunFailure(issue, result, "issue");
             } catch (error) {
-              await client.addLabels(issue, [config.labels.failed, config.labels.needsUser]);
+              clearRetry(scheduledRetryStatePath, issue.id);
+              clearIssueSession(issueSessionStatePath, issue.id);
+              await client.addLabels(issue, [config.labels.failed]);
               await tryRemoveLabel(issue, config.labels.running);
+              await tryRemoveLabel(issue, config.labels.needsUserReply);
               await commentCompletion(
                 issue,
                 buildAgentComment(
                   `Agent runner failed with error: ${
                     error instanceof Error ? error.message : String(error)
-                  }\n\nPlease reply with any details or fixes; the runner will re-queue after detecting your response.`,
-                  [NEEDS_USER_MARKER]
+                  }`
                 )
               );
             } finally {
@@ -1503,10 +1684,13 @@ program
                   `Agent runner started review follow-up (${followup.reason}) on ${new Date().toISOString()}. Concurrency ${config.concurrency}.`
                 )
               );
+              clearRetry(scheduledRetryStatePath, issue.id);
 
-              const result = await runIssue(client, config, issue);
+              const result = await runIssueWithSessionResume(issue);
               activityId = result.activityId;
               if (result.success) {
+                clearRetry(scheduledRetryStatePath, issue.id);
+                clearIssueSession(issueSessionStatePath, issue.id);
                 try {
                   const resolved = await resolveAllUnresolvedReviewThreads({
                     client,
@@ -1530,6 +1714,8 @@ program
 
                 await client.addLabels(issue, [config.labels.done]);
                 await tryRemoveLabel(issue, config.labels.running);
+                await tryRemoveLabel(issue, config.labels.failed);
+                await tryRemoveLabel(issue, config.labels.needsUserReply);
                 await commentCompletion(
                   issue,
                   buildAgentComment(
@@ -1541,27 +1727,19 @@ program
                 return;
               }
 
-              await client.addLabels(issue, [config.labels.failed, config.labels.needsUser]);
-              await tryRemoveLabel(issue, config.labels.running);
-              await commentCompletion(
-                issue,
-                buildAgentComment(
-                  `Agent runner failed review follow-up.` +
-                    `${result.summary ? `\n\nSummary:\n${result.summary}` : ""}` +
-                    `\n\nLog: ${result.logPath}\n\nPlease reply with any details or fixes; the runner will re-queue after detecting your response.`,
-                  [NEEDS_USER_MARKER]
-                )
-              );
+              await handleRunFailure(issue, result, "review-followup");
             } catch (error) {
-              await client.addLabels(issue, [config.labels.failed, config.labels.needsUser]);
+              clearRetry(scheduledRetryStatePath, issue.id);
+              clearIssueSession(issueSessionStatePath, issue.id);
+              await client.addLabels(issue, [config.labels.failed]);
               await tryRemoveLabel(issue, config.labels.running);
+              await tryRemoveLabel(issue, config.labels.needsUserReply);
               await commentCompletion(
                 issue,
                 buildAgentComment(
                   `Agent runner failed review follow-up with error: ${
                     error instanceof Error ? error.message : String(error)
-                  }\n\nPlease reply with any details or fixes; the runner will re-queue after detecting your response.`,
-                  [NEEDS_USER_MARKER]
+                  }`
                 )
               );
             } finally {
@@ -1908,3 +2086,4 @@ program
   });
 
 program.parseAsync(process.argv);
+

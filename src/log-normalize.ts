@@ -21,10 +21,14 @@ function decodeBuffer(buffer: Buffer): string {
   return buffer.toString("utf8");
 }
 
+function normalizeText(value: string): string {
+  return value.replace(/\u0000/g, "").replace(/\r(?!\n)/g, "\n");
+}
+
 export function normalizeLogChunk(chunk: Buffer | string): string {
   if (typeof chunk === "string") {
-    return chunk;
+    return normalizeText(chunk);
   }
   const decoded = decodeBuffer(chunk);
-  return decoded.replace(/\u0000/g, "");
+  return normalizeText(decoded);
 }

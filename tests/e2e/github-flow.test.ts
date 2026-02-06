@@ -183,7 +183,7 @@ describe("github flow", () => {
           running: "agent:e2e-running",
           done: "agent:e2e-done",
           failed: "agent:e2e-failed",
-          needsUser: "agent:e2e-needs-user"
+          needsUserReply: "agent:e2e-needs-user"
         },
         codex: {
           command: "node",
@@ -221,7 +221,7 @@ describe("github flow", () => {
           octokit,
           issueNumber,
           (labels) =>
-            labels.includes(config.labels.needsUser) && labels.includes(config.labels.failed),
+            labels.includes(config.labels.needsUserReply) && labels.includes(config.labels.failed),
           () => {
             const failRun = runCli(
               ["run", "--once", "--yes", "--config", configPath],
@@ -231,7 +231,7 @@ describe("github flow", () => {
           },
           3
         );
-        expect(failedLabels).toContain(config.labels.needsUser);
+        expect(failedLabels).toContain(config.labels.needsUserReply);
         expect(failedLabels).toContain(config.labels.failed);
 
         const comments = await octokit.issues.listComments({
@@ -255,7 +255,7 @@ describe("github flow", () => {
           octokit,
           issueNumber,
           (labels) =>
-            labels.includes(config.labels.done) && !labels.includes(config.labels.needsUser),
+            labels.includes(config.labels.done) && !labels.includes(config.labels.needsUserReply),
           () => {
             const successRun = runCli(
               ["run", "--once", "--yes", "--config", configPath],
@@ -266,7 +266,7 @@ describe("github flow", () => {
           3
         );
         expect(doneLabels).toContain(config.labels.done);
-        expect(doneLabels).not.toContain(config.labels.needsUser);
+        expect(doneLabels).not.toContain(config.labels.needsUserReply);
       } finally {
         await octokit.issues.update({
           owner: env.owner,
@@ -299,3 +299,4 @@ describe("github flow", () => {
     { timeout: 240_000 }
   );
 });
+

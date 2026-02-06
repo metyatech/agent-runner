@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import type { RepoInfo } from "./github.js";
+import { isProcessAlive } from "./runner-state.js";
 
 export type ActivityKind = "issue" | "idle";
 
@@ -60,4 +61,21 @@ export function removeActivity(statePath: string, id: string): void {
     running: filtered,
     updatedAt: new Date().toISOString()
   });
+}
+
+export function pruneDeadActivityRecords(
+  statePath: string,
+  aliveCheck: (pid: number) => boolean = isProcessAlive
+): number {
+  const state = loadActivityState(statePath);
+  const filtered = state.running.filter((entry) => aliveCheck(entry.pid));
+  const removedCount = state.running.length - filtered.length;
+  if (removedCount === 0) {
+    return 0;
+  }
+  saveActivityState(statePath, {
+    running: filtered,
+    updatedAt: new Date().toISOString()
+  });
+  return removedCount;
 }

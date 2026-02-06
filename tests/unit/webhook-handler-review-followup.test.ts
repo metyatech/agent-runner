@@ -19,7 +19,7 @@ function makeConfig(workdirRoot: string): AgentRunnerConfig {
       running: "agent:running",
       done: "agent:done",
       failed: "agent:failed",
-      needsUser: "agent:needs-user"
+      needsUserReply: "agent:needs-user"
     },
     codex: { command: "codex", args: [], promptTemplate: "" },
     idle: {
@@ -182,3 +182,4 @@ describe("webhook-handler review followup", () => {
     expect(queued[0]?.requiresEngine).toBe(true);
   });
 });
+
