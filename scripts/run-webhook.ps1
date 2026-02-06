@@ -61,15 +61,39 @@ function Test-WebhookServer {
 
 New-Item -ItemType Directory -Force -Path $resolvedLogDir | Out-Null
 $date = Get-Date -Format "yyyyMMdd"
-$outPath = Join-Path $resolvedLogDir "webhook-run-$date.log"
-$errPath = Join-Path $resolvedLogDir "webhook-run-$date.err.log"
+$runStamp = Get-Date -Format "yyyyMMdd-HHmmss-fff"
+$outPath = Join-Path $resolvedLogDir "webhook-run-$runStamp-$PID.log"
+$errPath = Join-Path $resolvedLogDir "webhook-run-$runStamp-$PID.err.log"
 $metaPath = Join-Path $resolvedLogDir "webhook-meta-$date.log"
 $latestPath = Join-Path $resolvedLogDir "latest-webhook-run.path"
 $latestMetaPath = Join-Path $resolvedLogDir "latest-webhook-meta.path"
 
 function Append-MetaLog {
   param([string]$Line)
-  $Line | Out-File -FilePath $metaPath -Append -Encoding utf8
+  $maxAttempts = 30
+  $attempt = 0
+  while ($true) {
+    try {
+      $fileStream = [System.IO.File]::Open($metaPath, [System.IO.FileMode]::Append, [System.IO.FileAccess]::Write, [System.IO.FileShare]::ReadWrite)
+      try {
+        $writer = New-Object System.IO.StreamWriter($fileStream, $utf8)
+        try {
+          $writer.WriteLine($Line)
+        } finally {
+          $writer.Dispose()
+        }
+      } finally {
+        $fileStream.Dispose()
+      }
+      return
+    } catch [System.IO.IOException] {
+      $attempt += 1
+      if ($attempt -ge $maxAttempts) {
+        throw
+      }
+      Start-Sleep -Milliseconds 100
+    }
+  }
 }
 
 try {

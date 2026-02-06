@@ -38,15 +38,39 @@ $resolvedLogDir = if ($LogDir) { $LogDir } else { (Join-Path $RepoPath "logs") }
 
 New-Item -ItemType Directory -Force -Path $resolvedLogDir | Out-Null
 $date = Get-Date -Format "yyyyMMdd"
-$outPath = Join-Path $resolvedLogDir "task-run-$date.log"
-$errPath = Join-Path $resolvedLogDir "task-run-$date.err.log"
+$runStamp = Get-Date -Format "yyyyMMdd-HHmmss-fff"
+$outPath = Join-Path $resolvedLogDir "task-run-$runStamp-$PID.log"
+$errPath = Join-Path $resolvedLogDir "task-run-$runStamp-$PID.err.log"
 $metaPath = Join-Path $resolvedLogDir "task-meta-$date.log"
 $latestPath = Join-Path $resolvedLogDir "latest-task-run.path"
 $latestMetaPath = Join-Path $resolvedLogDir "latest-task-meta.path"
 
 function Append-MetaLog {
   param([string]$Line)
-  $Line | Out-File -FilePath $metaPath -Append -Encoding utf8
+  $maxAttempts = 30
+  $attempt = 0
+  while ($true) {
+    try {
+      $fileStream = [System.IO.File]::Open($metaPath, [System.IO.FileMode]::Append, [System.IO.FileAccess]::Write, [System.IO.FileShare]::ReadWrite)
+      try {
+        $writer = New-Object System.IO.StreamWriter($fileStream, $utf8)
+        try {
+          $writer.WriteLine($Line)
+        } finally {
+          $writer.Dispose()
+        }
+      } finally {
+        $fileStream.Dispose()
+      }
+      return
+    } catch [System.IO.IOException] {
+      $attempt += 1
+      if ($attempt -ge $maxAttempts) {
+        throw
+      }
+      Start-Sleep -Milliseconds 100
+    }
+  }
 }
 
 try {

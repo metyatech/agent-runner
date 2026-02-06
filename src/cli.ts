@@ -33,6 +33,7 @@ import {
   evaluateRunningIssues,
   isProcessAlive,
   loadRunnerState,
+  removeRunningIssue,
   resolveRunnerStatePath
 } from "./runner-state.js";
 import { startStatusServer } from "./status-server.js";
@@ -90,6 +91,7 @@ import {
   scheduleRetry,
   takeDueRetries
 } from "./scheduled-retry-state.js";
+import { recoverStalledIssue } from "./stalled-issue-recovery.js";
 
 const program = new Command();
 
@@ -972,7 +974,7 @@ program
 
       let repos: RepoInfo[] = [];
       let rateLimitedUntil: string | null = null;
-      const prunedActivityCount = pruneDeadActivityRecords(activityPath, isProcessAlive);
+      const prunedActivityCount = pruneDeadActivityRecords(activityPath, isProcessAlive, ["idle"]);
       if (prunedActivityCount > 0) {
         log("info", "Pruned stale activity records.", json, { removed: prunedActivityCount });
       }
@@ -1026,39 +1028,38 @@ program
             const evaluation = evaluateRunningIssues(runningIssues, state, isProcessAlive);
 
             for (const issue of evaluation.deadProcess) {
-              if (dryRun) {
-                log("info", `Dry-run: would mark ${issue.issue.url} failed (process exited).`, json);
-                continue;
-              }
-
-              await client.addLabels(issue.issue, [config.labels.failed]);
-              await tryRemoveLabel(issue.issue, config.labels.running);
-              await tryRemoveLabel(issue.issue, config.labels.needsUserReply);
-              await client.comment(
-                issue.issue,
-                buildAgentComment(
-                  `Detected runner process exit (pid ${issue.record.pid}). ` +
-                    "Please re-run with `/agent run` after checking the log."
-                )
-              );
+              await recoverStalledIssue({
+                issue: issue.issue,
+                reason: "dead_process",
+                pid: issue.record.pid,
+                dryRun,
+                labels: config.labels,
+                webhookQueuePath: webhooksEnabled ? webhookQueuePath : null,
+                addLabel: (target, labels) => client.addLabels(target, labels),
+                removeLabel: tryRemoveLabel,
+                enqueueWebhookIssue,
+                removeRunningIssue: (issueId) => removeRunningIssue(statePath, issueId),
+                removeActivity: (activityId) => removeActivity(activityPath, activityId),
+                clearRetry: (issueId) => clearRetry(scheduledRetryStatePath, issueId),
+                log: (level, message, data) => log(level, message, json, data)
+              });
             }
 
             for (const issue of evaluation.missingRecord) {
-              if (dryRun) {
-                log("info", `Dry-run: would mark ${issue.url} failed (missing state).`, json);
-                continue;
-              }
-
-              await client.addLabels(issue, [config.labels.failed]);
-              await tryRemoveLabel(issue, config.labels.running);
-              await tryRemoveLabel(issue, config.labels.needsUserReply);
-              await client.comment(
+              await recoverStalledIssue({
                 issue,
-                buildAgentComment(
-                  `Runner state was missing for this request. ` +
-                    "Please re-run with `/agent run`."
-                )
-              );
+                reason: "missing_state",
+                dryRun,
+                labels: config.labels,
+                webhookQueuePath: webhooksEnabled ? webhookQueuePath : null,
+                addLabel: (target, labels) => client.addLabels(target, labels),
+                removeLabel: tryRemoveLabel,
+                enqueueWebhookIssue,
+                removeRunningIssue: (issueId) => removeRunningIssue(statePath, issueId),
+                removeActivity: (activityId) => removeActivity(activityPath, activityId),
+                clearRetry: (issueId) => clearRetry(scheduledRetryStatePath, issueId),
+                log: (level, message, data) => log(level, message, json, data)
+              });
             }
           }
         } else if (webhooksEnabled) {
@@ -1070,20 +1071,21 @@ program
             if (!issue) {
               continue;
             }
-            if (dryRun) {
-              log("info", `Dry-run: would mark ${issue.url} failed (process exited).`, json);
-              continue;
-            }
-            await client.addLabels(issue, [config.labels.failed]);
-            await tryRemoveLabel(issue, config.labels.running);
-            await tryRemoveLabel(issue, config.labels.needsUserReply);
-            await client.comment(
+            await recoverStalledIssue({
               issue,
-              buildAgentComment(
-                `Detected runner process exit (pid ${record.pid}). ` +
-                  "Please re-run with `/agent run` after checking the log."
-              )
-            );
+              reason: "dead_process",
+              pid: record.pid,
+              dryRun,
+              labels: config.labels,
+              webhookQueuePath,
+              addLabel: (target, labels) => client.addLabels(target, labels),
+              removeLabel: tryRemoveLabel,
+              enqueueWebhookIssue,
+              removeRunningIssue: (issueId) => removeRunningIssue(statePath, issueId),
+              removeActivity: (activityId) => removeActivity(activityPath, activityId),
+              clearRetry: (issueId) => clearRetry(scheduledRetryStatePath, issueId),
+              log: (level, message, data) => log(level, message, json, data)
+            });
           }
         }
       }

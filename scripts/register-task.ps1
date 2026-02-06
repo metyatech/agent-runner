@@ -14,6 +14,12 @@ $action = New-ScheduledTaskAction -Execute $wscript -Argument "//B //NoLogo `"$v
 $trigger = New-ScheduledTaskTrigger -Once -At (Get-Date).AddMinutes(1) -RepetitionInterval (New-TimeSpan -Minutes $IntervalMinutes) -RepetitionDuration (New-TimeSpan -Days 3650)
 $principal = New-ScheduledTaskPrincipal -UserId $env:USERNAME -LogonType S4U -RunLevel Limited
 
-$settings = New-ScheduledTaskSettingsSet -Hidden
+$settings = New-ScheduledTaskSettingsSet `
+  -Hidden `
+  -AllowStartIfOnBatteries `
+  -DontStopIfGoingOnBatteries `
+  -RestartCount 3 `
+  -RestartInterval (New-TimeSpan -Minutes 1) `
+  -MultipleInstances IgnoreNew
 Register-ScheduledTask -TaskName $TaskName -Action $action -Trigger $trigger -Principal $principal -Settings $settings -Force
 Write-Host "Registered task $TaskName"

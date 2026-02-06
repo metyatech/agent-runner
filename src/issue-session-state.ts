@@ -1,6 +1,5 @@
-import fs from "node:fs";
-import path from "node:path";
 import type { IssueInfo } from "./github.js";
+import { resolveStateDbPath, upsertRepo, withStateDb } from "./state-db.js";
 
 export type IssueSessionRecord = {
   issueId: number;
@@ -18,24 +17,42 @@ type IssueSessionState = {
 };
 
 export function resolveIssueSessionStatePath(workdirRoot: string): string {
-  return path.resolve(workdirRoot, "agent-runner", "state", "issue-sessions.json");
+  return resolveStateDbPath(workdirRoot);
 }
 
 function loadState(statePath: string): IssueSessionState {
-  if (!fs.existsSync(statePath)) {
-    return { sessions: [] };
-  }
-  const raw = fs.readFileSync(statePath, "utf8");
-  const parsed = JSON.parse(raw) as IssueSessionState;
-  if (!parsed || !Array.isArray(parsed.sessions)) {
-    throw new Error(`Invalid issue session state at ${statePath}`);
-  }
-  return parsed;
-}
+  return withStateDb(statePath, (db) => {
+    const rows = db
+      .prepare(`
+        SELECT
+          s.issue_id AS issueId,
+          s.issue_number AS issueNumber,
+          r.owner,
+          r.repo,
+          s.session_id AS sessionId,
+          s.updated_at AS updatedAt
+        FROM issue_sessions s
+        JOIN repos r ON r.id = s.repo_id
+      `)
+      .all() as Array<{
+      issueId: number;
+      issueNumber: number;
+      owner: string;
+      repo: string;
+      sessionId: string;
+      updatedAt: string;
+    }>;
 
-function saveState(statePath: string, state: IssueSessionState): void {
-  fs.mkdirSync(path.dirname(statePath), { recursive: true });
-  fs.writeFileSync(statePath, JSON.stringify(state, null, 2));
+    return {
+      sessions: rows.map((row) => ({
+        issueId: row.issueId,
+        issueNumber: row.issueNumber,
+        repo: { owner: row.owner, repo: row.repo },
+        sessionId: row.sessionId,
+        updatedAt: row.updatedAt
+      }))
+    };
+  });
 }
 
 function sameIssue(a: IssueSessionRecord, issue: Pick<IssueInfo, "id">): boolean {
@@ -47,29 +64,27 @@ export function setIssueSession(
   issue: IssueInfo,
   sessionId: string
 ): void {
-  const state = loadState(statePath);
-  const next = state.sessions.filter((entry) => !sameIssue(entry, issue));
-  next.push({
-    issueId: issue.id,
-    issueNumber: issue.number,
-    repo: issue.repo,
-    sessionId,
-    updatedAt: new Date().toISOString()
+  withStateDb(statePath, (db) => {
+    const repoId = upsertRepo(db, issue.repo);
+    db.prepare(`
+      INSERT INTO issue_sessions (issue_id, repo_id, issue_number, session_id, updated_at)
+      VALUES (?, ?, ?, ?, ?)
+      ON CONFLICT(issue_id) DO UPDATE SET
+        repo_id = excluded.repo_id,
+        issue_number = excluded.issue_number,
+        session_id = excluded.session_id,
+        updated_at = excluded.updated_at
+    `).run(issue.id, repoId, issue.number, sessionId, new Date().toISOString());
   });
-  saveState(statePath, { sessions: next });
 }
 
 export function getIssueSession(statePath: string, issue: Pick<IssueInfo, "id">): string | null {
   const state = loadState(statePath);
-  const match = state.sessions.find((entry) => sameIssue(entry, issue));
-  return match?.sessionId ?? null;
+  return state.sessions.find((entry) => sameIssue(entry, issue))?.sessionId ?? null;
 }
 
 export function clearIssueSession(statePath: string, issueId: number): void {
-  const state = loadState(statePath);
-  const next = state.sessions.filter((entry) => entry.issueId !== issueId);
-  if (next.length === state.sessions.length) {
-    return;
-  }
-  saveState(statePath, { sessions: next });
+  withStateDb(statePath, (db) => {
+    db.prepare("DELETE FROM issue_sessions WHERE issue_id = ?").run(issueId);
+  });
 }

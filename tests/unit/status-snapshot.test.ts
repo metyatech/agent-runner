@@ -8,7 +8,7 @@ import {
   recordActivity,
   resolveActivityStatePath
 } from "../../src/activity-state.js";
-import { resolveRunnerStatePath } from "../../src/runner-state.js";
+import { recordRunningIssue, resolveRunnerStatePath } from "../../src/runner-state.js";
 import { buildStatusSnapshot } from "../../src/status-snapshot.js";
 
 describe("status-snapshot", () => {
@@ -72,30 +72,17 @@ describe("status-snapshot", () => {
     }
   });
 
-  it("falls back to runner state when activity is missing", () => {
+  it("includes issue records tracked by runner state", () => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), "agent-runner-status-"));
     const runnerPath = resolveRunnerStatePath(root);
-    fs.mkdirSync(path.dirname(runnerPath), { recursive: true });
-    fs.writeFileSync(
-      runnerPath,
-      JSON.stringify(
-        {
-          running: [
-            {
-              issueId: 123,
-              issueNumber: 7,
-              repo: { owner: "metyatech", repo: "demo" },
-              startedAt: new Date().toISOString(),
-              pid: process.pid,
-              logPath: path.join(root, "log.txt")
-            }
-          ]
-        },
-        null,
-        2
-      ),
-      "utf8"
-    );
+    recordRunningIssue(runnerPath, {
+      issueId: 123,
+      issueNumber: 7,
+      repo: { owner: "metyatech", repo: "demo" },
+      startedAt: new Date().toISOString(),
+      pid: process.pid,
+      logPath: path.join(root, "log.txt")
+    });
 
     const snapshot = buildStatusSnapshot(root);
     expect(snapshot.busy).toBe(true);

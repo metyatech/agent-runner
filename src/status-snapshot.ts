@@ -153,7 +153,7 @@ export function buildStatusSnapshot(workdirRoot: string): StatusSnapshot {
 
   if (fs.existsSync(statePath)) {
     try {
-      pruneDeadActivityRecords(statePath);
+      pruneDeadActivityRecords(statePath, isProcessAlive, ["idle"]);
       const state = loadActivityState(statePath);
       activityUpdatedAt = state.updatedAt;
       records = state.running.slice();

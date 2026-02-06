@@ -1,6 +1,5 @@
-import fs from "node:fs";
-import path from "node:path";
 import type { IssueInfo, RepoInfo } from "./github.js";
+import { resolveStateDbPath, upsertRepo, withStateDb } from "./state-db.js";
 
 export type ScheduledRetryRecord = {
   issueId: number;
@@ -17,24 +16,48 @@ type ScheduledRetryState = {
 };
 
 export function resolveScheduledRetryStatePath(workdirRoot: string): string {
-  return path.resolve(workdirRoot, "agent-runner", "state", "scheduled-retries.json");
+  return resolveStateDbPath(workdirRoot);
 }
 
 function loadState(statePath: string): ScheduledRetryState {
-  if (!fs.existsSync(statePath)) {
-    return { retries: [] };
-  }
-  const raw = fs.readFileSync(statePath, "utf8");
-  const parsed = JSON.parse(raw) as ScheduledRetryState;
-  if (!parsed || !Array.isArray(parsed.retries)) {
-    throw new Error(`Invalid scheduled retry state at ${statePath}`);
-  }
-  return parsed;
-}
+  return withStateDb(statePath, (db) => {
+    const rows = db
+      .prepare(`
+        SELECT
+          s.issue_id AS issueId,
+          s.issue_number AS issueNumber,
+          r.owner,
+          r.repo,
+          s.run_after AS runAfter,
+          s.reason,
+          s.session_id AS sessionId,
+          s.updated_at AS updatedAt
+        FROM scheduled_retries s
+        JOIN repos r ON r.id = s.repo_id
+      `)
+      .all() as Array<{
+      issueId: number;
+      issueNumber: number;
+      owner: string;
+      repo: string;
+      runAfter: string;
+      reason: "codex_quota";
+      sessionId: string | null;
+      updatedAt: string;
+    }>;
 
-function saveState(statePath: string, state: ScheduledRetryState): void {
-  fs.mkdirSync(path.dirname(statePath), { recursive: true });
-  fs.writeFileSync(statePath, JSON.stringify(state, null, 2));
+    return {
+      retries: rows.map((row) => ({
+        issueId: row.issueId,
+        issueNumber: row.issueNumber,
+        repo: { owner: row.owner, repo: row.repo },
+        runAfter: row.runAfter,
+        reason: row.reason,
+        sessionId: row.sessionId,
+        updatedAt: row.updatedAt
+      }))
+    };
+  });
 }
 
 export function scheduleRetry(
@@ -43,54 +66,85 @@ export function scheduleRetry(
   runAfter: string,
   sessionId: string | null
 ): void {
-  const state = loadState(statePath);
-  const next = state.retries.filter((entry) => entry.issueId !== issue.id);
-  next.push({
-    issueId: issue.id,
-    issueNumber: issue.number,
-    repo: issue.repo,
-    runAfter,
-    reason: "codex_quota",
-    sessionId,
-    updatedAt: new Date().toISOString()
+  withStateDb(statePath, (db) => {
+    const repoId = upsertRepo(db, issue.repo);
+    db.prepare(`
+      INSERT INTO scheduled_retries (
+        issue_id, repo_id, issue_number, run_after, reason, session_id, updated_at
+      ) VALUES (?, ?, ?, ?, 'codex_quota', ?, ?)
+      ON CONFLICT(issue_id) DO UPDATE SET
+        repo_id = excluded.repo_id,
+        issue_number = excluded.issue_number,
+        run_after = excluded.run_after,
+        reason = excluded.reason,
+        session_id = excluded.session_id,
+        updated_at = excluded.updated_at
+    `).run(issue.id, repoId, issue.number, runAfter, sessionId, new Date().toISOString());
   });
-  saveState(statePath, { retries: next });
 }
 
 export function clearRetry(statePath: string, issueId: number): void {
-  const state = loadState(statePath);
-  const next = state.retries.filter((entry) => entry.issueId !== issueId);
-  if (next.length === state.retries.length) {
-    return;
-  }
-  saveState(statePath, { retries: next });
+  withStateDb(statePath, (db) => {
+    db.prepare("DELETE FROM scheduled_retries WHERE issue_id = ?").run(issueId);
+  });
 }
 
 export function takeDueRetries(
   statePath: string,
   now: Date
 ): ScheduledRetryRecord[] {
-  const state = loadState(statePath);
-  if (state.retries.length === 0) {
-    return [];
-  }
+  return withStateDb(statePath, (db) => {
+    const rows = db
+      .prepare(`
+        SELECT
+          s.issue_id AS issueId,
+          s.issue_number AS issueNumber,
+          r.owner,
+          r.repo,
+          s.run_after AS runAfter,
+          s.reason,
+          s.session_id AS sessionId,
+          s.updated_at AS updatedAt
+        FROM scheduled_retries s
+        JOIN repos r ON r.id = s.repo_id
+      `)
+      .all() as Array<{
+      issueId: number;
+      issueNumber: number;
+      owner: string;
+      repo: string;
+      runAfter: string;
+      reason: "codex_quota";
+      sessionId: string | null;
+      updatedAt: string;
+    }>;
 
-  const nowMs = now.getTime();
-  const due: ScheduledRetryRecord[] = [];
-  const pending: ScheduledRetryRecord[] = [];
-
-  for (const entry of state.retries) {
-    const scheduled = Date.parse(entry.runAfter);
-    if (!Number.isNaN(scheduled) && scheduled <= nowMs) {
-      due.push(entry);
-      continue;
+    if (rows.length === 0) {
+      return [];
     }
-    pending.push(entry);
-  }
 
-  if (pending.length !== state.retries.length) {
-    saveState(statePath, { retries: pending });
-  }
+    const nowMs = now.getTime();
+    const due = rows.filter((entry) => {
+      const scheduled = Date.parse(entry.runAfter);
+      return !Number.isNaN(scheduled) && scheduled <= nowMs;
+    });
+    if (due.length === 0) {
+      return [];
+    }
 
-  return due;
+    const remove = db.prepare("DELETE FROM scheduled_retries WHERE issue_id = ?");
+    for (const entry of due) {
+      remove.run(entry.issueId);
+    }
+
+    return due.map((row) => ({
+      issueId: row.issueId,
+      issueNumber: row.issueNumber,
+      repo: { owner: row.owner, repo: row.repo },
+      runAfter: row.runAfter,
+      reason: row.reason,
+      sessionId: row.sessionId,
+      updatedAt: row.updatedAt
+    }));
+  });
 }
