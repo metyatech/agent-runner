@@ -549,6 +549,12 @@ Run a background tray helper to open the status UI and pause/resume the runner:
 .\scripts\tray.ps1 -RepoPath "." -ConfigPath ".\\agent-runner.config.json"
 ```
 
+For startup/background launch without a visible PowerShell window, use:
+
+```powershell
+wscript.exe //B //NoLogo .\scripts\run-tray.vbs
+```
+
 If `webhooks.enabled` is true, the tray helper will also ensure the webhook listener
 is running in the background.
 
