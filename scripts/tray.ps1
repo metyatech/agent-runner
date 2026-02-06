@@ -8,6 +8,7 @@ param(
 
 $ErrorActionPreference = "Stop"
 Set-StrictMode -Version Latest
+$env:NODE_NO_WARNINGS = "1"
 
 $hideConsole = {
   try {
@@ -164,7 +165,13 @@ function Get-StatusSnapshot {
   if (-not (Test-Path $cliPath)) {
     return $null
   }
-  $raw = & node $cliPath status --config $ConfigPath --json 2>$null
+  $savedPreference = $ErrorActionPreference
+  try {
+    $ErrorActionPreference = "Continue"
+    $raw = & node $cliPath status --config $ConfigPath --json 2>$null
+  } finally {
+    $ErrorActionPreference = $savedPreference
+  }
   if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($raw)) {
     return $null
   }
@@ -179,7 +186,13 @@ function Request-Stop {
   if (-not (Test-Path $cliPath)) {
     return
   }
-  & node $cliPath stop --config $ConfigPath 1>$null 2>$null
+  $savedPreference = $ErrorActionPreference
+  try {
+    $ErrorActionPreference = "Continue"
+    & node $cliPath stop --config $ConfigPath 1>$null 2>$null
+  } finally {
+    $ErrorActionPreference = $savedPreference
+  }
   try {
     Stop-ScheduledTask -TaskName $RunnerTaskName -ErrorAction SilentlyContinue | Out-Null
   } catch {
@@ -191,7 +204,13 @@ function Resume-Runner {
   if (-not (Test-Path $cliPath)) {
     return
   }
-  & node $cliPath resume --config $ConfigPath 1>$null 2>$null
+  $savedPreference = $ErrorActionPreference
+  try {
+    $ErrorActionPreference = "Continue"
+    & node $cliPath resume --config $ConfigPath 1>$null 2>$null
+  } finally {
+    $ErrorActionPreference = $savedPreference
+  }
   try {
     Start-ScheduledTask -TaskName $RunnerTaskName -ErrorAction SilentlyContinue | Out-Null
   } catch {
