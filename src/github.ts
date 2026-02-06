@@ -61,6 +61,7 @@ export type PullRequestDetails = {
   headRef: string;
   headSha: string;
   headRepoFullName: string | null;
+  requestedReviewerLogins: string[];
 };
 
 export type RepoMergeOptions = {
@@ -718,7 +719,17 @@ export class GitHubClient {
         mergeableState,
         headRef,
         headSha,
-        headRepoFullName: response.data.head.repo?.full_name ?? null
+        headRepoFullName: response.data.head.repo?.full_name ?? null,
+        requestedReviewerLogins: Array.isArray(
+          (response.data as { requested_reviewers?: Array<{ login?: string | null }> | null }).requested_reviewers
+        )
+          ? (
+              (response.data as { requested_reviewers?: Array<{ login?: string | null }> | null })
+                .requested_reviewers ?? []
+            )
+              .map((reviewer) => reviewer?.login ?? "")
+              .filter((reviewer): reviewer is string => reviewer.length > 0)
+          : []
       };
     } catch (error) {
       if (error instanceof Error && "status" in error) {
@@ -870,5 +881,41 @@ export class GitHubClient {
       `,
       threadId
     });
+  }
+
+  async requestPullRequestReviewers(repo: RepoInfo, pullNumber: number, reviewers: string[]): Promise<void> {
+    const unique = Array.from(
+      new Set(reviewers.map((reviewer) => reviewer.trim()).filter((reviewer) => reviewer.length > 0))
+    );
+    if (unique.length === 0) {
+      return;
+    }
+    for (let index = 0; index < unique.length; index += 15) {
+      const chunk = unique.slice(index, index + 15);
+      await this.octokit.pulls.requestReviewers({
+        owner: repo.owner,
+        repo: repo.repo,
+        pull_number: pullNumber,
+        reviewers: chunk
+      });
+    }
+  }
+
+  async removeRequestedPullRequestReviewers(repo: RepoInfo, pullNumber: number, reviewers: string[]): Promise<void> {
+    const unique = Array.from(
+      new Set(reviewers.map((reviewer) => reviewer.trim()).filter((reviewer) => reviewer.length > 0))
+    );
+    if (unique.length === 0) {
+      return;
+    }
+    for (let index = 0; index < unique.length; index += 15) {
+      const chunk = unique.slice(index, index + 15);
+      await this.octokit.pulls.removeRequestedReviewers({
+        owner: repo.owner,
+        repo: repo.repo,
+        pull_number: pullNumber,
+        reviewers: chunk
+      });
+    }
   }
 }

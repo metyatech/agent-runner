@@ -80,7 +80,7 @@ describe("webhook-handler review followup", () => {
           comment: {
             id: 9003,
             body: "Please address this review comment.",
-            author_association: "OWNER",
+            author_association: "NONE",
             user: { login: "metyatech" }
           }
         }
@@ -93,6 +93,49 @@ describe("webhook-handler review followup", () => {
     expect(calls.addLabels.flat()).toHaveLength(0);
     const reviewQueuePath = resolveReviewQueuePath(config.workdirRoot);
     expect(loadReviewQueue(reviewQueuePath)).toHaveLength(1);
+  });
+
+  it("enqueues review follow-up for non-Copilot bot comments too", async () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "agent-runner-webhook-any-bot-review-comment-"));
+    const config = makeConfig(root);
+    const repo = makeRepo();
+    const pr = makePullRequestIssue(repo);
+    const queuePath = path.join(root, "agent-runner", "state", "webhook-queue.json");
+
+    const client = {
+      addLabels: async () => {},
+      removeLabel: async () => {},
+      comment: async () => {},
+      listIssueComments: async () => [],
+      getIssue: async (_repo: RepoInfo, number: number) => (number === pr.number ? pr : null)
+    };
+
+    await handleWebhookEvent({
+      event: {
+        event: "pull_request_review_comment",
+        delivery: "z",
+        payload: {
+          action: "created",
+          repository: { name: repo.repo, owner: { login: repo.owner } },
+          pull_request: { number: pr.number, id: pr.id, html_url: pr.url },
+          comment: {
+            id: 9005,
+            body: "Please fix this.",
+            author_association: "NONE",
+            user: { login: "chatgpt-codex-connector[bot]", type: "Bot" }
+          }
+        }
+      },
+      client: client as any,
+      config,
+      queuePath
+    });
+
+    const reviewQueuePath = resolveReviewQueuePath(config.workdirRoot);
+    const queued = loadReviewQueue(reviewQueuePath);
+    expect(queued).toHaveLength(1);
+    expect(queued[0]?.reason).toBe("review_comment");
+    expect(queued[0]?.requiresEngine).toBe(true);
   });
 
   it("treats Copilot 'no new comments' review as approval (merge-only follow-up)", async () => {
@@ -180,6 +223,93 @@ describe("webhook-handler review followup", () => {
     expect(queued).toHaveLength(1);
     expect(queued[0]?.reason).toBe("review_comment");
     expect(queued[0]?.requiresEngine).toBe(true);
+  });
+
+  it("treats usage-limit review comments as approval follow-up", async () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "agent-runner-webhook-usage-limit-review-comment-"));
+    const config = makeConfig(root);
+    const repo = makeRepo();
+    const pr = makePullRequestIssue(repo);
+    const queuePath = path.join(root, "agent-runner", "state", "webhook-queue.json");
+
+    const client = {
+      addLabels: async () => {},
+      removeLabel: async () => {},
+      comment: async () => {},
+      listIssueComments: async () => [],
+      getIssue: async (_repo: RepoInfo, number: number) => (number === pr.number ? pr : null)
+    };
+
+    await handleWebhookEvent({
+      event: {
+        event: "pull_request_review_comment",
+        delivery: "z",
+        payload: {
+          action: "created",
+          repository: { name: repo.repo, owner: { login: repo.owner } },
+          pull_request: { number: pr.number, id: pr.id, html_url: pr.url },
+          comment: {
+            id: 9006,
+            body: "Usage limit reached. Unable to review now.",
+            author_association: "NONE",
+            user: { login: "any-review-bot", type: "Bot" }
+          }
+        }
+      },
+      client: client as any,
+      config,
+      queuePath
+    });
+
+    const reviewQueuePath = resolveReviewQueuePath(config.workdirRoot);
+    const queued = loadReviewQueue(reviewQueuePath);
+    expect(queued).toHaveLength(1);
+    expect(queued[0]?.reason).toBe("approval");
+    expect(queued[0]?.requiresEngine).toBe(false);
+  });
+
+  it("treats usage-limit pull_request_review bodies as approval follow-up", async () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "agent-runner-webhook-usage-limit-review-"));
+    const config = makeConfig(root);
+    const repo = makeRepo();
+    const pr = makePullRequestIssue(repo);
+    const queuePath = path.join(root, "agent-runner", "state", "webhook-queue.json");
+
+    const client = {
+      addLabels: async () => {},
+      removeLabel: async () => {},
+      comment: async () => {},
+      listIssueComments: async () => [],
+      getIssue: async (_repo: RepoInfo, number: number) => (number === pr.number ? pr : null)
+    };
+
+    await handleWebhookEvent({
+      event: {
+        event: "pull_request_review",
+        delivery: "z",
+        payload: {
+          action: "submitted",
+          repository: { name: repo.repo, owner: { login: repo.owner } },
+          pull_request: { number: pr.number, id: pr.id, html_url: pr.url },
+          review: {
+            id: 77,
+            state: "commented",
+            body: "Quota exceeded. Cannot review right now.",
+            author_association: "NONE",
+            user: { login: "review-bot", type: "Bot" }
+          }
+        }
+      },
+      client: client as any,
+      config,
+      queuePath
+    });
+
+    const reviewQueuePath = resolveReviewQueuePath(config.workdirRoot);
+    const queued = loadReviewQueue(reviewQueuePath);
+    expect(queued).toHaveLength(1);
+    expect(queued[0]?.reason).toBe("approval");
+    expect(queued[0]?.requiresEngine).toBe(false);
   });
 });
 

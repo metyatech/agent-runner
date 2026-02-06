@@ -1,6 +1,6 @@
 import type { GitHubClient, IssueInfo, RepoInfo } from "./github.js";
 import { chooseMergeMethod, summarizeLatestReviews } from "./pr-review-automation.js";
-import { copilotLatestReviewIsNoNewCommentsApproval } from "./copilot-review.js";
+import { isCopilotReviewerLogin } from "./copilot-review.js";
 
 export type ResolveThreadsResult = {
   total: number;
@@ -30,6 +30,12 @@ export async function resolveAllUnresolvedReviewThreads(options: {
 export type AutoMergeResult =
   | { merged: true; branchDeleted: boolean; mergeMethod: string }
   | { merged: false; retry: boolean; reason: string };
+
+export type ReRequestReviewResult = {
+  requestedHumanReviewers: string[];
+  requestedCopilot: boolean;
+  requestedCodex: boolean;
+};
 
 async function waitForMergeable(options: {
   client: GitHubClient;
@@ -94,15 +100,19 @@ export async function attemptAutoMergeApprovedPullRequest(options: {
     reviews.map((review) => ({
       author: review.author,
       state: review.state,
-      submittedAt: review.submittedAt
-    }))
+      submittedAt: review.submittedAt,
+      body: review.body
+    })),
+    pr.requestedReviewerLogins
   );
 
-  const copilotNoNewComments = copilotLatestReviewIsNoNewCommentsApproval(reviews);
-  if (summary.changesRequested) {
-    return { merged: false, retry: false, reason: "not_approved" };
+  if (summary.changesRequested > 0 || summary.actionableComments > 0) {
+    return { merged: false, retry: false, reason: "actionable_review_feedback" };
   }
-  if (!summary.approved && !copilotNoNewComments) {
+  if (summary.pendingReviewers > 0) {
+    return { merged: false, retry: true, reason: "awaiting_reviewer_feedback" };
+  }
+  if (!summary.approved) {
     return { merged: false, retry: false, reason: "not_approved" };
   }
 
@@ -210,4 +220,81 @@ export async function attemptAutoMergeApprovedPullRequest(options: {
   }
 
   return { merged: true, branchDeleted, mergeMethod: chosenMergeMethod };
+}
+
+function isCodexReviewerLogin(login: string): boolean {
+  const normalized = login.trim().toLowerCase();
+  if (!normalized) return false;
+  return normalized.includes("codex");
+}
+
+function isLikelyBotLogin(login: string): boolean {
+  return /\[bot\]$/i.test(login.trim());
+}
+
+export async function reRequestAllReviewers(options: {
+  client: GitHubClient;
+  repo: RepoInfo;
+  pullNumber: number;
+  issue: IssueInfo;
+}): Promise<ReRequestReviewResult> {
+  const reviews = await options.client.listPullRequestReviews(options.repo, options.pullNumber);
+  const pr = await options.client.getPullRequest(options.repo, options.pullNumber);
+
+  const candidates = new Set<string>();
+  for (const review of reviews) {
+    if (review.author) {
+      candidates.add(review.author);
+    }
+  }
+  for (const reviewer of pr?.requestedReviewerLogins ?? []) {
+    candidates.add(reviewer);
+  }
+
+  const humans: string[] = [];
+  let requestedCopilot = false;
+  let requestedCodex = false;
+  for (const candidate of candidates) {
+    const login = candidate.trim();
+    if (!login) continue;
+    if (login.toLowerCase() === (options.issue.author ?? "").trim().toLowerCase()) {
+      continue;
+    }
+    if (isCopilotReviewerLogin(login)) {
+      requestedCopilot = true;
+      continue;
+    }
+    if (isCodexReviewerLogin(login)) {
+      requestedCodex = true;
+      continue;
+    }
+    if (!isLikelyBotLogin(login)) {
+      humans.push(login);
+    }
+  }
+
+  const requestedHumanReviewers = Array.from(new Set(humans));
+  if (requestedHumanReviewers.length > 0) {
+    await options.client.requestPullRequestReviewers(options.repo, options.pullNumber, requestedHumanReviewers);
+  }
+
+  if (requestedCopilot) {
+    const copilotBot = "copilot-pull-request-reviewer[bot]";
+    try {
+      await options.client.removeRequestedPullRequestReviewers(options.repo, options.pullNumber, [copilotBot]);
+    } catch {
+      // ignore best-effort remove
+    }
+    await options.client.requestPullRequestReviewers(options.repo, options.pullNumber, [copilotBot]);
+  }
+
+  if (requestedCodex) {
+    await options.client.commentIssue(options.repo, options.pullNumber, "@codex review");
+  }
+
+  return {
+    requestedHumanReviewers,
+    requestedCopilot,
+    requestedCodex
+  };
 }

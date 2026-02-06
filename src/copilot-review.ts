@@ -1,6 +1,8 @@
 import type { PullRequestReview } from "./github.js";
+import { reviewFeedbackIndicatesOk } from "./review-feedback.js";
 
 const COPILOT_REVIEWER_LOGINS = new Set([
+  "copilot",
   "copilot-pull-request-reviewer",
   "github-copilot[bot]",
   "copilot[bot]"
@@ -15,9 +17,7 @@ export function isCopilotReviewerLogin(login: string | null): boolean {
 }
 
 export function copilotReviewIndicatesNoNewComments(body: string | null): boolean {
-  const text = (body ?? "").trim();
-  if (!text) return false;
-  return /\bgenerated\s+no(?:\s+new)?\s+comments?\b/i.test(text) || /\bno\s+new\s+comments\b/i.test(text);
+  return reviewFeedbackIndicatesOk(body);
 }
 
 function parseSubmittedAt(value: string | null): number {

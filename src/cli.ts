@@ -71,9 +71,12 @@ import {
 } from "./review-queue.js";
 import { scheduleReviewFollowups } from "./review-scheduler.js";
 import type { ScheduledReviewFollowup } from "./review-scheduler.js";
-import { attemptAutoMergeApprovedPullRequest, resolveAllUnresolvedReviewThreads } from "./pr-review-actions.js";
+import {
+  attemptAutoMergeApprovedPullRequest,
+  reRequestAllReviewers,
+  resolveAllUnresolvedReviewThreads
+} from "./pr-review-actions.js";
 import { summarizeLatestReviews } from "./pr-review-automation.js";
-import { copilotLatestReviewIsNoNewCommentsApproval } from "./copilot-review.js";
 import {
   listManagedPullRequests,
   markManagedPullRequest,
@@ -349,12 +352,13 @@ async function maybeEnqueueManagedPullRequestReviewFollowups(options: {
       reviews.map((review) => ({
         author: review.author,
         state: review.state,
-        submittedAt: review.submittedAt
-      }))
+        submittedAt: review.submittedAt,
+        body: review.body
+      })),
+      pr.requestedReviewerLogins
     );
-    const copilotNoNewComments = copilotLatestReviewIsNoNewCommentsApproval(reviews);
 
-    if (summary.changesRequested) {
+    if (summary.changesRequested > 0 || summary.actionableComments > 0) {
       if (dryRun) {
         log("info", "Dry-run: would enqueue managed PR review follow-up due to changes requested.", json, { url: issue.url });
         enqueued += 1;
@@ -374,7 +378,7 @@ async function maybeEnqueueManagedPullRequestReviewFollowups(options: {
       continue;
     }
 
-    if (summary.approved || copilotNoNewComments) {
+    if (summary.approved) {
       if (dryRun) {
         log("info", "Dry-run: would enqueue managed PR merge follow-up after approval.", json, { url: issue.url });
         enqueued += 1;
@@ -1709,6 +1713,25 @@ program
                   }
                 } catch (error) {
                   log("warn", "Failed to resolve PR review threads after follow-up run.", json, {
+                    url: followup.url,
+                    error: error instanceof Error ? error.message : String(error)
+                  });
+                }
+                try {
+                  const requested = await reRequestAllReviewers({
+                    client: notifyClient ?? client,
+                    repo: followup.repo,
+                    pullNumber: followup.prNumber,
+                    issue
+                  });
+                  log("info", "Re-requested reviewers after follow-up run.", json, {
+                    url: followup.url,
+                    humanReviewers: requested.requestedHumanReviewers,
+                    copilot: requested.requestedCopilot,
+                    codex: requested.requestedCodex
+                  });
+                } catch (error) {
+                  log("warn", "Failed to re-request reviewers after follow-up run.", json, {
                     url: followup.url,
                     error: error instanceof Error ? error.message : String(error)
                   });

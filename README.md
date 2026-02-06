@@ -71,8 +71,12 @@ Only repo collaborators (OWNER/MEMBER/COLLABORATOR) are accepted for `/agent run
 
 When the target is a PR, agent-runner treats the PR as "managed" after `/agent run` (and for bot-authored PRs). Managed PRs:
 
-- Re-run the agent automatically on PR review feedback (review comments / changes requested).
-- Auto-merge after approval (including Copilot reviews that report "no new comments") and best-effort delete the remote PR branch.
+- Re-run the agent automatically on PR review feedback (review comments / reviews), regardless of reviewer account type.
+- Classify reviewer messages as:
+  - actionable feedback -> run a follow-up task (`requiresEngine: true`)
+  - non-actionable/OK feedback (for example "no new comments", "usage limit reached / unable to review") -> approval-style follow-up (`requiresEngine: false`)
+- Auto-merge when all known reviewers are in an OK state (no pending reviewer feedback, no actionable comments/changes requested), then best-effort delete the remote PR branch.
+- After a successful review follow-up run, re-request review from all prior reviewers (human reviewers via requested-reviewers API, Copilot bot re-request, and Codex via `@codex review`).
 
 ## E2E (GitHub API)
 
@@ -210,7 +214,8 @@ Search API scan to catch requests created while the webhook listener was down.
 When no queued issues exist, the runner can execute idle tasks defined in the config.
 Each idle run writes a report under `reports/` and streams the Codex output to `logs/`.
 When changes are made, the idle prompt is expected to open a PR. The runner will
-follow up on PR review feedback and can auto-merge managed PRs after approval.
+follow up on PR review feedback and can auto-merge managed PRs when all reviewers
+are in an OK state.
 
 ### GitHub notifications (GitHub App / bot token)
 
