@@ -1,8 +1,13 @@
 <!-- markdownlint-disable MD025 -->
 # Tool Rules (compose-agentsmd)
 - Before starting any work, run `compose-agentsmd` from the project root.
+- `compose-agentsmd` intentionally regenerates `AGENTS.md`; any resulting `AGENTS.md` diff is expected and must not be treated as an unexpected external change.
+- If `compose-agentsmd` is not available, install it via npm: `npm install -g compose-agentsmd`.
 - To update shared rules, run `compose-agentsmd edit-rules`, edit the workspace rules, then run `compose-agentsmd apply-rules`.
+- `compose-agentsmd apply-rules` pushes the rules workspace when `source` is GitHub (if the workspace is clean), then regenerates `AGENTS.md` with refreshed rules.
 - Do not edit `AGENTS.md` directly; update the source rules and regenerate.
+- `tools/tool-rules.md` is the shared rule source for all repositories that use compose-agentsmd.
+- Before applying any rule updates, present the planned changes first (prefer a colorized diff-style preview), ask for explicit approval, then make the edits.
 - These tool rules live in tools/tool-rules.md in the compose-agentsmd repository; do not duplicate them in global rule modules.
 - When updating rules, include a colorized diff-style summary in the final response. Use `git diff --stat` first, then include the raw ANSI-colored output of `git diff --color=always` (no sanitizing or reformatting), and limit the output to the rule files that changed.
 - Also provide a short, copy-pasteable command the user can run to view the diff in the same format. Use absolute paths so it works regardless of the current working directory, and scope it to the changed rule files.
