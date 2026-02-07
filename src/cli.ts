@@ -20,6 +20,12 @@ import {
 import { evaluateCopilotUsageGate, fetchCopilotUsage } from "./copilot-usage.js";
 import { evaluateGeminiUsageGate, fetchGeminiUsage } from "./gemini-usage.js";
 import {
+  evaluateGeminiWarmup,
+  loadGeminiWarmupState,
+  recordGeminiWarmupAttempt,
+  resolveGeminiWarmupStatePath
+} from "./gemini-warmup.js";
+import {
   evaluateAmazonQUsageGate,
   getAmazonQUsageSnapshot,
   resolveAmazonQUsageStatePath
@@ -1344,6 +1350,9 @@ program
 
         let geminiProAllowed = false;
         let geminiFlashAllowed = false;
+        let geminiWarmupPro = false;
+        let geminiWarmupFlash = false;
+        let geminiWarmupReason: string | null = null;
         let amazonQAllowed = false;
         const geminiGate = config.idle.geminiUsageGate;
         if (geminiGate?.enabled) {
@@ -1360,9 +1369,29 @@ program
             if (!usage) {
               log("warn", "Idle Gemini usage gate: unable to parse Gemini quota info.", json);
             } else {
-              const decision = evaluateGeminiUsageGate(usage, geminiGate);
+              const now = new Date();
+              const decision = evaluateGeminiUsageGate(usage, geminiGate, now);
               if (!decision.allowPro && !decision.allowFlash) {
-                log("info", `Idle Gemini usage gate blocked. ${decision.reason}`, json);
+                let warmupState = { models: {} };
+                try {
+                  warmupState = loadGeminiWarmupState(resolveGeminiWarmupStatePath(config.workdirRoot));
+                } catch (error) {
+                  log("warn", "Idle Gemini warmup: unable to read warmup state. Proceeding without cooldown.", json, {
+                    error: error instanceof Error ? error.message : String(error)
+                  });
+                }
+
+                const warmupDecision = evaluateGeminiWarmup(usage, geminiGate, warmupState, now);
+                if (warmupDecision?.warmupPro || warmupDecision?.warmupFlash) {
+                  geminiWarmupPro = warmupDecision.warmupPro;
+                  geminiWarmupFlash = warmupDecision.warmupFlash;
+                  geminiWarmupReason = warmupDecision.reason;
+                  if (geminiWarmupPro) geminiProAllowed = true;
+                  if (geminiWarmupFlash) geminiFlashAllowed = true;
+                  log("info", `Idle Gemini warmup allowed. ${warmupDecision.reason}`, json);
+                } else {
+                  log("info", `Idle Gemini usage gate blocked. ${decision.reason}`, json);
+                }
               } else {
                 if (decision.allowPro) geminiProAllowed = true;
                 if (decision.allowFlash) geminiFlashAllowed = true;
@@ -1381,12 +1410,18 @@ program
             log("warn", "Idle Gemini enabled but no gemini command configured. Skipping Gemini idle.", json);
             geminiProAllowed = false;
             geminiFlashAllowed = false;
+            geminiWarmupPro = false;
+            geminiWarmupFlash = false;
+            geminiWarmupReason = null;
           } else {
             const exists = await commandExists(config.gemini.command);
             if (!exists) {
               log("warn", `Idle Gemini command not found (${config.gemini.command}).`, json);
               geminiProAllowed = false;
               geminiFlashAllowed = false;
+              geminiWarmupPro = false;
+              geminiWarmupFlash = false;
+              geminiWarmupReason = null;
             }
           }
         }
@@ -1513,6 +1548,30 @@ program
             }))
           });
           return;
+        }
+
+        if (geminiWarmupPro || geminiWarmupFlash) {
+          try {
+            const warmupStatePath = resolveGeminiWarmupStatePath(config.workdirRoot);
+            const warmupNow = new Date();
+            const scheduledEngines = new Set(scheduled.map((task) => task.engine));
+            if (geminiWarmupPro && scheduledEngines.has("gemini-pro")) {
+              recordGeminiWarmupAttempt(warmupStatePath, "gemini-3-pro-preview", warmupNow);
+            }
+            if (geminiWarmupFlash && scheduledEngines.has("gemini-flash")) {
+              recordGeminiWarmupAttempt(warmupStatePath, "gemini-3-flash-preview", warmupNow);
+            }
+            log("info", "Idle Gemini warmup attempt recorded.", json, {
+              warmupPro: geminiWarmupPro && scheduledEngines.has("gemini-pro"),
+              warmupFlash: geminiWarmupFlash && scheduledEngines.has("gemini-flash"),
+              reason: geminiWarmupReason
+            });
+          } catch (error) {
+            log("warn", "Idle Gemini warmup: unable to record warmup attempt.", json, {
+              error: error instanceof Error ? error.message : String(error),
+              reason: geminiWarmupReason
+            });
+          }
         }
 
         const idleLimit = pLimit(config.concurrency);

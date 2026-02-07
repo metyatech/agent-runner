@@ -65,6 +65,10 @@ export type AgentRunnerConfig = {
     geminiUsageGate?: {
       enabled: boolean;
       strategy: "spare-only";
+      warmup?: {
+        enabled?: boolean;
+        cooldownMinutes?: number;
+      };
       startMinutes: number;
       minRemainingPercentAtStart: number;
       minRemainingPercentAtEnd: number;

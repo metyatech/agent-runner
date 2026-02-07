@@ -17,6 +17,10 @@ export type GeminiUsage = {
 export type GeminiUsageGateConfig = {
   enabled: boolean;
   strategy: "spare-only";
+  warmup?: {
+    enabled?: boolean;
+    cooldownMinutes?: number;
+  };
 } & UsageRampSchedule;
 
 export type GeminiUsageGateDecision = {
@@ -282,11 +286,15 @@ export async function fetchGeminiUsage(
       for (const bucket of quotaData.buckets) {
         const modelId = bucket.modelId;
         if (modelId === "gemini-3-pro-preview" || modelId === "gemini-3-flash-preview") {
-          // remainingFraction is usually between 0.0 and 1.0
-          // but we want usage/limit.
-          // Gemini CLI's BucketInfo has resetTime.
-          const limit = 100; // API doesn't return limit directly, we use 100 as percentage scale
-          const used = Math.round((1.0 - (bucket.remainingFraction ?? 1.0)) * 100);
+          // remainingFraction is usually between 0.0 and 1.0.
+          // Keep fractional precision so tiny consumption (<0.5%) does not get rounded away.
+          const remainingFraction =
+            typeof bucket.remainingFraction === "number" && Number.isFinite(bucket.remainingFraction)
+              ? Math.min(Math.max(bucket.remainingFraction, 0), 1)
+              : 1.0;
+          const limit = 100; // percentage scale
+          const usedRaw = (1.0 - remainingFraction) * 100;
+          const used = Math.round(usedRaw * 1_000_000) / 1_000_000;
           usage[modelId as keyof GeminiUsage] = {
             limit,
             usage: used,

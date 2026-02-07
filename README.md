@@ -178,6 +178,9 @@ Config file: `agent-runner.config.json`
   - `idle.geminiUsageGate.startMinutes`: When to begin idle runs (minutes before reset)
   - `idle.geminiUsageGate.minRemainingPercentAtStart`: Required remaining percent at startMinutes
   - `idle.geminiUsageGate.minRemainingPercentAtEnd`: Required remaining percent at reset time
+  - `idle.geminiUsageGate.warmup`: Optional warmup run when Gemini is at 100% and the reset countdown appears stuck (default enabled)
+    - `idle.geminiUsageGate.warmup.enabled`: Enable/disable warmup (default `true`)
+    - `idle.geminiUsageGate.warmup.cooldownMinutes`: Minimum minutes between warmup attempts (default `60`)
   - `idle.amazonQUsageGate`: Optional Amazon Q monthly usage guard (runner-local tracking)
   - `idle.amazonQUsageGate.enabled`: Turn Amazon Q usage gating on/off
   - `idle.amazonQUsageGate.monthlyLimit`: Monthly request limit to enforce for runner-driven usage
@@ -266,6 +269,10 @@ usage to be within the configured reset window and above the remaining-percent
 threshold for that window.
 If `idle.geminiUsageGate.enabled` is true, idle runs also require Gemini usage
 to be within the configured reset window and above the remaining-percent threshold.
+Note: some Gemini quotas report a `~24h` reset time while usage is still `100%`, and the countdown
+does not start decreasing until the first request is made. When warmup is enabled (default),
+agent-runner will schedule a single Gemini idle run (per model, throttled by cooldown) to start
+the countdown, and then the normal reset-window gating applies.
 If `idle.amazonQUsageGate.enabled` is true, idle runs also require Amazon Q monthly
 usage (tracked by agent-runner for its own runs) to be within the configured reset
 window and above the remaining-percent threshold.

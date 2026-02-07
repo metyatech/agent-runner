@@ -162,6 +162,14 @@
           "properties": {
             "enabled": { "type": "boolean" },
             "strategy": { "type": "string", "enum": ["spare-only"] },
+            "warmup": {
+              "type": "object",
+              "properties": {
+                "enabled": { "type": "boolean" },
+                "cooldownMinutes": { "type": "integer", "minimum": 0, "maximum": 10080 }
+              },
+              "additionalProperties": false
+            },
             "startMinutes": { "type": "integer", "minimum": 0, "maximum": 10080 },
             "minRemainingPercentAtStart": { "type": "number", "minimum": 0, "maximum": 100 },
             "minRemainingPercentAtEnd": { "type": "number", "minimum": 0, "maximum": 100 }
