@@ -35,13 +35,34 @@ public static class Win32 {
 & $hideConsole
 
 $script:trayMutex = $null
+function Release-TrayMutex {
+  if (-not $script:trayMutex) {
+    return
+  }
+  try {
+    $script:trayMutex.ReleaseMutex() | Out-Null
+  } catch {
+    # ignore
+  }
+  try {
+    $script:trayMutex.Dispose()
+  } catch {
+    # ignore
+  }
+  $script:trayMutex = $null
+}
+
 try {
-  $script:trayMutex = New-Object System.Threading.Mutex($false, "Local\\AgentRunnerTray")
-  $hasHandle = $script:trayMutex.WaitOne(0, $false)
-  if (-not $hasHandle) {
+  $mutexCreatedNew = $false
+  $script:trayMutex = New-Object System.Threading.Mutex($true, "Local\AgentRunnerTray", [ref]$mutexCreatedNew)
+  if (-not $mutexCreatedNew) {
+    Release-TrayMutex
     exit 0
   }
+} catch [System.Threading.AbandonedMutexException] {
+  # Treat as acquired; continue.
 } catch {
+  Release-TrayMutex
   # best-effort; continue without single-instance enforcement
 }
 
@@ -317,6 +338,7 @@ $menu.Items.Add("Exit", $null, {
   }
   $notifyIcon.Visible = $false
   $notifyIcon.Dispose()
+  Release-TrayMutex
   [System.Windows.Forms.Application]::Exit()
 }) | Out-Null
 
