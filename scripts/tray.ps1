@@ -10,6 +10,10 @@ $ErrorActionPreference = "Stop"
 Set-StrictMode -Version Latest
 $env:NODE_NO_WARNINGS = "1"
 
+$logsProjectName = "agent-runner-logging"
+$logsComposePath = Join-Path $RepoPath "ops\\logging\\docker-compose.yml"
+$grafanaUrl = "http://127.0.0.1:3000"
+
 $hideConsole = {
   try {
     Add-Type -Namespace AgentRunner -Name Win32 -MemberDefinition @"
@@ -47,6 +51,60 @@ Add-Type -AssemblyName System.Drawing
 $cliPath = Join-Path $RepoPath "dist\\cli.js"
 $statusProcess = $null
 $webhookProcess = $null
+
+function Start-LogsStack {
+  if (-not (Test-Path $logsComposePath)) {
+    return
+  }
+
+  $dockerOk = $false
+  try {
+    & docker version 1>$null 2>$null
+    if ($LASTEXITCODE -eq 0) {
+      $dockerOk = $true
+    }
+  } catch {
+    $dockerOk = $false
+  }
+
+  if (-not $dockerOk) {
+    $dockerDesktop = @(
+      "$Env:ProgramFiles\\Docker\\Docker\\Docker Desktop.exe",
+      "$Env:LocalAppData\\Programs\\Docker\\Docker Desktop.exe"
+    ) | Where-Object { Test-Path $_ } | Select-Object -First 1
+
+    if ($dockerDesktop) {
+      try {
+        Start-Process -FilePath $dockerDesktop 1>$null 2>$null
+      } catch {
+        # ignore
+      }
+    }
+  }
+
+  try {
+    & docker compose -p $logsProjectName -f $logsComposePath up -d 1>$null 2>$null
+  } catch {
+    # best-effort
+  }
+}
+
+function Stop-LogsStack {
+  if (-not (Test-Path $logsComposePath)) {
+    return
+  }
+
+  try {
+    & docker compose -p $logsProjectName -f $logsComposePath down 1>$null 2>$null
+  } catch {
+    # best-effort
+  }
+}
+
+function Open-LogsUi {
+  Start-LogsStack
+  Start-Process $grafanaUrl
+}
 
 function Load-RunnerConfig {
   if (-not (Test-Path $ConfigPath)) {
@@ -158,6 +216,7 @@ function Ensure-WebhookServer {
 function Open-StatusUi {
   Ensure-StatusServer
   Ensure-WebhookServer
+  Start-LogsStack
   Start-Process "http://$StatusHost`:$StatusPort/"
 }
 
@@ -204,6 +263,7 @@ function Resume-Runner {
   if (-not (Test-Path $cliPath)) {
     return
   }
+  Start-LogsStack
   $savedPreference = $ErrorActionPreference
   try {
     $ErrorActionPreference = "Continue"
@@ -225,6 +285,11 @@ $notifyIcon.Visible = $true
 
 $menu = New-Object System.Windows.Forms.ContextMenuStrip
 $menu.Items.Add("Open Status UI", $null, { Open-StatusUi }) | Out-Null
+$menu.Items.Add("-") | Out-Null
+$menu.Items.Add("Open Logs (Grafana)", $null, { Open-LogsUi }) | Out-Null
+$menu.Items.Add("Start Logs", $null, { Start-LogsStack }) | Out-Null
+$menu.Items.Add("Stop Logs", $null, { Stop-LogsStack }) | Out-Null
+$menu.Items.Add("-") | Out-Null
 $menu.Items.Add("Pause Runner", $null, { Request-Stop }) | Out-Null
 $menu.Items.Add("Resume Runner", $null, { Resume-Runner }) | Out-Null
 $menu.Items.Add("Exit", $null, {
@@ -289,5 +354,6 @@ $timer.Add_Tick({
 }) | Out-Null
 $timer.Start()
 
+Start-LogsStack
 Ensure-WebhookServer
 [System.Windows.Forms.Application]::Run()

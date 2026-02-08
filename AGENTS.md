@@ -115,6 +115,7 @@ Source: github:metyatech/agent-rules@HEAD/rules/global/implementation-and-coding
 
 - Prefer official/standard approaches recommended by the framework or tooling.
 - Prefer well-maintained external dependencies; build in-house only when no suitable option exists.
+- Prefer third-party tools/services over custom implementations when they can meet the requirements; prefer free options (OSS/free-tier) when feasible and call out limitations/tradeoffs.
 - If functionality appears reusable, assess reuse first and propose a shared module/repo; prefer remote dependencies (never local filesystem paths).
 - Maintainability > testability > extensibility > readability.
 - Single responsibility; keep modules narrowly scoped and prefer composition over inheritance.

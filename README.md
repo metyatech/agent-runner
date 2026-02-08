@@ -192,6 +192,61 @@ Config file: `agent-runner.config.json`
   - `idle.amazonQUsageGate.monthlyLimit`: Monthly request limit to enforce for runner-driven usage
   - `idle.amazonQUsageGate.monthlySchedule`: Monthly ramp for remaining percent (same semantics as Copilot)
 
+## Logs (Grafana + Loki)
+
+This repo includes an optional, local-only log UI and query toolchain based on Grafana + Loki + Promtail.
+It avoids relying on log file naming/date boundaries (UTC vs local time) by querying logs by time range.
+
+### What is it?
+
+- `agent-runner` writes logs to `./logs/*.log` (local files).
+- Promtail tails those files and ships log lines to Loki.
+- Loki stores and indexes logs for fast time-range queries.
+- Grafana is the web UI that queries Loki.
+
+Why keep `./logs/*.log`?
+
+- Promtail needs a local input source to tail without adding custom log-shipping code to the runner.
+- It also provides a fallback when Docker/Loki is down (you still have raw files).
+
+Start the stack (local only):
+
+```bash
+docker compose -p agent-runner-logging -f ops/logging/docker-compose.yml up -d
+```
+
+Open Grafana:
+
+- `http://127.0.0.1:3000` (default credentials are `admin` / `admin` on first run)
+
+Explore logs (examples):
+
+- All logs: `{job="agent-runner"}`
+- Task run logs: `{job="agent-runner", kind="task-run"}`
+- Task meta logs: `{job="agent-runner", kind="task-meta"}`
+- Webhook logs: `{job="agent-runner", kind="webhook-run"}`
+- Webhook meta logs: `{job="agent-runner", kind="webhook-meta"}`
+
+Timezone note:
+
+- Grafana shows timestamps in your browser's local timezone by default (per-user setting).
+- Log lines are written with a UTC RFC3339 timestamp prefix; Promtail parses it so Loki stores the correct event timestamp.
+
+CLI export to a file (use your own local time offset in the range):
+
+```bash
+docker run --rm --network agent-runner-logging_default grafana/logcli:3.6.0 \
+  query --addr http://loki:3100 \
+  --from "<FROM_RFC3339>" --to "<TO_RFC3339>" \
+  '{job="agent-runner", kind="task-run"}' > exported.log
+```
+
+Stop the stack:
+
+```bash
+docker compose -p agent-runner-logging -f ops/logging/docker-compose.yml down
+```
+
 ## Running
 
 One-shot execution:
@@ -579,6 +634,13 @@ For startup/background launch without a visible PowerShell window, use:
 ```powershell
 wscript.exe //B //NoLogo .\scripts\run-tray.vbs
 ```
+
+The tray helper also includes log shortcuts (Grafana) and can start/stop the local logging stack.
+
+Tip:
+
+- Double-click the tray icon to open the Status UI.
+- Right-click the tray icon to open "Open Logs (Grafana)".
 
 If `webhooks.enabled` is true, the tray helper will also ensure the webhook listener
 is running in the background.

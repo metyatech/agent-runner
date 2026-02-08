@@ -15,17 +15,18 @@ function safeWrite(line: string): void {
 }
 
 export function log(level: LogLevel, message: string, json: boolean, data?: Record<string, unknown>): void {
+  const timestamp = new Date().toISOString();
   if (json) {
     const payload = {
       level,
       message,
       ...data,
-      timestamp: new Date().toISOString()
+      timestamp
     };
     safeWrite(`${JSON.stringify(payload)}\n`);
     return;
   }
 
   const details = data ? ` ${JSON.stringify(data)}` : "";
-  safeWrite(`[${level.toUpperCase()}] ${message}${details}\n`);
+  safeWrite(`[${timestamp}] [${level.toUpperCase()}] ${message}${details}\n`);
 }
