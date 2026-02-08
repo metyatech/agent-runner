@@ -55,9 +55,10 @@ you can also save the token to `state/cloudflared-token.txt` (ignored by git).
 ## Development commands
 
 - `npm run lint`
+- `npm run lint:ps` (PowerShell lint via PSScriptAnalyzer; required by `verify`)
 - `npm run test` (unit tests + local CLI checks; does not call GitHub API)
 - `npm run build`
-- `npm run verify` (lint + test + build)
+- `npm run verify` (lint + lint:ps + test + build)
 - `npm run dev -- run --once --yes`
 
 ## Requesting work
