@@ -6,14 +6,14 @@
   "schemaVersion": 39,
   "version": 1,
   "refresh": "10s",
-  "time": { "from": "now-1h", "to": "now" },
+  "time": { "from": "now-24h", "to": "now" },
   "templating": {
     "list": [
       {
         "name": "kind",
         "label": "Kind",
         "type": "custom",
-        "query": "task-run,task-meta,webhook-run,webhook-meta,task-run-err,webhook-run-err,idle,issue,runner-out,runner-err",
+        "query": "task-run,task-meta,webhook-run,webhook-meta,task-run-err,webhook-run-err,idle,issue,runner",
         "current": { "text": "task-run", "value": "task-run" },
         "refresh": 1,
         "sort": 1,
@@ -31,11 +31,21 @@
   },
   "panels": [
     {
+      "id": 2,
+      "type": "text",
+      "title": "How to use",
+      "gridPos": { "h": 4, "w": 24, "x": 0, "y": 0 },
+      "options": {
+        "mode": "markdown",
+        "content": "- Use **Kind** to switch log groups.\n- If you see **No data**: widen the time range (top right) and clear **Contains**.\n- Tip: `Contains` is a plain substring filter."
+      }
+    },
+    {
       "id": 1,
       "type": "logs",
       "title": "Logs",
       "datasource": { "type": "loki", "uid": "loki" },
-      "gridPos": { "h": 22, "w": 24, "x": 0, "y": 0 },
+      "gridPos": { "h": 18, "w": 24, "x": 0, "y": 4 },
       "options": {
         "showTime": true,
         "wrapLogMessage": true,
