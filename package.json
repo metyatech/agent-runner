@@ -15,7 +15,16 @@
     "test:unit": "vitest run ./tests/unit",
     "test:e2e": "vitest run ./tests/e2e",
     "dev": "tsx src/cli.ts",
-    "prepare": "simple-git-hooks"
+    "prepare": "simple-git-hooks",
+    "verify": "npm run lint && npm run test && npm run build"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/metyatech/agent-runner.git"
+  },
+  "homepage": "https://github.com/metyatech/agent-runner#readme",
+  "bugs": {
+    "url": "https://github.com/metyatech/agent-runner/issues"
   },
   "dependencies": {
     "@octokit/auth-app": "^7.2.2",
