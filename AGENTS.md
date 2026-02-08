@@ -116,6 +116,9 @@ Source: github:metyatech/agent-rules@HEAD/rules/global/implementation-and-coding
 - Prefer official/standard approaches recommended by the framework or tooling.
 - Prefer well-maintained external dependencies; build in-house only when no suitable option exists.
 - Prefer third-party tools/services over custom implementations when they can meet the requirements; prefer free options (OSS/free-tier) when feasible and call out limitations/tradeoffs.
+- PowerShell: `\` is a literal character (not an escape). Do not cargo-cult `\\` escaping patterns from other languages; validate APIs that require names like `Local\...` (e.g., named mutexes).
+- PowerShell: avoid assigning to or shadowing automatic/read-only variables (e.g., `$args`, `$PID`); use different names for locals.
+- PowerShell: when invoking PowerShell from PowerShell, avoid double-quoted `-Command` strings that allow the outer shell to expand `$...`; prefer `-File`, single quotes, or here-strings to control expansion.
 - If functionality appears reusable, assess reuse first and propose a shared module/repo; prefer remote dependencies (never local filesystem paths).
 - Maintainability > testability > extensibility > readability.
 - Single responsibility; keep modules narrowly scoped and prefer composition over inheritance.
@@ -208,6 +211,7 @@ Source: github:metyatech/agent-rules@HEAD/rules/global/linting-formatting-and-st
 - Format+lint: PSScriptAnalyzer (Invoke-Formatter + Invoke-ScriptAnalyzer).
 - Runtime: Set-StrictMode -Version Latest; fail fast on errors.
 - Tests: Pester when tests exist.
+- Enforce PSScriptAnalyzer via the repo’s standard `verify` command/script when PowerShell is used; treat findings as errors.
 
 ### Shell (sh/bash)
 
