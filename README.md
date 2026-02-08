@@ -453,14 +453,22 @@ Register a scheduled task that runs every minute:
 .\scripts\register-task.ps1 -RepoPath "." -ConfigPath ".\\agent-runner.config.json"
 ```
 
+Note:
+
+- The `AgentRunner` scheduled task is intentionally a daemon (`scripts/run-task.ps1` loops forever).
+- The task is configured with `MultipleInstances IgnoreNew`, so when Task Scheduler tries to start it again (every minute),
+  it may report `LastTaskResult = 0x800710E0` ("refused the request") even though the already-running instance is healthy.
+  Prefer checking the task `State = Running` and the logs instead of relying on `LastTaskResult`.
+
 Unregister the task:
 
 ```powershell
 .\scripts\unregister-task.ps1
 ```
 
-Task run logs are written to `logs/task-run-YYYYMMDD.log` (one file per day).
+Task run logs are written to `logs/task-run-YYYYMMDD-HHmmss-fff-PID.log` (one file per process start).
 The latest task-run log path is also written to `logs/latest-task-run.path`.
+Task meta logs (environment + runner start/end) are appended to `logs/task-meta-YYYYMMDD.log` and the latest path is written to `logs/latest-task-meta.path`.
 
 Issue logs (e.g. `*-issue-*.log`) are appended as output is produced.
 
@@ -490,7 +498,8 @@ Unregister the tunnel task:
 .\scripts\unregister-cloudflared-task.ps1
 ```
 
-Logs are written to `logs/webhook-run-*.out.log` / `logs/webhook-run-*.err.log` and `logs/cloudflared-*.out.log` / `logs/cloudflared-*.err.log`.
+Logs are written to `logs/webhook-run-YYYYMMDD-HHmmss-fff-PID.log` / `logs/webhook-run-YYYYMMDD-HHmmss-fff-PID.err.log` and `logs/cloudflared-*.out.log` / `logs/cloudflared-*.err.log`.
+Webhook meta logs are appended to `logs/webhook-meta-YYYYMMDD.log` and the latest paths are written to `logs/latest-webhook-run.path` and `logs/latest-webhook-meta.path`.
 
 ### Log cleanup
 
