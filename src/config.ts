@@ -10,6 +10,12 @@ export type AgentRunnerConfig = {
   workdirRoot: string;
   pollIntervalSeconds: number;
   concurrency: number;
+  serviceConcurrency?: {
+    codex?: number;
+    copilot?: number;
+    gemini?: number;
+    amazonQ?: number;
+  };
   logMaintenance?: {
     enabled: boolean;
     maxAgeDays?: number;

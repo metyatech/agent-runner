@@ -33,6 +33,16 @@
       "minimum": 1,
       "maximum": 16
     },
+    "serviceConcurrency": {
+      "type": "object",
+      "properties": {
+        "codex": { "type": "integer", "minimum": 1, "maximum": 16 },
+        "copilot": { "type": "integer", "minimum": 1, "maximum": 16 },
+        "gemini": { "type": "integer", "minimum": 1, "maximum": 16 },
+        "amazonQ": { "type": "integer", "minimum": 1, "maximum": 16 }
+      },
+      "additionalProperties": false
+    },
     "logMaintenance": {
       "type": "object",
       "required": ["enabled"],

@@ -101,6 +101,7 @@ import {
   takeDueRetries
 } from "./scheduled-retry-state.js";
 import { recoverStalledIssue } from "./stalled-issue-recovery.js";
+import { createServiceLimiters, idleEngineToService } from "./service-concurrency.js";
 
 const program = new Command();
 
@@ -520,6 +521,8 @@ program
     if (options.concurrency) {
       config.concurrency = Number.parseInt(options.concurrency, 10);
     }
+
+    const serviceLimiters = createServiceLimiters(config);
 
     const token =
       process.env.AGENT_GITHUB_TOKEN ||
@@ -1578,7 +1581,10 @@ program
         await Promise.all(
           scheduled.map((task) =>
             idleLimit(async () => {
-              const result = await runIdleTask(config, task.repo, task.task, task.engine);
+              const service = idleEngineToService(task.engine);
+              const result = await serviceLimiters[service](() =>
+                runIdleTask(config, task.repo, task.task, task.engine)
+              );
               await maybeNotifyIdlePullRequest(result);
               if (result.success) {
                 log("info", "Idle task completed.", json, {
@@ -1641,7 +1647,7 @@ program
                 await removeWebhookIssues(webhookQueuePath, [issue.id]);
               }
 
-              const result = await runIssueWithSessionResume(issue);
+              const result = await serviceLimiters.codex(() => runIssueWithSessionResume(issue));
               activityId = result.activityId;
               if (result.success) {
                 clearRetry(scheduledRetryStatePath, issue.id);
@@ -1751,7 +1757,7 @@ program
               );
               clearRetry(scheduledRetryStatePath, issue.id);
 
-              const result = await runIssueWithSessionResume(issue);
+              const result = await serviceLimiters.codex(() => runIssueWithSessionResume(issue));
               activityId = result.activityId;
               if (result.success) {
                 clearRetry(scheduledRetryStatePath, issue.id);

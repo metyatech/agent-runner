@@ -57,6 +57,7 @@ you can also save the token to `state/cloudflared-token.txt` (ignored by git).
 - `npm run lint`
 - `npm run test` (unit tests + local CLI checks; does not call GitHub API)
 - `npm run build`
+- `npm run verify` (lint + test + build)
 - `npm run dev -- run --once --yes`
 
 ## Requesting work
@@ -117,6 +118,11 @@ Config file: `agent-runner.config.json`
 - `workdirRoot`: Local workspace root containing repos
 - `pollIntervalSeconds`: Polling interval
 - `concurrency`: Max concurrent requests
+- `serviceConcurrency`: Optional per-service concurrency (defaults to 1 for each service)
+  - `serviceConcurrency.codex`: Max concurrent Codex executions
+  - `serviceConcurrency.copilot`: Max concurrent Copilot executions
+  - `serviceConcurrency.gemini`: Max concurrent Gemini executions (pro/flash combined)
+  - `serviceConcurrency.amazonQ`: Max concurrent Amazon Q executions
 - `repos`: If `"all"`, the runner caches the repository list and refreshes periodically to avoid GitHub rate limits. When rate-limited and no cache is available, it will fall back to local workspace repositories (directories with a `.git` folder).
 - `logMaintenance`: Optional log pruning settings (applied automatically on startup and via `agent-runner logs prune`)
 - `reportMaintenance`: Optional report pruning settings (applied automatically on startup and via `agent-runner reports prune`)

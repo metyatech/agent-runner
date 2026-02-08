@@ -103,5 +103,75 @@ describe("loadConfig", () => {
       fs.rmSync(tempDir, { recursive: true, force: true });
     }
   });
+
+  it("accepts serviceConcurrency configuration", () => {
+    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "agent-runner-config-service-"));
+    const configPath = path.join(tempDir, "agent-runner.config.json");
+
+    fs.writeFileSync(
+      configPath,
+      JSON.stringify(
+        {
+          owner: "metyatech",
+          repos: "all",
+          workdirRoot: "D:\\ghws",
+          pollIntervalSeconds: 60,
+          concurrency: 8,
+          serviceConcurrency: {
+            codex: 1,
+            copilot: 1,
+            gemini: 1,
+            amazonQ: 1
+          },
+          labels: {
+            queued: "agent:queued",
+            running: "agent:running",
+            done: "agent:done",
+            failed: "agent:failed",
+            needsUserReply: "agent:needs-user"
+          },
+          codex: {
+            command: "codex",
+            args: ["exec", "--help"],
+            promptTemplate: "Template {{repos}} {{task}}"
+          }
+        },
+        null,
+        2
+      ),
+      "utf8"
+    );
+
+    try {
+      const repoRoot = path.resolve(".");
+      const scriptPath = path.join(tempDir, "run-load-config.mjs");
+      const configModulePath = path.join(repoRoot, "src", "config.ts");
+
+      fs.writeFileSync(
+        scriptPath,
+        [
+          "import process from 'node:process';",
+          "import { pathToFileURL } from 'node:url';",
+          "const [tempDir, configPath, configModulePath] = process.argv.slice(2);",
+          "process.chdir(tempDir);",
+          "const mod = await import(pathToFileURL(configModulePath).href);",
+          "mod.loadConfig(configPath);",
+          "console.log('OK');"
+        ].join("\n"),
+        "utf8"
+      );
+
+      const result = spawnSync(
+        process.execPath,
+        ["--import", "tsx", scriptPath, tempDir, configPath, configModulePath],
+        { encoding: "utf8", cwd: repoRoot }
+      );
+
+      expect(result.status).toBe(0);
+      expect(result.stdout).toContain("OK");
+    } finally {
+      fs.rmSync(tempDir, { recursive: true, force: true });
+    }
+  });
 });
 
