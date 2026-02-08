@@ -8,10 +8,13 @@ repoDir = fso.GetParentFolderName(scriptDir)
 ps1Path = scriptDir & "\run-webhook.ps1"
 configPath = repoDir & "\agent-runner.config.json"
 
+If WScript.Arguments.Count >= 1 Then
+  configPath = WScript.Arguments.Item(0)
+End If
+
 cmd = "powershell.exe -NoProfile -NonInteractive -WindowStyle Hidden -ExecutionPolicy Bypass -File """ & ps1Path & _
   """ -RepoPath """ & repoDir & """ -ConfigPath """ & configPath & """"
 
 Set shell = CreateObject("WScript.Shell")
 shell.CurrentDirectory = repoDir
 shell.Run cmd, 0, True
-

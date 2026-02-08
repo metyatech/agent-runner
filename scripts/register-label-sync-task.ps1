@@ -10,7 +10,7 @@ $resolvedRepoPath = (Resolve-Path -Path $RepoPath).Path
 $resolvedConfigPath = (Resolve-Path -Path $ConfigPath).Path
 $vbs = Join-Path $resolvedRepoPath "scripts\\run-label-sync.vbs"
 
-$action = New-ScheduledTaskAction -Execute $wscript -Argument "//B //NoLogo `"$vbs`"" -WorkingDirectory $resolvedRepoPath
+$action = New-ScheduledTaskAction -Execute $wscript -Argument "//B //NoLogo `"$vbs`" `"$resolvedConfigPath`"" -WorkingDirectory $resolvedRepoPath
 $trigger = New-ScheduledTaskTrigger -Daily -At $DailyAt
 $principal = New-ScheduledTaskPrincipal -UserId $env:USERNAME -LogonType S4U -RunLevel Limited
 $settings = New-ScheduledTaskSettingsSet -Hidden -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries

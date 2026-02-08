@@ -1,3 +1,7 @@
+[Diagnostics.CodeAnalysis.SuppressMessageAttribute("PSReviewUnusedParameter", "ConfigPath", Justification = "Used via script-scoped functions; PSScriptAnalyzer may false-positive on script param blocks.")]
+[Diagnostics.CodeAnalysis.SuppressMessageAttribute("PSReviewUnusedParameter", "StatusHost", Justification = "Used via script-scoped functions; PSScriptAnalyzer may false-positive on script param blocks.")]
+[Diagnostics.CodeAnalysis.SuppressMessageAttribute("PSReviewUnusedParameter", "StatusPort", Justification = "Used via script-scoped functions; PSScriptAnalyzer may false-positive on script param blocks.")]
+[Diagnostics.CodeAnalysis.SuppressMessageAttribute("PSReviewUnusedParameter", "RunnerTaskName", Justification = "Used via script-scoped functions; PSScriptAnalyzer may false-positive on script param blocks.")]
 param(
   [string]$RepoPath = (Split-Path -Parent $PSScriptRoot),
   [string]$ConfigPath = (Join-Path (Split-Path -Parent $PSScriptRoot) "agent-runner.config.json"),
@@ -70,8 +74,8 @@ Add-Type -AssemblyName System.Windows.Forms
 Add-Type -AssemblyName System.Drawing
 
 $cliPath = Join-Path $RepoPath "dist\\cli.js"
-$statusProcess = $null
-$webhookProcess = $null
+$script:statusProcess = $null
+$script:webhookProcess = $null
 
 function Start-LogsStack {
   if (-not (Test-Path $logsComposePath)) {
@@ -200,7 +204,7 @@ function Ensure-StatusServer {
   if (-not (Test-Path $cliPath)) {
     return
   }
-  $args = @(
+  $statusArgs = @(
     $cliPath,
     "ui",
     "--config",
@@ -210,7 +214,7 @@ function Ensure-StatusServer {
     "--port",
     $StatusPort
   )
-  $statusProcess = Start-Process -FilePath "node" -ArgumentList $args -WorkingDirectory $RepoPath -WindowStyle Hidden -PassThru
+  $script:statusProcess = Start-Process -FilePath "node" -ArgumentList $statusArgs -WorkingDirectory $RepoPath -WindowStyle Hidden -PassThru
   Start-Sleep -Milliseconds 300
 }
 
@@ -224,13 +228,13 @@ function Ensure-WebhookServer {
   if (-not (Test-Path $cliPath)) {
     return
   }
-  $args = @(
+  $webhookArgs = @(
     $cliPath,
     "webhook",
     "--config",
     $ConfigPath
   )
-  $webhookProcess = Start-Process -FilePath "node" -ArgumentList $args -WorkingDirectory $RepoPath -WindowStyle Hidden -PassThru
+  $script:webhookProcess = Start-Process -FilePath "node" -ArgumentList $webhookArgs -WorkingDirectory $RepoPath -WindowStyle Hidden -PassThru
   Start-Sleep -Milliseconds 300
 }
 
@@ -314,23 +318,23 @@ $menu.Items.Add("-") | Out-Null
 $menu.Items.Add("Pause Runner", $null, { Request-Stop }) | Out-Null
 $menu.Items.Add("Resume Runner", $null, { Resume-Runner }) | Out-Null
 $menu.Items.Add("Exit", $null, {
-  if ($statusProcess -and -not $statusProcess.HasExited) {
+  if ($script:statusProcess -and -not $script:statusProcess.HasExited) {
     try {
-      $statusProcess.CloseMainWindow() | Out-Null
+      $script:statusProcess.CloseMainWindow() | Out-Null
       Start-Sleep -Milliseconds 200
-      if (-not $statusProcess.HasExited) {
-        $statusProcess.Kill()
+      if (-not $script:statusProcess.HasExited) {
+        $script:statusProcess.Kill()
       }
     } catch {
       # ignore
     }
   }
-  if ($webhookProcess -and -not $webhookProcess.HasExited) {
+  if ($script:webhookProcess -and -not $script:webhookProcess.HasExited) {
     try {
-      $webhookProcess.CloseMainWindow() | Out-Null
+      $script:webhookProcess.CloseMainWindow() | Out-Null
       Start-Sleep -Milliseconds 200
-      if (-not $webhookProcess.HasExited) {
-        $webhookProcess.Kill()
+      if (-not $script:webhookProcess.HasExited) {
+        $script:webhookProcess.Kill()
       }
     } catch {
       # ignore
