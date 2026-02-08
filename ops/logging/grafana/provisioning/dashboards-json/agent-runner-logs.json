@@ -12,9 +12,8 @@
       {
         "name": "kind",
         "label": "Kind",
-        "type": "query",
-        "datasource": { "type": "loki", "uid": "loki" },
-        "query": "label_values({job=\"agent-runner\"}, kind)",
+        "type": "custom",
+        "query": "task-run,task-meta,webhook-run,webhook-meta,task-run-err,webhook-run-err,idle,issue,runner-out,runner-err",
         "current": { "text": "task-run", "value": "task-run" },
         "refresh": 1,
         "sort": 1,

@@ -220,7 +220,16 @@ Open Grafana:
 
 - `http://127.0.0.1:3000` (default credentials are `admin` / `admin` on first run)
 
-Explore logs (examples):
+Dashboard (recommended):
+
+- Go to `Dashboards` → `Agent Runner` → `Agent Runner Logs`
+- Use the `Kind` dropdown to switch between:
+  - `task-run`, `task-meta`
+  - `webhook-run`, `webhook-meta`
+  - (and other kinds)
+- Optional: type a substring into `Contains` to filter without writing LogQL
+
+Explore logs (examples / fallback):
 
 - All logs: `{job="agent-runner"}`
 - Task run logs: `{job="agent-runner", kind="task-run"}`
