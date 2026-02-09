@@ -583,8 +583,15 @@ wscript.exe //B //NoLogo .\scripts\run-tray.vbs
 If `webhooks.enabled` is true, the tray helper will also ensure the webhook listener
 is running in the background.
 
-## Release / deploy
+## License
 
-Not applicable. This repository is intended to run locally.
+[MIT](LICENSE)
+
+## Project Standards
+
+- [Security Policy](SECURITY.md)
+- [Contributing Guidelines](CONTRIBUTING.md)
+- [Code of Conduct](CODE_OF_CONDUCT.md)
+- [Changelog](CHANGELOG.md)
 
 
