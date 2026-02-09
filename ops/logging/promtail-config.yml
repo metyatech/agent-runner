@@ -1,0 +1,136 @@
+server:
+  http_listen_port: 9080
+  grpc_listen_port: 0
+
+positions:
+  filename: /promtail/positions.yaml
+
+clients:
+  - url: http://loki:3100/loki/api/v1/push
+
+scrape_configs:
+  - job_name: agent-runner-task-run
+    pipeline_stages:
+      - regex:
+          expression: "^(?:\uFEFF)?\\[(?P<ts>[^\\]]+)\\]\\s+\\[(?P<level>[A-Z]+)\\]\\s+(?P<msg>.*)$"
+      - timestamp:
+          source: ts
+          format: RFC3339Nano
+          action_on_failure: skip
+      - labels:
+          level:
+      - output:
+          source: msg
+    static_configs:
+      - targets:
+          - localhost
+        labels:
+          job: agent-runner
+          kind: task-run
+          __path__: /var/log/agent-runner/task-run-*.log
+
+  - job_name: agent-runner-task-run-err
+    static_configs:
+      - targets:
+          - localhost
+        labels:
+          job: agent-runner
+          kind: task-run-err
+          __path__: /var/log/agent-runner/task-run-*.err.log
+
+  - job_name: agent-runner-task-meta
+    pipeline_stages:
+      - regex:
+          expression: "^=== .*?:\\s+(?P<ts>\\d{4}-\\d{2}-\\d{2}T[^\\s]+)\\s+===.*$"
+      - timestamp:
+          source: ts
+          format: RFC3339Nano
+          action_on_failure: skip
+    static_configs:
+      - targets:
+          - localhost
+        labels:
+          job: agent-runner
+          kind: task-meta
+          __path__: /var/log/agent-runner/task-meta-*.log
+
+  - job_name: agent-runner-webhook-run
+    pipeline_stages:
+      - regex:
+          expression: "^(?:\uFEFF)?\\[(?P<ts>[^\\]]+)\\]\\s+\\[(?P<level>[A-Z]+)\\]\\s+(?P<msg>.*)$"
+      - timestamp:
+          source: ts
+          format: RFC3339Nano
+          action_on_failure: skip
+      - labels:
+          level:
+      - output:
+          source: msg
+    static_configs:
+      - targets:
+          - localhost
+        labels:
+          job: agent-runner
+          kind: webhook-run
+          __path__: /var/log/agent-runner/webhook-run-*.log
+
+  - job_name: agent-runner-webhook-run-err
+    static_configs:
+      - targets:
+          - localhost
+        labels:
+          job: agent-runner
+          kind: webhook-run-err
+          __path__: /var/log/agent-runner/webhook-run-*.err.log
+
+  - job_name: agent-runner-webhook-meta
+    pipeline_stages:
+      - regex:
+          expression: "^=== .*?:\\s+(?P<ts>\\d{4}-\\d{2}-\\d{2}T[^\\s]+)\\s+===.*$"
+      - timestamp:
+          source: ts
+          format: RFC3339Nano
+          action_on_failure: skip
+    static_configs:
+      - targets:
+          - localhost
+        labels:
+          job: agent-runner
+          kind: webhook-meta
+          __path__: /var/log/agent-runner/webhook-meta-*.log
+
+  - job_name: agent-runner-idle
+    static_configs:
+      - targets:
+          - localhost
+        labels:
+          job: agent-runner
+          kind: idle
+          __path__: /var/log/agent-runner/*-idle-*.log
+
+  - job_name: agent-runner-issue
+    static_configs:
+      - targets:
+          - localhost
+        labels:
+          job: agent-runner
+          kind: issue
+          __path__: /var/log/agent-runner/*-issue-*.log
+
+  - job_name: agent-runner-runner-out
+    static_configs:
+      - targets:
+          - localhost
+        labels:
+          job: agent-runner
+          kind: runner-out
+          __path__: /var/log/agent-runner/agent-runner-run-*.out.log
+
+  - job_name: agent-runner-runner-err
+    static_configs:
+      - targets:
+          - localhost
+        labels:
+          job: agent-runner
+          kind: runner-err
+          __path__: /var/log/agent-runner/agent-runner-run-*.err.log

@@ -10,7 +10,8 @@
   "scripts": {
     "build": "tsup",
     "lint": "eslint . && tsc -p tsconfig.json --noEmit && tsc -p tsconfig.test.json --noEmit",
-    "verify": "npm run lint && npm test && npm run build",
+    "lint:ps": "powershell -NoProfile -NonInteractive -ExecutionPolicy Bypass -File scripts\\\\lint-ps.ps1",
+    "verify": "npm run lint && npm run lint:ps && npm test && npm run build",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run ./tests/unit ./tests/e2e/cli.test.ts",
     "test:unit": "vitest run ./tests/unit",
@@ -38,6 +39,6 @@
     "vitest": "^1.6.0"
   },
   "simple-git-hooks": {
-    "pre-commit": "npm run lint && npm run test && npm run build"
+    "pre-commit": "npm run verify"
   }
 }

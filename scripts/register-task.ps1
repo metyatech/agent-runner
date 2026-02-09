@@ -10,7 +10,7 @@ $resolvedRepoPath = (Resolve-Path -Path $RepoPath).Path
 $resolvedConfigPath = (Resolve-Path -Path $ConfigPath).Path
 $vbs = Join-Path $resolvedRepoPath "scripts\\run-task.vbs"
 
-$action = New-ScheduledTaskAction -Execute $wscript -Argument "//B //NoLogo `"$vbs`"" -WorkingDirectory $resolvedRepoPath
+$action = New-ScheduledTaskAction -Execute $wscript -Argument "//B //NoLogo `"$vbs`" `"$resolvedConfigPath`"" -WorkingDirectory $resolvedRepoPath
 $trigger = New-ScheduledTaskTrigger -Once -At (Get-Date).AddMinutes(1) -RepetitionInterval (New-TimeSpan -Minutes $IntervalMinutes) -RepetitionDuration (New-TimeSpan -Days 3650)
 $principal = New-ScheduledTaskPrincipal -UserId $env:USERNAME -LogonType S4U -RunLevel Limited
 

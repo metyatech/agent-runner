@@ -1,3 +1,7 @@
+[Diagnostics.CodeAnalysis.SuppressMessageAttribute("PSReviewUnusedParameter", "ConfigPath", Justification = "Used via script-scoped functions; PSScriptAnalyzer may false-positive on script param blocks.")]
+[Diagnostics.CodeAnalysis.SuppressMessageAttribute("PSReviewUnusedParameter", "StatusHost", Justification = "Used via script-scoped functions; PSScriptAnalyzer may false-positive on script param blocks.")]
+[Diagnostics.CodeAnalysis.SuppressMessageAttribute("PSReviewUnusedParameter", "StatusPort", Justification = "Used via script-scoped functions; PSScriptAnalyzer may false-positive on script param blocks.")]
+[Diagnostics.CodeAnalysis.SuppressMessageAttribute("PSReviewUnusedParameter", "RunnerTaskName", Justification = "Used via script-scoped functions; PSScriptAnalyzer may false-positive on script param blocks.")]
 param(
   [string]$RepoPath = (Split-Path -Parent $PSScriptRoot),
   [string]$ConfigPath = (Join-Path (Split-Path -Parent $PSScriptRoot) "agent-runner.config.json"),
@@ -9,6 +13,10 @@ param(
 $ErrorActionPreference = "Stop"
 Set-StrictMode -Version Latest
 $env:NODE_NO_WARNINGS = "1"
+
+$logsProjectName = "agent-runner-logging"
+$logsComposePath = Join-Path $RepoPath "ops\\logging\\docker-compose.yml"
+$grafanaUrl = "http://127.0.0.1:3000"
 
 $hideConsole = {
   try {
@@ -31,13 +39,34 @@ public static class Win32 {
 & $hideConsole
 
 $script:trayMutex = $null
+function Release-TrayMutex {
+  if (-not $script:trayMutex) {
+    return
+  }
+  try {
+    $script:trayMutex.ReleaseMutex() | Out-Null
+  } catch {
+    # ignore
+  }
+  try {
+    $script:trayMutex.Dispose()
+  } catch {
+    # ignore
+  }
+  $script:trayMutex = $null
+}
+
 try {
-  $script:trayMutex = New-Object System.Threading.Mutex($false, "Local\\AgentRunnerTray")
-  $hasHandle = $script:trayMutex.WaitOne(0, $false)
-  if (-not $hasHandle) {
+  $mutexCreatedNew = $false
+  $script:trayMutex = New-Object System.Threading.Mutex($true, "Local\AgentRunnerTray", [ref]$mutexCreatedNew)
+  if (-not $mutexCreatedNew) {
+    Release-TrayMutex
     exit 0
   }
+} catch [System.Threading.AbandonedMutexException] {
+  # Treat as acquired; continue.
 } catch {
+  Release-TrayMutex
   # best-effort; continue without single-instance enforcement
 }
 
@@ -45,8 +74,62 @@ Add-Type -AssemblyName System.Windows.Forms
 Add-Type -AssemblyName System.Drawing
 
 $cliPath = Join-Path $RepoPath "dist\\cli.js"
-$statusProcess = $null
-$webhookProcess = $null
+$script:statusProcess = $null
+$script:webhookProcess = $null
+
+function Start-LogsStack {
+  if (-not (Test-Path $logsComposePath)) {
+    return
+  }
+
+  $dockerOk = $false
+  try {
+    & docker version 1>$null 2>$null
+    if ($LASTEXITCODE -eq 0) {
+      $dockerOk = $true
+    }
+  } catch {
+    $dockerOk = $false
+  }
+
+  if (-not $dockerOk) {
+    $dockerDesktop = @(
+      "$Env:ProgramFiles\\Docker\\Docker\\Docker Desktop.exe",
+      "$Env:LocalAppData\\Programs\\Docker\\Docker Desktop.exe"
+    ) | Where-Object { Test-Path $_ } | Select-Object -First 1
+
+    if ($dockerDesktop) {
+      try {
+        Start-Process -FilePath $dockerDesktop 1>$null 2>$null
+      } catch {
+        # ignore
+      }
+    }
+  }
+
+  try {
+    & docker compose -p $logsProjectName -f $logsComposePath up -d 1>$null 2>$null
+  } catch {
+    # best-effort
+  }
+}
+
+function Stop-LogsStack {
+  if (-not (Test-Path $logsComposePath)) {
+    return
+  }
+
+  try {
+    & docker compose -p $logsProjectName -f $logsComposePath down 1>$null 2>$null
+  } catch {
+    # best-effort
+  }
+}
+
+function Open-LogsUi {
+  Start-LogsStack
+  Start-Process $grafanaUrl
+}
 
 function Load-RunnerConfig {
   if (-not (Test-Path $ConfigPath)) {
@@ -121,7 +204,7 @@ function Ensure-StatusServer {
   if (-not (Test-Path $cliPath)) {
     return
   }
-  $args = @(
+  $statusArgs = @(
     $cliPath,
     "ui",
     "--config",
@@ -131,7 +214,7 @@ function Ensure-StatusServer {
     "--port",
     $StatusPort
   )
-  $statusProcess = Start-Process -FilePath "node" -ArgumentList $args -WorkingDirectory $RepoPath -WindowStyle Hidden -PassThru
+  $script:statusProcess = Start-Process -FilePath "node" -ArgumentList $statusArgs -WorkingDirectory $RepoPath -WindowStyle Hidden -PassThru
   Start-Sleep -Milliseconds 300
 }
 
@@ -145,19 +228,20 @@ function Ensure-WebhookServer {
   if (-not (Test-Path $cliPath)) {
     return
   }
-  $args = @(
+  $webhookArgs = @(
     $cliPath,
     "webhook",
     "--config",
     $ConfigPath
   )
-  $webhookProcess = Start-Process -FilePath "node" -ArgumentList $args -WorkingDirectory $RepoPath -WindowStyle Hidden -PassThru
+  $script:webhookProcess = Start-Process -FilePath "node" -ArgumentList $webhookArgs -WorkingDirectory $RepoPath -WindowStyle Hidden -PassThru
   Start-Sleep -Milliseconds 300
 }
 
 function Open-StatusUi {
   Ensure-StatusServer
   Ensure-WebhookServer
+  Start-LogsStack
   Start-Process "http://$StatusHost`:$StatusPort/"
 }
 
@@ -204,6 +288,7 @@ function Resume-Runner {
   if (-not (Test-Path $cliPath)) {
     return
   }
+  Start-LogsStack
   $savedPreference = $ErrorActionPreference
   try {
     $ErrorActionPreference = "Continue"
@@ -225,26 +310,31 @@ $notifyIcon.Visible = $true
 
 $menu = New-Object System.Windows.Forms.ContextMenuStrip
 $menu.Items.Add("Open Status UI", $null, { Open-StatusUi }) | Out-Null
+$menu.Items.Add("-") | Out-Null
+$menu.Items.Add("Open Logs (Grafana)", $null, { Open-LogsUi }) | Out-Null
+$menu.Items.Add("Start Logs", $null, { Start-LogsStack }) | Out-Null
+$menu.Items.Add("Stop Logs", $null, { Stop-LogsStack }) | Out-Null
+$menu.Items.Add("-") | Out-Null
 $menu.Items.Add("Pause Runner", $null, { Request-Stop }) | Out-Null
 $menu.Items.Add("Resume Runner", $null, { Resume-Runner }) | Out-Null
 $menu.Items.Add("Exit", $null, {
-  if ($statusProcess -and -not $statusProcess.HasExited) {
+  if ($script:statusProcess -and -not $script:statusProcess.HasExited) {
     try {
-      $statusProcess.CloseMainWindow() | Out-Null
+      $script:statusProcess.CloseMainWindow() | Out-Null
       Start-Sleep -Milliseconds 200
-      if (-not $statusProcess.HasExited) {
-        $statusProcess.Kill()
+      if (-not $script:statusProcess.HasExited) {
+        $script:statusProcess.Kill()
       }
     } catch {
       # ignore
     }
   }
-  if ($webhookProcess -and -not $webhookProcess.HasExited) {
+  if ($script:webhookProcess -and -not $script:webhookProcess.HasExited) {
     try {
-      $webhookProcess.CloseMainWindow() | Out-Null
+      $script:webhookProcess.CloseMainWindow() | Out-Null
       Start-Sleep -Milliseconds 200
-      if (-not $webhookProcess.HasExited) {
-        $webhookProcess.Kill()
+      if (-not $script:webhookProcess.HasExited) {
+        $script:webhookProcess.Kill()
       }
     } catch {
       # ignore
@@ -252,6 +342,7 @@ $menu.Items.Add("Exit", $null, {
   }
   $notifyIcon.Visible = $false
   $notifyIcon.Dispose()
+  Release-TrayMutex
   [System.Windows.Forms.Application]::Exit()
 }) | Out-Null
 
@@ -289,5 +380,6 @@ $timer.Add_Tick({
 }) | Out-Null
 $timer.Start()
 
+Start-LogsStack
 Ensure-WebhookServer
 [System.Windows.Forms.Application]::Run()

@@ -36,6 +36,48 @@ $node = (Get-Command node -ErrorAction Stop).Source
 $script = Join-Path $RepoPath "dist\\cli.js"
 $resolvedLogDir = if ($LogDir) { $LogDir } else { (Join-Path $RepoPath "logs") }
 
+$logsProjectName = "agent-runner-logging"
+$logsComposePath = Join-Path $RepoPath "ops\\logging\\docker-compose.yml"
+
+function Ensure-LogsStack {
+  if (-not (Test-Path $logsComposePath)) {
+    return
+  }
+
+  $dockerOk = $false
+  try {
+    & docker version 1>$null 2>$null
+    if ($LASTEXITCODE -eq 0) {
+      $dockerOk = $true
+    }
+  } catch {
+    $dockerOk = $false
+  }
+
+  if (-not $dockerOk) {
+    $dockerDesktop = @(
+      "$Env:ProgramFiles\\Docker\\Docker\\Docker Desktop.exe",
+      "$Env:LocalAppData\\Programs\\Docker\\Docker Desktop.exe"
+    ) | Where-Object { Test-Path $_ } | Select-Object -First 1
+
+    if ($dockerDesktop) {
+      try {
+        Start-Process -FilePath $dockerDesktop 1>$null 2>$null
+      } catch {
+        # ignore
+      }
+    }
+  }
+
+  try {
+    & docker compose -p $logsProjectName -f $logsComposePath up -d 1>$null 2>$null
+  } catch {
+    # best-effort
+  }
+}
+
+Ensure-LogsStack
+
 function Test-WebhookServer {
   try {
     $config = Get-Content -Path $ConfigPath -Raw | ConvertFrom-Json

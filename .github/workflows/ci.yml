@@ -2,18 +2,45 @@ name: CI
 
 on:
   push:
-    branches: [ main ]
+    branches:
+      - main
   pull_request:
-    branches: [ main ]
+  workflow_dispatch:
+
+permissions:
+  contents: read
 
 jobs:
   verify:
-    runs-on: ubuntu-latest
+    runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
+
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
-          cache: 'npm'
-      - run: npm ci
-      - run: npm run verify
+          node-version: 22
+          cache: npm
+
+      - name: Install PSScriptAnalyzer
+        shell: powershell
+        run: |
+          Set-StrictMode -Version Latest
+          $ErrorActionPreference = 'Stop'
+          if (Get-Module -ListAvailable -Name PSScriptAnalyzer) {
+            Write-Output "PSScriptAnalyzer already available."
+            exit 0
+          }
+          [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+          try {
+            Set-PSRepository -Name PSGallery -InstallationPolicy Trusted
+          } catch {
+            # best-effort
+          }
+          Install-PackageProvider -Name NuGet -MinimumVersion 2.8.5.201 -Force -Scope CurrentUser -ForceBootstrap | Out-Null
+          Install-Module PSScriptAnalyzer -Scope CurrentUser -Force -AllowClobber
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Verify
+        run: npm run verify

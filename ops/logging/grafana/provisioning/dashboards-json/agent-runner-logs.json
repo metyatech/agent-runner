@@ -1,0 +1,64 @@
+{
+  "uid": "agent-runner-logs",
+  "title": "Agent Runner Logs",
+  "tags": ["agent-runner"],
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "10s",
+  "time": { "from": "now-24h", "to": "now" },
+  "templating": {
+    "list": [
+      {
+        "name": "kind",
+        "label": "Kind",
+        "type": "custom",
+        "query": "task-run,task-meta,webhook-run,webhook-meta,task-run-err,webhook-run-err,idle,issue,runner",
+        "current": { "text": "task-run", "value": "task-run" },
+        "refresh": 1,
+        "sort": 1,
+        "multi": false,
+        "includeAll": false
+      },
+      {
+        "name": "contains",
+        "label": "Contains",
+        "type": "textbox",
+        "query": "",
+        "current": { "text": "", "value": "" }
+      }
+    ]
+  },
+  "panels": [
+    {
+      "id": 2,
+      "type": "text",
+      "title": "How to use",
+      "gridPos": { "h": 4, "w": 24, "x": 0, "y": 0 },
+      "options": {
+        "mode": "markdown",
+        "content": "- Use **Kind** to switch log groups.\n- If you see **No data**: widen the time range (top right) and clear **Contains**.\n- Tip: `Contains` is a plain substring filter."
+      }
+    },
+    {
+      "id": 1,
+      "type": "logs",
+      "title": "Logs",
+      "datasource": { "type": "loki", "uid": "loki" },
+      "gridPos": { "h": 18, "w": 24, "x": 0, "y": 4 },
+      "options": {
+        "showTime": true,
+        "wrapLogMessage": true,
+        "prettifyLogMessage": false,
+        "enableLogDetails": true,
+        "dedupStrategy": "none"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "{job=\"agent-runner\", kind=~\"$kind\"} |= \"$contains\""
+        }
+      ]
+    }
+  ]
+}

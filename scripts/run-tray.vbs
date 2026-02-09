@@ -13,4 +13,4 @@ cmd = "powershell.exe -NoProfile -NonInteractive -WindowStyle Hidden -ExecutionP
 
 Set shell = CreateObject("WScript.Shell")
 shell.CurrentDirectory = repoDir
-shell.Run cmd, 0, True
+shell.Run cmd, 0, False

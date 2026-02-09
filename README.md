@@ -55,9 +55,10 @@ you can also save the token to `state/cloudflared-token.txt` (ignored by git).
 ## Development commands
 
 - `npm run lint`
+- `npm run lint:ps` (PowerShell lint via PSScriptAnalyzer; required by `verify`)
 - `npm run test` (unit tests + local CLI checks; does not call GitHub API)
 - `npm run build`
-- `npm run verify` (lint + test + build)
+- `npm run verify` (lint + lint:ps + test + build)
 - `npm run dev -- run --once --yes`
 
 ## Requesting work
@@ -192,6 +193,70 @@ Config file: `agent-runner.config.json`
   - `idle.amazonQUsageGate.monthlyLimit`: Monthly request limit to enforce for runner-driven usage
   - `idle.amazonQUsageGate.monthlySchedule`: Monthly ramp for remaining percent (same semantics as Copilot)
 
+## Logs (Grafana + Loki)
+
+This repo includes an optional, local-only log UI and query toolchain based on Grafana + Loki + Promtail.
+It avoids relying on log file naming/date boundaries (UTC vs local time) by querying logs by time range.
+
+### What is it?
+
+- `agent-runner` writes logs to `./logs/*.log` (local files).
+- Promtail tails those files and ships log lines to Loki.
+- Loki stores and indexes logs for fast time-range queries.
+- Grafana is the web UI that queries Loki.
+
+Why keep `./logs/*.log`?
+
+- Promtail needs a local input source to tail without adding custom log-shipping code to the runner.
+- It also provides a fallback when Docker/Loki is down (you still have raw files).
+
+Start the stack (local only):
+
+```bash
+docker compose -p agent-runner-logging -f ops/logging/docker-compose.yml up -d
+```
+
+Open Grafana:
+
+- `http://127.0.0.1:3000` (default credentials are `admin` / `admin` on first run)
+
+Dashboard (recommended):
+
+- Go to `Dashboards` → `Agent Runner` → `Agent Runner Logs`
+- Use the `Kind` dropdown to switch between:
+  - `task-run`, `task-meta`
+  - `webhook-run`, `webhook-meta`
+  - (and other kinds)
+- Optional: type a substring into `Contains` to filter without writing LogQL
+
+Explore logs (examples / fallback):
+
+- All logs: `{job="agent-runner"}`
+- Task run logs: `{job="agent-runner", kind="task-run"}`
+- Task meta logs: `{job="agent-runner", kind="task-meta"}`
+- Webhook logs: `{job="agent-runner", kind="webhook-run"}`
+- Webhook meta logs: `{job="agent-runner", kind="webhook-meta"}`
+
+Timezone note:
+
+- Grafana shows timestamps in your browser's local timezone by default (per-user setting).
+- Log lines are written with a UTC RFC3339 timestamp prefix; Promtail parses it so Loki stores the correct event timestamp.
+
+CLI export to a file (use your own local time offset in the range):
+
+```bash
+docker run --rm --network agent-runner-logging_default grafana/logcli:3.6.0 \
+  query --addr http://loki:3100 \
+  --from "<FROM_RFC3339>" --to "<TO_RFC3339>" \
+  '{job="agent-runner", kind="task-run"}' > exported.log
+```
+
+Stop the stack:
+
+```bash
+docker compose -p agent-runner-logging -f ops/logging/docker-compose.yml down
+```
+
 ## Running
 
 One-shot execution:
@@ -216,7 +281,7 @@ When `webhooks.enabled` is true, repo-wide issue polling is skipped and the runn
 relies on webhook-queued issues. Keep the webhook listener running (for example,
 as a background service or scheduled task).
 If `webhooks.catchup.enabled` is true, the runner also performs a low-frequency
-Search API scan to catch requests created while the webhook listener was down.
+Search API scan to catch requests missed while the webhook listener was down.
 
 ## Idle runs (issue-less)
 
@@ -397,14 +462,22 @@ Register a scheduled task that runs every minute:
 .\scripts\register-task.ps1 -RepoPath "." -ConfigPath ".\\agent-runner.config.json"
 ```
 
+Note:
+
+- The `AgentRunner` scheduled task is intentionally a daemon (`scripts/run-task.ps1` loops forever).
+- The task is configured with `MultipleInstances IgnoreNew`, so when Task Scheduler tries to start it again (every minute),
+  it may report `LastTaskResult = 0x800710E0` ("refused the request") even though the already-running instance is healthy.
+  Prefer checking the task `State = Running` and the logs instead of relying on `LastTaskResult`.
+
 Unregister the task:
 
 ```powershell
 .\scripts\unregister-task.ps1
 ```
 
-Task run logs are written to `logs/task-run-YYYYMMDD.log` (one file per day).
+Task run logs are written to `logs/task-run-YYYYMMDD-HHmmss-fff-PID.log` (one file per process start).
 The latest task-run log path is also written to `logs/latest-task-run.path`.
+Task meta logs (environment + runner start/end) are appended to `logs/task-meta-YYYYMMDD.log` and the latest path is written to `logs/latest-task-meta.path`.
 
 Issue logs (e.g. `*-issue-*.log`) are appended as output is produced.
 
@@ -434,7 +507,8 @@ Unregister the tunnel task:
 .\scripts\unregister-cloudflared-task.ps1
 ```
 
-Logs are written to `logs/webhook-run-*.out.log` / `logs/webhook-run-*.err.log` and `logs/cloudflared-*.out.log` / `logs/cloudflared-*.err.log`.
+Logs are written to `logs/webhook-run-YYYYMMDD-HHmmss-fff-PID.log` / `logs/webhook-run-YYYYMMDD-HHmmss-fff-PID.err.log` and `logs/cloudflared-*.out.log` / `logs/cloudflared-*.err.log`.
+Webhook meta logs are appended to `logs/webhook-meta-YYYYMMDD.log` and the latest paths are written to `logs/latest-webhook-run.path` and `logs/latest-webhook-meta.path`.
 
 ### Log cleanup
 
@@ -580,6 +654,13 @@ For startup/background launch without a visible PowerShell window, use:
 wscript.exe //B //NoLogo .\scripts\run-tray.vbs
 ```
 
+The tray helper also includes log shortcuts (Grafana) and can start/stop the local logging stack.
+
+Tip:
+
+- Double-click the tray icon to open the Status UI.
+- Right-click the tray icon to open "Open Logs (Grafana)".
+
 If `webhooks.enabled` is true, the tray helper will also ensure the webhook listener
 is running in the background.
 
@@ -593,5 +674,3 @@ is running in the background.
 - [Contributing Guidelines](CONTRIBUTING.md)
 - [Code of Conduct](CODE_OF_CONDUCT.md)
 - [Changelog](CHANGELOG.md)
-
-
