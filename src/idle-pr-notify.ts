@@ -85,14 +85,22 @@ export async function notifyIdlePullRequest(options: {
   } else if (prFromLog) {
     pr = { ...prFromLog, source: "log" };
   } else if (options.result.headBranch) {
-    const found = await options.client.findOpenPullRequestByHead(options.result.repo, options.result.headBranch);
-    if (found) {
-      pr = {
-        repo: options.result.repo,
-        number: found.number,
-        url: found.url,
-        source: "head"
-      };
+    try {
+      const found = await options.client.findOpenPullRequestByHead(options.result.repo, options.result.headBranch);
+      if (found) {
+        pr = {
+          repo: options.result.repo,
+          number: found.number,
+          url: found.url,
+          source: "head"
+        };
+      }
+    } catch (error) {
+      options.log("warn", "Failed to locate idle PR by head branch; skipping.", options.json, {
+        repo: `${options.result.repo.owner}/${options.result.repo.repo}`,
+        headBranch: options.result.headBranch,
+        error: error instanceof Error ? error.message : String(error)
+      });
     }
   }
 

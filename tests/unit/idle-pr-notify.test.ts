@@ -148,6 +148,57 @@ describe("notifyIdlePullRequest", () => {
     expect(calls.commentIssue).toHaveLength(1);
   });
 
+  it("treats head branch lookup failures as best-effort (no throw)", async () => {
+    const calls: any = { commentIssue: [], addAssignees: [], logs: [] };
+    const client: any = {
+      getAuthenticatedLogin: async () => "alice",
+      getIssue: async () => null,
+      addAssignees: async (repo: any, issueNumber: number, assignees: string[]) => {
+        calls.addAssignees.push({ repo, issueNumber, assignees });
+      },
+      commentIssue: async (repo: any, issueNumber: number, body: string) => {
+        calls.commentIssue.push({ repo, issueNumber, body });
+      },
+      findOpenPullRequestByHead: async () => {
+        throw new Error("boom");
+      }
+    };
+
+    const logPath = path.join(os.tmpdir(), "agent-runner-missing.log");
+    try {
+      fs.rmSync(logPath, { force: true });
+    } catch {
+      // ignore
+    }
+
+    const result: any = {
+      success: true,
+      logPath,
+      repo: { owner: "metyatech", repo: "demo" },
+      task: "T",
+      engine: "codex",
+      summary: null,
+      reportPath: "report.json",
+      headBranch: "agent-runner/idle-codex-123"
+    };
+
+    const notified = await notifyIdlePullRequest({
+      client,
+      notifyClient: null,
+      config: { workdirRoot: "D:/tmp" } as any,
+      result,
+      json: false,
+      log: (level, message, json, meta) => {
+        calls.logs.push({ level, message, json, meta });
+      }
+    });
+
+    expect(notified).toBeNull();
+    expect(calls.commentIssue).toHaveLength(0);
+    expect(calls.addAssignees).toHaveLength(0);
+    expect(calls.logs.some((entry: any) => entry.level === "warn")).toBe(true);
+  });
+
   it("ignores PR URLs for a different repo and falls back to head branch", async () => {
     const calls: any = { addAssignees: [], commentIssue: [] };
     const client: any = {
