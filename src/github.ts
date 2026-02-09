@@ -832,12 +832,12 @@ export class GitHubClient {
     }
   }
 
-  async findOpenPullRequestByHead(repo: RepoInfo, headRef: string): Promise<{ number: number; url: string } | null> {
+  async findOpenPullRequestByHead(repo: RepoInfo, headBranch: string): Promise<{ number: number; url: string } | null> {
     const response = await this.octokit.pulls.list({
       owner: repo.owner,
       repo: repo.repo,
       state: "open",
-      head: `${repo.owner}:${headRef}`,
+      head: `${repo.owner}:${headBranch}`,
       per_page: 10,
       page: 1
     });
