@@ -22,6 +22,10 @@ export async function notifyIdlePullRequest(options: {
   json: boolean;
   log: (level: "info" | "warn" | "error", message: string, json: boolean, meta?: Record<string, unknown>) => void;
 }): Promise<IdlePullRequestNotification | null> {
+  const expectedRepo = options.result.repo;
+  const isSameRepo = (left: RepoInfo, right: RepoInfo): boolean =>
+    left.owner.toLowerCase() === right.owner.toLowerCase() && left.repo.toLowerCase() === right.repo.toLowerCase();
+
   const truncate = (value: string, limit: number): string =>
     value.length <= limit ? value : `${value.slice(0, Math.max(0, limit - 16))}\n…(truncated)…`;
 
@@ -51,10 +55,29 @@ export async function notifyIdlePullRequest(options: {
   };
 
   const summaryText = options.result.summary ?? "";
-  const prFromSummary = parseLastPullRequestUrl(summaryText);
+  const validateRepo = (
+    match: ReturnType<typeof parseLastPullRequestUrl>,
+    source: "summary" | "log"
+  ): ReturnType<typeof parseLastPullRequestUrl> => {
+    if (!match) {
+      return null;
+    }
+    if (isSameRepo(match.repo, expectedRepo)) {
+      return match;
+    }
+    options.log("warn", "Idle PR URL repo mismatch; ignoring.", options.json, {
+      expectedRepo: `${expectedRepo.owner}/${expectedRepo.repo}`,
+      parsedRepo: `${match.repo.owner}/${match.repo.repo}`,
+      source,
+      url: match.url
+    });
+    return null;
+  };
+
+  const prFromSummary = validateRepo(parseLastPullRequestUrl(summaryText), "summary");
   const prFromLog = prFromSummary
     ? null
-    : parseLastPullRequestUrl(readLogTail(options.result.logPath, 512 * 1024) ?? "");
+    : validateRepo(parseLastPullRequestUrl(readLogTail(options.result.logPath, 512 * 1024) ?? ""), "log");
 
   let pr: IdlePullRequestNotification | null = null;
   if (prFromSummary) {
@@ -138,4 +161,3 @@ export async function notifyIdlePullRequest(options: {
 
   return pr;
 }
-

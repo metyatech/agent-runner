@@ -133,5 +133,46 @@ describe("notifyIdlePullRequest", () => {
     expect(notified?.number).toBe(42);
     expect(calls.commentIssue).toHaveLength(1);
   });
-});
 
+  it("ignores PR URLs for a different repo and falls back to head branch", async () => {
+    const calls: any = { addAssignees: [], commentIssue: [] };
+    const client: any = {
+      getAuthenticatedLogin: async () => "alice",
+      getIssue: async () => null,
+      addAssignees: async (repo: any, issueNumber: number, assignees: string[]) => {
+        calls.addAssignees.push({ repo, issueNumber, assignees });
+      },
+      commentIssue: async (repo: any, issueNumber: number, body: string) => {
+        calls.commentIssue.push({ repo, issueNumber, body });
+      },
+      findOpenPullRequestByHead: async () => ({ number: 77, url: "https://github.com/metyatech/demo/pull/77" })
+    };
+
+    const logPath = createTempLog("no pr url here");
+    const result: any = {
+      success: true,
+      logPath,
+      repo: { owner: "metyatech", repo: "demo" },
+      task: "T",
+      engine: "codex",
+      summary: "unrelated https://github.com/other/repo/pull/999",
+      reportPath: "report.json",
+      headBranch: "agent-runner/idle-codex-123"
+    };
+
+    const notified = await notifyIdlePullRequest({
+      client,
+      notifyClient: null,
+      config: { workdirRoot: "D:/tmp" } as any,
+      result,
+      json: false,
+      log: () => {}
+    });
+
+    expect(notified?.number).toBe(77);
+    expect(calls.addAssignees).toHaveLength(1);
+    expect(calls.addAssignees[0].issueNumber).toBe(77);
+    expect(calls.commentIssue).toHaveLength(1);
+    expect(calls.commentIssue[0].issueNumber).toBe(77);
+  });
+});
