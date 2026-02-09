@@ -838,7 +838,7 @@ export class GitHubClient {
       repo: repo.repo,
       state: "open",
       head: `${repo.owner}:${headBranch}`,
-      per_page: 10,
+      per_page: 1,
       page: 1
     });
     const first = response.data[0];
