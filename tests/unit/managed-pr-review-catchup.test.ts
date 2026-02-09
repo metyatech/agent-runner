@@ -62,6 +62,75 @@ function makePullRequestDetails(): PullRequestDetails {
 }
 
 describe("managed-pr-review-catchup", () => {
+  it("does not enqueue the same PR twice when state and search casing differs", async () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "agent-runner-managed-pr-catchup-dedupe-"));
+    const config = makeConfig(root);
+    const repo = makeRepo();
+    const issue = makeIssue(repo);
+
+    const managedStatePath = resolveManagedPullRequestsStatePath(config.workdirRoot);
+    await markManagedPullRequest(managedStatePath, { owner: "MeTyATech", repo: "DeMo" }, issue.number);
+
+    let getIssueCalls = 0;
+    const client = {
+      getIssue: async () => {
+        getIssueCalls += 1;
+        return issue;
+      },
+      getPullRequest: async () => makePullRequestDetails(),
+      listPullRequestReviewThreads: async () => [{ id: "t1", isResolved: false, isOutdated: false }],
+      listPullRequestReviews: async () => [],
+      searchOpenPullRequestsByAuthorAcrossOwner: async (_owner: string, author: string) =>
+        author === "agent-runner-bot" ? [{ ...issue, author: "agent-runner-bot" }] : []
+    };
+
+    const enqueued = await enqueueManagedPullRequestReviewFollowups({
+      client: client as any,
+      config,
+      dryRun: false,
+      maxEntries: 5
+    });
+
+    expect(enqueued).toBe(1);
+    expect(getIssueCalls).toBe(1);
+    const queuePath = resolveReviewQueuePath(config.workdirRoot);
+    const queued = loadReviewQueue(queuePath);
+    expect(queued).toHaveLength(1);
+  });
+
+  it("ignores search-derived bot PRs from repos outside config.repos", async () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "agent-runner-managed-pr-catchup-scope-"));
+    const config: AgentRunnerConfig = { ...makeConfig(root), repos: ["demo"] };
+    const repo = makeRepo();
+    const issue = { ...makeIssue(repo), author: "agent-runner-bot" };
+    const outOfScope: IssueInfo = {
+      ...issue,
+      repo: { owner: "metyatech", repo: "other" },
+      url: "https://github.com/metyatech/other/pull/5"
+    };
+
+    const client = {
+      getIssue: async () => issue,
+      getPullRequest: async () => makePullRequestDetails(),
+      listPullRequestReviewThreads: async () => [{ id: "t1", isResolved: false, isOutdated: false }],
+      listPullRequestReviews: async () => [],
+      searchOpenPullRequestsByAuthorAcrossOwner: async (_owner: string, author: string) =>
+        author === "agent-runner-bot" ? [outOfScope] : []
+    };
+
+    const enqueued = await enqueueManagedPullRequestReviewFollowups({
+      client: client as any,
+      config,
+      dryRun: false,
+      maxEntries: 5
+    });
+
+    expect(enqueued).toBe(0);
+    const queuePath = resolveReviewQueuePath(config.workdirRoot);
+    const queued = loadReviewQueue(queuePath);
+    expect(queued).toHaveLength(0);
+  });
+
   it("enqueues follow-ups for managed PRs even without agent:done label", async () => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), "agent-runner-managed-pr-catchup-"));
     const config = makeConfig(root);

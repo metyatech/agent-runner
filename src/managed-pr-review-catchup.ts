@@ -5,6 +5,10 @@ import { summarizeLatestReviews } from "./pr-review-automation.js";
 import { enqueueReviewTask, resolveReviewQueuePath } from "./review-queue.js";
 import { listManagedPullRequests, resolveManagedPullRequestsStatePath } from "./managed-pull-requests.js";
 
+function buildCandidateKey(repo: RepoInfo, prNumber: number): string {
+  return `${repo.owner.toLowerCase()}/${repo.repo.toLowerCase()}#${prNumber}`;
+}
+
 export async function enqueueManagedPullRequestReviewFollowups(options: {
   client: GitHubClient;
   config: AgentRunnerConfig;
@@ -40,12 +44,18 @@ export async function enqueueManagedPullRequestReviewFollowups(options: {
   const candidates: Array<{ repo: RepoInfo; prNumber: number; key: string; source: "state" | "search" }> = [];
   const seen = new Set<string>();
   for (const entry of managed.slice().reverse()) {
-    if (seen.has(entry.key)) {
+    const key = buildCandidateKey(entry.repo, entry.prNumber);
+    if (seen.has(key)) {
       continue;
     }
-    seen.add(entry.key);
-    candidates.push({ ...entry, source: "state" });
+    seen.add(key);
+    candidates.push({ repo: entry.repo, prNumber: entry.prNumber, key, source: "state" });
   }
+
+  const allowedRepos =
+    Array.isArray(options.config.repos) && options.config.repos.length > 0
+      ? new Set(options.config.repos.map((repo) => `${options.config.owner.toLowerCase()}/${repo.toLowerCase()}`))
+      : null;
 
   const targetCandidates = Math.max(1, Math.min(50, limit * 10));
   const botAuthorLogins = ["agent-runner-bot", "app/agent-runner-bot", "agent-runner-app[bot]"];
@@ -75,7 +85,13 @@ export async function enqueueManagedPullRequestReviewFollowups(options: {
       if (!item.isPullRequest) {
         continue;
       }
-      const key = `${item.repo.owner.toLowerCase()}/${item.repo.repo.toLowerCase()}#${item.number}`;
+      if (allowedRepos) {
+        const repoKey = `${item.repo.owner.toLowerCase()}/${item.repo.repo.toLowerCase()}`;
+        if (!allowedRepos.has(repoKey)) {
+          continue;
+        }
+      }
+      const key = buildCandidateKey(item.repo, item.number);
       if (seen.has(key)) {
         continue;
       }
