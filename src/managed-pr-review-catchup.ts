@@ -3,7 +3,6 @@ import type { GitHubClient, IssueInfo, RepoInfo } from "./github.js";
 import { summarizeLatestReviews } from "./pr-review-automation.js";
 import { enqueueReviewTask, resolveReviewQueuePath } from "./review-queue.js";
 import { listManagedPullRequests, resolveManagedPullRequestsStatePath } from "./managed-pull-requests.js";
-import { ensureManagedPullRequestRecorded, isManagedPullRequestIssue } from "./managed-pr.js";
 
 export async function enqueueManagedPullRequestReviewFollowups(options: {
   client: GitHubClient;
@@ -63,11 +62,6 @@ export async function enqueueManagedPullRequestReviewFollowups(options: {
     ) {
       continue;
     }
-
-    if (!(await isManagedPullRequestIssue(issue, options.config))) {
-      continue;
-    }
-    await ensureManagedPullRequestRecorded(issue, options.config);
 
     const pr = await options.client.getPullRequest(entry.repo, entry.prNumber);
     if (!pr || pr.state !== "open" || pr.merged || pr.draft) {
@@ -164,4 +158,3 @@ export async function enqueueManagedPullRequestReviewFollowups(options: {
 
   return enqueued;
 }
-

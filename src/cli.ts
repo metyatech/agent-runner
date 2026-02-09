@@ -659,7 +659,13 @@ program
       return resumed;
     };
 
-    const runIssueWithSessionResume = async (issue: IssueInfo): Promise<Awaited<ReturnType<typeof runIssue>>> => {
+    const runIssueWithSessionResume = async (
+      issue: IssueInfo,
+      engine: IdleEngine
+    ): Promise<Awaited<ReturnType<typeof runIssue>>> => {
+      if (engine !== "codex") {
+        return runIssue(client, config, issue, { engine });
+      }
       let resumeSessionId = getIssueSession(issueSessionStatePath, issue);
       let resumePrompt: string | null =
         resumeSessionId
@@ -668,7 +674,8 @@ program
       while (true) {
         const result = await runIssue(client, config, issue, {
           resumeSessionId,
-          resumePrompt
+          resumePrompt,
+          engine
         });
         if (result.sessionId) {
           setIssueSession(issueSessionStatePath, issue, result.sessionId);
@@ -1109,89 +1116,22 @@ program
         }
       };
 
-      if (idleEnabled && picked.length < config.concurrency) {
-        await maybeEnqueueManagedPullRequestReviewFollowups({
-          client,
-          config,
-          json,
-          dryRun,
-          maxEntries: config.concurrency - picked.length
-        });
-      }
-
-      let scheduledReviewFollowups: ScheduledReviewFollowup[] = [];
-      if (idleEnabled && picked.length < config.concurrency) {
-        const reviewQueuePath = resolveReviewQueuePath(config.workdirRoot);
-        const backlog = loadReviewQueue(reviewQueuePath);
-        if (backlog.length > 0) {
-          const maxEntries = config.concurrency - picked.length;
-          const mergeOnlyBacklog = backlog.filter((entry) => !entry.requiresEngine);
-          const engineBacklog = backlog.filter((entry) => entry.requiresEngine);
-
-          let queue: ReviewQueueEntry[] = [];
-          if (dryRun) {
-            queue = backlog.slice(0, maxEntries);
-          } else {
-            const mergeOnly = await takeReviewTasksWhere(reviewQueuePath, maxEntries, (entry) => !entry.requiresEngine);
-            queue.push(...mergeOnly);
-            const remaining = maxEntries - mergeOnly.length;
-            if (remaining > 0 && engineBacklog.length > 0) {
-              const codexAllowed = await evaluateCodexIdleAllowed();
-              if (!codexAllowed) {
-                log(
-                  "info",
-                  "Review follow-up backlog detected but Codex idle gate is blocked. Skipping engine-required review follow-ups.",
-                  json,
-                  { queued: engineBacklog.length }
-                );
-              } else {
-                const engineTasks = await takeReviewTasksWhere(reviewQueuePath, remaining, (entry) => entry.requiresEngine);
-                queue.push(...engineTasks);
-              }
-            }
-          }
-
-          if (queue.length === 0) {
-            if (mergeOnlyBacklog.length > 0) {
-              log("info", "Review follow-up merge-only backlog detected but nothing was scheduled.", json, {
-                queued: mergeOnlyBacklog.length
-              });
-            } else if (engineBacklog.length > 0) {
-              log("info", "Review follow-up backlog detected but nothing was scheduled.", json, {
-                queued: engineBacklog.length
-              });
-            }
-          } else {
-            scheduledReviewFollowups = scheduleReviewFollowups({
-              normalRunning: picked.length,
-              concurrency: config.concurrency,
-              allowedEngines: ["codex"],
-              queue
-            });
-          }
-        }
-      }
-
-      if (picked.length === 0 && scheduledReviewFollowups.length === 0) {
-        if (!config.idle?.enabled) {
-          log("info", "No queued requests.", json);
-          return;
-        }
-
+      const resolveAllowedIdleEngines = async (options: {
+        allowGeminiWarmup: boolean;
+      }): Promise<{
+        engines: IdleEngine[];
+        geminiWarmup: { warmupPro: boolean; warmupFlash: boolean; reason: string | null };
+      }> => {
         const codexAllowed = await evaluateCodexIdleAllowed();
 
         let copilotAllowed = false;
-        const copilotGate = config.idle.copilotUsageGate;
+        const copilotGate = config.idle?.copilotUsageGate;
         if (copilotGate?.enabled) {
           try {
             const copilotStart = Date.now();
             const usage = await fetchCopilotUsage(token, copilotGate);
             if (timingEnabled) {
-              log(
-                "info",
-                `${timingPrefix} (Copilot): rateLimits=${Date.now() - copilotStart}ms`,
-                json
-              );
+              log("info", `${timingPrefix} (Copilot): rateLimits=${Date.now() - copilotStart}ms`, json);
             }
             if (!usage) {
               log("warn", "Idle Copilot usage gate: unable to parse Copilot quota info.", json);
@@ -1221,11 +1161,7 @@ program
           } else {
             const exists = await commandExists(config.copilot.command);
             if (!exists) {
-              log(
-                "warn",
-                `Idle Copilot command not found (${config.copilot.command}). Skipping Copilot idle.`,
-                json
-              );
+              log("warn", `Idle Copilot command not found (${config.copilot.command}). Skipping Copilot idle.`, json);
               copilotAllowed = false;
             }
           }
@@ -1236,18 +1172,13 @@ program
         let geminiWarmupPro = false;
         let geminiWarmupFlash = false;
         let geminiWarmupReason: string | null = null;
-        let amazonQAllowed = false;
-        const geminiGate = config.idle.geminiUsageGate;
+        const geminiGate = config.idle?.geminiUsageGate;
         if (geminiGate?.enabled) {
           try {
             const geminiStart = Date.now();
             const usage = await fetchGeminiUsage();
             if (timingEnabled) {
-              log(
-                "info",
-                `${timingPrefix} (Gemini): rateLimits=${Date.now() - geminiStart}ms`,
-                json
-              );
+              log("info", `${timingPrefix} (Gemini): rateLimits=${Date.now() - geminiStart}ms`, json);
             }
             if (!usage) {
               log("warn", "Idle Gemini usage gate: unable to parse Gemini quota info.", json);
@@ -1255,23 +1186,27 @@ program
               const now = new Date();
               const decision = evaluateGeminiUsageGate(usage, geminiGate, now);
               if (!decision.allowPro && !decision.allowFlash) {
-                let warmupState = { models: {} };
-                try {
-                  warmupState = loadGeminiWarmupState(resolveGeminiWarmupStatePath(config.workdirRoot));
-                } catch (error) {
-                  log("warn", "Idle Gemini warmup: unable to read warmup state. Proceeding without cooldown.", json, {
-                    error: error instanceof Error ? error.message : String(error)
-                  });
-                }
+                if (options.allowGeminiWarmup) {
+                  let warmupState = { models: {} };
+                  try {
+                    warmupState = loadGeminiWarmupState(resolveGeminiWarmupStatePath(config.workdirRoot));
+                  } catch (error) {
+                    log("warn", "Idle Gemini warmup: unable to read warmup state. Proceeding without cooldown.", json, {
+                      error: error instanceof Error ? error.message : String(error)
+                    });
+                  }
 
-                const warmupDecision = evaluateGeminiWarmup(usage, geminiGate, warmupState, now);
-                if (warmupDecision?.warmupPro || warmupDecision?.warmupFlash) {
-                  geminiWarmupPro = warmupDecision.warmupPro;
-                  geminiWarmupFlash = warmupDecision.warmupFlash;
-                  geminiWarmupReason = warmupDecision.reason;
-                  if (geminiWarmupPro) geminiProAllowed = true;
-                  if (geminiWarmupFlash) geminiFlashAllowed = true;
-                  log("info", `Idle Gemini warmup allowed. ${warmupDecision.reason}`, json);
+                  const warmupDecision = evaluateGeminiWarmup(usage, geminiGate, warmupState, now);
+                  if (warmupDecision?.warmupPro || warmupDecision?.warmupFlash) {
+                    geminiWarmupPro = warmupDecision.warmupPro;
+                    geminiWarmupFlash = warmupDecision.warmupFlash;
+                    geminiWarmupReason = warmupDecision.reason;
+                    if (geminiWarmupPro) geminiProAllowed = true;
+                    if (geminiWarmupFlash) geminiFlashAllowed = true;
+                    log("info", `Idle Gemini warmup allowed. ${warmupDecision.reason}`, json);
+                  } else {
+                    log("info", `Idle Gemini usage gate blocked. ${decision.reason}`, json);
+                  }
                 } else {
                   log("info", `Idle Gemini usage gate blocked. ${decision.reason}`, json);
                 }
@@ -1309,12 +1244,13 @@ program
           }
         }
 
+        let amazonQAllowed = false;
         if (config.amazonQ?.enabled) {
           const exists = await commandExists(config.amazonQ.command);
           if (!exists) {
             log("warn", `Idle Amazon Q command not found (${config.amazonQ.command}).`, json);
           } else {
-            const amazonQGate = config.idle.amazonQUsageGate;
+            const amazonQGate = config.idle?.amazonQUsageGate;
             if (amazonQGate?.enabled) {
               try {
                 const now = new Date();
@@ -1362,6 +1298,94 @@ program
         if (amazonQAllowed) {
           engines.push("amazon-q");
         }
+
+        return {
+          engines,
+          geminiWarmup: {
+            warmupPro: geminiWarmupPro,
+            warmupFlash: geminiWarmupFlash,
+            reason: geminiWarmupReason
+          }
+        };
+      };
+
+      if (idleEnabled && picked.length < config.concurrency) {
+        await maybeEnqueueManagedPullRequestReviewFollowups({
+          client,
+          config,
+          json,
+          dryRun,
+          maxEntries: config.concurrency - picked.length
+        });
+      }
+
+      let scheduledReviewFollowups: ScheduledReviewFollowup[] = [];
+      if (idleEnabled && picked.length < config.concurrency) {
+        const reviewQueuePath = resolveReviewQueuePath(config.workdirRoot);
+        const backlog = loadReviewQueue(reviewQueuePath);
+        if (backlog.length > 0) {
+          const maxEntries = config.concurrency - picked.length;
+          const mergeOnlyBacklog = backlog.filter((entry) => !entry.requiresEngine);
+          const engineBacklog = backlog.filter((entry) => entry.requiresEngine);
+
+          let queue: ReviewQueueEntry[] = [];
+          let allowedEngines: IdleEngine[] = [];
+          if (dryRun) {
+            queue = backlog.slice(0, maxEntries);
+            allowedEngines = ["codex"];
+          } else {
+            const mergeOnly = await takeReviewTasksWhere(reviewQueuePath, maxEntries, (entry) => !entry.requiresEngine);
+            queue.push(...mergeOnly);
+            const remaining = maxEntries - mergeOnly.length;
+            if (remaining > 0 && engineBacklog.length > 0) {
+              const gate = await resolveAllowedIdleEngines({ allowGeminiWarmup: false });
+              allowedEngines = gate.engines;
+              if (allowedEngines.length === 0) {
+                log(
+                  "info",
+                  "Review follow-up backlog detected but all idle engine gates are blocked. Skipping engine-required review follow-ups.",
+                  json,
+                  { queued: engineBacklog.length }
+                );
+              } else {
+                const engineTasks = await takeReviewTasksWhere(reviewQueuePath, remaining, (entry) => entry.requiresEngine);
+                queue.push(...engineTasks);
+              }
+            }
+          }
+
+          if (queue.length === 0) {
+            if (mergeOnlyBacklog.length > 0) {
+              log("info", "Review follow-up merge-only backlog detected but nothing was scheduled.", json, {
+                queued: mergeOnlyBacklog.length
+              });
+            } else if (engineBacklog.length > 0) {
+              log("info", "Review follow-up backlog detected but nothing was scheduled.", json, {
+                queued: engineBacklog.length
+              });
+            }
+          } else {
+            scheduledReviewFollowups = scheduleReviewFollowups({
+              normalRunning: picked.length,
+              concurrency: config.concurrency,
+              allowedEngines,
+              queue
+            });
+          }
+        }
+      }
+
+      if (picked.length === 0 && scheduledReviewFollowups.length === 0) {
+        if (!config.idle?.enabled) {
+          log("info", "No queued requests.", json);
+          return;
+        }
+
+        const gate = await resolveAllowedIdleEngines({ allowGeminiWarmup: true });
+        const engines = gate.engines;
+        const geminiWarmupPro = gate.geminiWarmup.warmupPro;
+        const geminiWarmupFlash = gate.geminiWarmup.warmupFlash;
+        const geminiWarmupReason = gate.geminiWarmup.reason;
 
         if (engines.length === 0) {
           log("info", "Idle usage gate blocked for all engines. Skipping idle.", json);
@@ -1527,7 +1551,7 @@ program
                 await removeWebhookIssues(webhookQueuePath, [issue.id]);
               }
 
-              const result = await serviceLimiters.codex(() => runIssueWithSessionResume(issue));
+              const result = await serviceLimiters.codex(() => runIssueWithSessionResume(issue, "codex"));
               activityId = result.activityId;
               if (result.success) {
                 clearRetry(scheduledRetryStatePath, issue.id);
@@ -1654,7 +1678,8 @@ program
               );
               clearRetry(scheduledRetryStatePath, issue.id);
 
-              const result = await serviceLimiters.codex(() => runIssueWithSessionResume(issue));
+              const service = idleEngineToService(followup.engine);
+              const result = await serviceLimiters[service](() => runIssueWithSessionResume(issue, followup.engine));
               activityId = result.activityId;
               if (result.success) {
                 clearRetry(scheduledRetryStatePath, issue.id);

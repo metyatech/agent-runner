@@ -15,13 +15,18 @@ export function scheduleReviewFollowups(options: {
   if (spare <= 0) {
     return [];
   }
-  if (options.allowedEngines.length === 0) {
-    return [];
-  }
   const selected = options.queue.slice(0, spare);
+  if (options.allowedEngines.length === 0) {
+    return selected
+      .filter((entry) => !entry.requiresEngine)
+      .map((entry) => ({
+        ...entry,
+        engine: "codex"
+      }));
+  }
+
   return selected.map((entry, index) => ({
     ...entry,
     engine: options.allowedEngines[index % options.allowedEngines.length]
   }));
 }
-

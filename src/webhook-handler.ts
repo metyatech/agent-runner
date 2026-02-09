@@ -238,7 +238,14 @@ async function handleReviewFollowup(options: {
   if (!(await isManagedPullRequestIssue(issue, config))) {
     return;
   }
-  await ensureManagedPullRequestRecorded(issue, config);
+  try {
+    await ensureManagedPullRequestRecorded(issue, config);
+  } catch (error) {
+    onLog?.("warn", "Failed to record managed PR during review follow-up. Proceeding anyway.", {
+      url: issue.url,
+      error: error instanceof Error ? error.message : String(error)
+    });
+  }
 
   await safeRemoveLabel(client, issue, config.labels.needsUserReply, onLog);
   await safeRemoveLabel(client, issue, config.labels.failed, onLog);

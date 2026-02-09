@@ -92,5 +92,80 @@ describe("managed-pr-review-catchup", () => {
     expect(queued[0]?.reason).toBe("review_comment");
     expect(queued[0]?.requiresEngine).toBe(true);
   });
-});
 
+  it("enqueues review follow-up when changes are requested", async () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "agent-runner-managed-pr-catchup-review-"));
+    const config = makeConfig(root);
+    const repo = makeRepo();
+    const issue = makeIssue(repo);
+
+    const managedStatePath = resolveManagedPullRequestsStatePath(config.workdirRoot);
+    await markManagedPullRequest(managedStatePath, repo, issue.number);
+
+    const client = {
+      getIssue: async () => issue,
+      getPullRequest: async () => makePullRequestDetails(),
+      listPullRequestReviewThreads: async () => [],
+      listPullRequestReviews: async () => [
+        {
+          state: "CHANGES_REQUESTED",
+          author: "reviewer",
+          submittedAt: new Date().toISOString(),
+          body: "Please address these issues."
+        }
+      ]
+    };
+
+    const enqueued = await enqueueManagedPullRequestReviewFollowups({
+      client: client as any,
+      config,
+      dryRun: false,
+      maxEntries: 5
+    });
+
+    expect(enqueued).toBe(1);
+    const queuePath = resolveReviewQueuePath(config.workdirRoot);
+    const queued = loadReviewQueue(queuePath);
+    expect(queued).toHaveLength(1);
+    expect(queued[0]?.reason).toBe("review");
+    expect(queued[0]?.requiresEngine).toBe(true);
+  });
+
+  it("enqueues approval follow-up when the latest reviews are approved", async () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "agent-runner-managed-pr-catchup-approval-"));
+    const config = makeConfig(root);
+    const repo = makeRepo();
+    const issue = makeIssue(repo);
+
+    const managedStatePath = resolveManagedPullRequestsStatePath(config.workdirRoot);
+    await markManagedPullRequest(managedStatePath, repo, issue.number);
+
+    const client = {
+      getIssue: async () => issue,
+      getPullRequest: async () => makePullRequestDetails(),
+      listPullRequestReviewThreads: async () => [],
+      listPullRequestReviews: async () => [
+        {
+          state: "APPROVED",
+          author: "reviewer",
+          submittedAt: new Date().toISOString(),
+          body: "LGTM"
+        }
+      ]
+    };
+
+    const enqueued = await enqueueManagedPullRequestReviewFollowups({
+      client: client as any,
+      config,
+      dryRun: false,
+      maxEntries: 5
+    });
+
+    expect(enqueued).toBe(1);
+    const queuePath = resolveReviewQueuePath(config.workdirRoot);
+    const queued = loadReviewQueue(queuePath);
+    expect(queued).toHaveLength(1);
+    expect(queued[0]?.reason).toBe("approval");
+    expect(queued[0]?.requiresEngine).toBe(false);
+  });
+});

@@ -508,6 +508,7 @@ async function resolveQuotaResumeAt(config: AgentRunnerConfig): Promise<string |
 }
 
 async function runCodexAttempt(options: {
+  engine: IdleEngine;
   mode: IssueRunMode;
   config: AgentRunnerConfig;
   issue: IssueInfo;
@@ -522,7 +523,13 @@ async function runCodexAttempt(options: {
   envOverrides: NodeJS.ProcessEnv;
 }): Promise<IssueAttemptResult> {
   const invocation =
-    options.mode === "resume" && options.resumeSessionId
+    options.engine === "copilot"
+      ? buildCopilotInvocation(options.config, options.primaryPath, options.prompt, options.envOverrides)
+      : options.engine === "amazon-q"
+      ? buildAmazonQInvocation(options.config, options.primaryPath, options.prompt, options.envOverrides)
+      : options.engine === "gemini-pro" || options.engine === "gemini-flash"
+      ? buildGeminiInvocation(options.config, options.primaryPath, options.prompt, options.engine, options.envOverrides)
+      : options.mode === "resume" && options.resumeSessionId
       ? buildCodexResumeInvocation(
           options.config,
           options.primaryPath,
@@ -566,7 +573,7 @@ async function runCodexAttempt(options: {
       recordActivity(options.activityPath, {
         id: options.activityId,
         kind: "issue",
-        engine: "codex",
+        engine: options.engine,
         repo: options.issue.repo,
         startedAt,
         pid: child.pid,
@@ -580,9 +587,11 @@ async function runCodexAttempt(options: {
       const normalized = normalizeLogChunk(chunk);
       appendLog(normalized);
       outputTail = keepTail(outputTail + normalized);
-      const detected = detectSessionId(normalized);
-      if (detected) {
-        sessionId = detected;
+      if (options.engine === "codex") {
+        const detected = detectSessionId(normalized);
+        if (detected) {
+          sessionId = detected;
+        }
       }
       return normalized;
     };
@@ -603,7 +612,7 @@ async function runCodexAttempt(options: {
       resolve({
         exitCode: code ?? 1,
         outputTail,
-        sessionId: sessionId ?? detectSessionId(outputTail)
+        sessionId: options.engine === "codex" ? sessionId ?? detectSessionId(outputTail) : null
       });
     });
   });
@@ -613,8 +622,9 @@ export async function runIssue(
   client: GitHubClient,
   config: AgentRunnerConfig,
   issue: IssueInfo,
-  options: { resumeSessionId?: string | null; resumePrompt?: string | null } = {}
+  options: { resumeSessionId?: string | null; resumePrompt?: string | null; engine?: IdleEngine } = {}
 ): Promise<RunResult> {
+  const engine: IdleEngine = options.engine ?? "codex";
   const repos = resolveTargetRepos(issue, config.owner);
   const comments = await client.listIssueComments(issue);
   const reviewComments = isPullRequestUrl(issue.url)
@@ -694,13 +704,14 @@ export async function runIssue(
     const notifyEnv = await buildGitHubNotifyChildEnv(config.workdirRoot);
     const envOverrides: NodeJS.ProcessEnv = {
       ...notifyEnv,
+      AGENT_RUNNER_ENGINE: engine,
       AGENT_RUNNER_WORKROOT: workRoot,
       AGENT_RUNNER_PRIMARY_REPO: `${primaryRepo.owner}/${primaryRepo.repo}`,
       AGENT_RUNNER_PRIMARY_REPO_PATH: primaryPath
     };
 
-    let mode: IssueRunMode = options.resumeSessionId ? "resume" : "new";
-    let latestSessionId: string | null = options.resumeSessionId ?? null;
+    let mode: IssueRunMode = engine === "codex" && options.resumeSessionId ? "resume" : "new";
+    let latestSessionId: string | null = engine === "codex" ? options.resumeSessionId ?? null : null;
     let currentPrompt = mode === "resume" ? resumePrompt : prompt;
     let attempt = 0;
 
@@ -708,6 +719,7 @@ export async function runIssue(
       while (true) {
         attempt += 1;
         const result = await runCodexAttempt({
+          engine,
           mode,
           config,
           issue,
@@ -780,14 +792,14 @@ export async function runIssue(
           };
         }
 
-        if (mode === "resume" && isLikelyMissingSessionError(result.outputTail) && attempt < MAX_RESUME_ATTEMPTS) {
+        if (engine === "codex" && mode === "resume" && isLikelyMissingSessionError(result.outputTail) && attempt < MAX_RESUME_ATTEMPTS) {
           mode = "new";
           latestSessionId = null;
           currentPrompt = prompt;
           continue;
         }
 
-        if (stage === "after_session" && attempt < MAX_RESUME_ATTEMPTS) {
+        if (engine === "codex" && stage === "after_session" && attempt < MAX_RESUME_ATTEMPTS) {
           mode = "resume";
           currentPrompt =
             "The previous execution ended unexpectedly. Continue this same session and complete the original task. " +

@@ -4,6 +4,7 @@ import os from "node:os";
 import path from "node:path";
 import type { AgentRunnerConfig } from "../../src/config.js";
 import type { IssueInfo, RepoInfo } from "../../src/github.js";
+import { resolveManagedPullRequestsStatePath } from "../../src/managed-pull-requests.js";
 import { handleWebhookEvent } from "../../src/webhook-handler.js";
 import { loadReviewQueue, resolveReviewQueuePath } from "../../src/review-queue.js";
 
@@ -310,6 +311,50 @@ describe("webhook-handler review followup", () => {
     expect(queued).toHaveLength(1);
     expect(queued[0]?.reason).toBe("approval");
     expect(queued[0]?.requiresEngine).toBe(false);
+  });
+
+  it("continues even when managed PR state is corrupted", async () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "agent-runner-webhook-managed-state-corrupt-"));
+    const config = makeConfig(root);
+    const repo = makeRepo();
+    const pr = makePullRequestIssue(repo);
+    const queuePath = path.join(root, "agent-runner", "state", "webhook-queue.json");
+
+    const managedStatePath = resolveManagedPullRequestsStatePath(config.workdirRoot);
+    fs.mkdirSync(path.dirname(managedStatePath), { recursive: true });
+    fs.writeFileSync(managedStatePath, "{not-valid-json", "utf8");
+
+    const client = {
+      addLabels: async () => {},
+      removeLabel: async () => {},
+      comment: async () => {},
+      listIssueComments: async () => [],
+      getIssue: async (_repo: RepoInfo, number: number) => (number === pr.number ? pr : null)
+    };
+
+    await handleWebhookEvent({
+      event: {
+        event: "pull_request_review_comment",
+        delivery: "z",
+        payload: {
+          action: "created",
+          repository: { name: repo.repo, owner: { login: repo.owner } },
+          pull_request: { number: pr.number, id: pr.id, html_url: pr.url },
+          comment: {
+            id: 9010,
+            body: "Please address this review comment.",
+            author_association: "NONE",
+            user: { login: "metyatech" }
+          }
+        }
+      },
+      client: client as any,
+      config,
+      queuePath
+    });
+
+    const reviewQueuePath = resolveReviewQueuePath(config.workdirRoot);
+    expect(loadReviewQueue(reviewQueuePath)).toHaveLength(1);
   });
 });
 
