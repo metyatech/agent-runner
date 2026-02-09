@@ -1,17 +1,31 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { describe, expect, it } from "vitest";
+import { afterAll, describe, expect, it } from "vitest";
 import { notifyIdlePullRequest } from "../../src/idle-pr-notify.js";
+
+const tempLogDirs: string[] = [];
 
 function createTempLog(contents: string): string {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "agent-runner-"));
+  tempLogDirs.push(dir);
   const logPath = path.join(dir, "idle.log");
   fs.writeFileSync(logPath, contents, "utf8");
   return logPath;
 }
 
 describe("notifyIdlePullRequest", () => {
+  afterAll(() => {
+    for (const dir of tempLogDirs) {
+      try {
+        fs.rmSync(dir, { recursive: true, force: true });
+      } catch {
+        // ignore cleanup errors
+      }
+    }
+    tempLogDirs.length = 0;
+  });
+
   it("assigns the authenticated user and posts a comment (summary URL)", async () => {
     const calls: any = { addAssignees: [], commentIssue: [] };
     const client: any = {
