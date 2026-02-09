@@ -75,7 +75,8 @@ describe("managed-pr-review-catchup", () => {
       getIssue: async () => issue,
       getPullRequest: async () => makePullRequestDetails(),
       listPullRequestReviewThreads: async () => [{ id: "t1", isResolved: false, isOutdated: false }],
-      listPullRequestReviews: async () => []
+      listPullRequestReviews: async () => [],
+      searchOpenPullRequestsByAuthorAcrossOwner: async () => []
     };
 
     const enqueued = await enqueueManagedPullRequestReviewFollowups({
@@ -113,7 +114,8 @@ describe("managed-pr-review-catchup", () => {
           submittedAt: new Date().toISOString(),
           body: "Please address these issues."
         }
-      ]
+      ],
+      searchOpenPullRequestsByAuthorAcrossOwner: async () => []
     };
 
     const enqueued = await enqueueManagedPullRequestReviewFollowups({
@@ -151,7 +153,8 @@ describe("managed-pr-review-catchup", () => {
           submittedAt: new Date().toISOString(),
           body: "LGTM"
         }
-      ]
+      ],
+      searchOpenPullRequestsByAuthorAcrossOwner: async () => []
     };
 
     const enqueued = await enqueueManagedPullRequestReviewFollowups({
@@ -167,5 +170,35 @@ describe("managed-pr-review-catchup", () => {
     expect(queued).toHaveLength(1);
     expect(queued[0]?.reason).toBe("approval");
     expect(queued[0]?.requiresEngine).toBe(false);
+  });
+
+  it("enqueues follow-ups for agent-runner GitHub App bot PRs even when managed state is empty", async () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "agent-runner-managed-pr-catchup-app-bot-"));
+    const config = makeConfig(root);
+    const repo = makeRepo();
+    const issue: IssueInfo = { ...makeIssue(repo), author: "agent-runner-bot" };
+
+    const client = {
+      getIssue: async () => issue,
+      getPullRequest: async () => makePullRequestDetails(),
+      listPullRequestReviewThreads: async () => [{ id: "t1", isResolved: false, isOutdated: false }],
+      listPullRequestReviews: async () => [],
+      searchOpenPullRequestsByAuthorAcrossOwner: async (_owner: string, author: string) =>
+        author === "agent-runner-bot" ? [issue] : []
+    };
+
+    const enqueued = await enqueueManagedPullRequestReviewFollowups({
+      client: client as any,
+      config,
+      dryRun: false,
+      maxEntries: 5
+    });
+
+    expect(enqueued).toBe(1);
+    const queuePath = resolveReviewQueuePath(config.workdirRoot);
+    const queued = loadReviewQueue(queuePath);
+    expect(queued).toHaveLength(1);
+    expect(queued[0]?.reason).toBe("review_comment");
+    expect(queued[0]?.requiresEngine).toBe(true);
   });
 });
