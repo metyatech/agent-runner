@@ -128,6 +128,10 @@ export class GitHubClient {
     return this.authLogin;
   }
 
+  async getAuthenticatedLogin(): Promise<string | null> {
+    return this.resolveAuthenticatedLogin();
+  }
+
   private async listOwnedReposForAuthenticatedUser(owner: string): Promise<RepoInfo[]> {
     const repos: RepoInfo[] = [];
     let page = 1;
@@ -212,6 +216,22 @@ export class GitHubClient {
       issue_number: issue.number,
       labels
     });
+  }
+
+  async addAssignees(repo: RepoInfo, issueNumber: number, assignees: string[]): Promise<void> {
+    const unique = Array.from(new Set(assignees.map((assignee) => assignee.trim()).filter((assignee) => assignee.length > 0)));
+    if (unique.length === 0) {
+      return;
+    }
+    for (let index = 0; index < unique.length; index += 10) {
+      const chunk = unique.slice(index, index + 10);
+      await this.octokit.issues.addAssignees({
+        owner: repo.owner,
+        repo: repo.repo,
+        issue_number: issueNumber,
+        assignees: chunk
+      });
+    }
   }
 
   async removeLabel(issue: IssueInfo, label: string): Promise<void> {
@@ -810,6 +830,27 @@ export class GitHubClient {
       }
       throw error;
     }
+  }
+
+  async findOpenPullRequestByHead(repo: RepoInfo, headRef: string): Promise<{ number: number; url: string } | null> {
+    const response = await this.octokit.pulls.list({
+      owner: repo.owner,
+      repo: repo.repo,
+      state: "open",
+      head: `${repo.owner}:${headRef}`,
+      per_page: 10,
+      page: 1
+    });
+    const first = response.data[0];
+    if (!first) {
+      return null;
+    }
+    const number = typeof (first as { number?: unknown }).number === "number" ? (first as { number: number }).number : null;
+    const url = typeof (first as { html_url?: unknown }).html_url === "string" ? (first as { html_url: string }).html_url : "";
+    if (!number || number <= 0 || url.length === 0) {
+      return null;
+    }
+    return { number, url };
   }
 
   async listPullRequestReviews(repo: RepoInfo, pullNumber: number): Promise<PullRequestReview[]> {

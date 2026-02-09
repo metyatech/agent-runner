@@ -7,5 +7,6 @@ state/
 git-cache/
 work/
 .githooks/
+.custom-hooks/
 .env
 .DS_Store
