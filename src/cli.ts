@@ -87,6 +87,7 @@ import {
   resolveManagedPullRequestsStatePath
 } from "./managed-pull-requests.js";
 import { ensureManagedPullRequestRecorded } from "./managed-pr.js";
+import { notifyIdlePullRequest } from "./idle-pr-notify.js";
 import { enqueueManagedPullRequestReviewFollowups } from "./managed-pr-review-catchup.js";
 import { parseLastPullRequestUrl } from "./pull-request-url.js";
 import {
@@ -491,69 +492,18 @@ program
     };
 
     const maybeNotifyIdlePullRequest = async (result: IdleTaskResult): Promise<void> => {
-      if (!notifyClient) {
-        return;
-      }
-
-      const truncate = (value: string, limit: number): string =>
-        value.length <= limit ? value : `${value.slice(0, Math.max(0, limit - 16))}\n…(truncated)…`;
-
-      const readLogTail = (logPath: string, maxBytes: number): string | null => {
-        if (!fs.existsSync(logPath)) {
-          return null;
-        }
-        try {
-          const stat = fs.statSync(logPath);
-          const size = stat.size;
-          if (size <= maxBytes) {
-            return fs.readFileSync(logPath, "utf8");
-          }
-
-          const fd = fs.openSync(logPath, "r");
-          try {
-            const buffer = Buffer.allocUnsafe(maxBytes);
-            const offset = Math.max(0, size - maxBytes);
-            const bytesRead = fs.readSync(fd, buffer, 0, maxBytes, offset);
-            return buffer.subarray(0, bytesRead).toString("utf8");
-          } finally {
-            fs.closeSync(fd);
-          }
-        } catch {
-          return null;
-        }
-      };
-
-      const summaryText = result.summary ?? "";
-      const pr =
-        parseLastPullRequestUrl(summaryText) ?? parseLastPullRequestUrl(readLogTail(result.logPath, 512 * 1024) ?? "");
-      if (!pr) {
-        return;
-      }
-
       try {
-        const prIssue = await notifyClient.getIssue(pr.repo, pr.number);
-        if (prIssue) {
-          await ensureManagedPullRequestRecorded(prIssue, config);
-        }
-      } catch (error) {
-        log("warn", "Failed to record managed PR from idle PR URL.", json, {
-          pr: pr.url,
-          error: error instanceof Error ? error.message : String(error)
+        await notifyIdlePullRequest({
+          client,
+          notifyClient,
+          config,
+          result,
+          json,
+          log
         });
-      }
-
-      const body = buildAgentComment(
-        `Agent runner idle ${result.success ? "completed" : "failed"}.\n\n` +
-          `Repo: ${result.repo.owner}/${result.repo.repo}\n` +
-          `Engine: ${result.engine}\n\n` +
-          `Summary:\n${truncate(summaryText || "(missing)", 6000)}`
-      );
-
-      try {
-        await notifyClient.commentIssue(pr.repo, pr.number, body);
       } catch (error) {
-        log("warn", "Failed to post idle completion comment to PR.", json, {
-          pr: pr.url,
+        log("warn", "Failed to notify idle PR.", json, {
+          repo: `${result.repo.owner}/${result.repo.repo}`,
           error: error instanceof Error ? error.message : String(error)
         });
       }

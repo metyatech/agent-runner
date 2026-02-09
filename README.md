@@ -327,7 +327,11 @@ Helper script (writes `state/github-notify-token.txt`):
 .\scripts\set-notify-token.ps1 -Token "<token>"
 ```
 
-For idle runs, notifications are posted to the PR when a PR URL is present in the idle summary.
+For idle runs that create a PR, agent-runner will try to locate the PR URL from the idle summary or the idle log tail.
+If no PR URL is available, it will fall back to searching for an open PR by the idle run's head branch.
+When a PR is detected, agent-runner assigns the authenticated user associated with the runner GitHub token to the PR (to trigger GitHub notifications)
+and posts an idle completion comment. If a notify client is configured, the comment is posted as the notify identity; otherwise it is posted
+using the runner token.
 If `idle.repoScope` is set to `"local"`, idle runs only target repositories under the workspace root.
 If `idle.usageGate.enabled` is true, idle runs only execute when the weekly reset
 window is near and unused weekly capacity remains. The weekly threshold ramps

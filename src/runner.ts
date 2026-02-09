@@ -61,6 +61,7 @@ export type IdleTaskResult = {
   engine: IdleEngine;
   summary: string | null;
   reportPath: string;
+  headBranch: string;
 };
 
 export type EngineInvocation = {
@@ -1053,7 +1054,8 @@ export async function runIdleTask(
     task,
     engine,
     summary,
-    reportPath
+    reportPath,
+    headBranch: newBranch
   };
   } finally {
     if (created) {
