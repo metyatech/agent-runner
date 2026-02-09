@@ -105,6 +105,55 @@ describe("notifyIdlePullRequest", () => {
     expect(calls.commentIssue).toHaveLength(1);
   });
 
+  it("falls back to posting a comment with client when notifyClient fails", async () => {
+    const calls: any = { clientComments: [], notifyComments: [], logs: [] };
+    const client: any = {
+      getAuthenticatedLogin: async () => "alice",
+      getIssue: async () => null,
+      addAssignees: async () => {},
+      commentIssue: async (repo: any, issueNumber: number, body: string) => {
+        calls.clientComments.push({ repo, issueNumber, body });
+      },
+      findOpenPullRequestByHead: async () => null
+    };
+
+    const notifyClient: any = {
+      commentIssue: async () => {
+        calls.notifyComments.push({ called: true });
+        throw new Error("notify down");
+      }
+    };
+
+    const logPath = createTempLog("nothing");
+    const result: any = {
+      success: true,
+      logPath,
+      repo: { owner: "metyatech", repo: "demo" },
+      task: "T",
+      engine: "codex",
+      summary: "Done https://github.com/metyatech/demo/pull/456",
+      reportPath: "report.json",
+      headBranch: "agent-runner/idle-codex-123"
+    };
+
+    const notified = await notifyIdlePullRequest({
+      client,
+      notifyClient,
+      config: { workdirRoot: "D:/tmp" } as any,
+      result,
+      json: false,
+      log: (level, message, json, meta) => {
+        calls.logs.push({ level, message, json, meta });
+      }
+    });
+
+    expect(notified?.number).toBe(456);
+    expect(calls.notifyComments).toHaveLength(1);
+    expect(calls.clientComments).toHaveLength(1);
+    expect(calls.clientComments[0].issueNumber).toBe(456);
+    expect(calls.logs.some((entry: any) => entry.level === "warn")).toBe(true);
+  });
+
   it("falls back to searching by head branch when no URL is available", async () => {
     const calls: any = { commentIssue: [] };
     const client: any = {

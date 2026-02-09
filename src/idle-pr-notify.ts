@@ -26,8 +26,14 @@ export async function notifyIdlePullRequest(options: {
   const isSameRepo = (left: RepoInfo, right: RepoInfo): boolean =>
     left.owner.toLowerCase() === right.owner.toLowerCase() && left.repo.toLowerCase() === right.repo.toLowerCase();
 
-  const truncate = (value: string, limit: number): string =>
-    value.length <= limit ? value : `${value.slice(0, Math.max(0, limit - 16))}\n…(truncated)…`;
+  const truncate = (value: string, limit: number): string => {
+    const suffix = "\n…(truncated)…";
+    if (value.length <= limit) {
+      return value;
+    }
+    const sliceLength = Math.max(0, limit - suffix.length);
+    return `${value.slice(0, sliceLength)}${suffix}`;
+  };
 
   const readLogTail = (logPath: string, maxBytes: number): string | null => {
     if (!fs.existsSync(logPath)) {
