@@ -82,12 +82,13 @@ import {
   reRequestAllReviewers,
   resolveAllUnresolvedReviewThreads
 } from "./pr-review-actions.js";
-import { summarizeLatestReviews } from "./pr-review-automation.js";
 import {
-  listManagedPullRequests,
   markManagedPullRequest,
   resolveManagedPullRequestsStatePath
 } from "./managed-pull-requests.js";
+import { ensureManagedPullRequestRecorded } from "./managed-pr.js";
+import { enqueueManagedPullRequestReviewFollowups } from "./managed-pr-review-catchup.js";
+import { parseLastPullRequestUrl } from "./pull-request-url.js";
 import {
   clearIssueSession,
   getIssueSession,
@@ -159,6 +160,7 @@ async function maybeRunWebhookCatchup(options: {
   const parsedLastRunAt = state.lastRunAt ? Date.parse(state.lastRunAt) : Number.NaN;
   const lastRunAt = Number.isNaN(parsedLastRunAt) ? now.getTime() - intervalMs : parsedLastRunAt;
   const commandStatePath = resolveAgentCommandStatePath(config.workdirRoot);
+  const managedStatePath = resolveManagedPullRequestsStatePath(config.workdirRoot);
   let found: IssueInfo[] = [];
   try {
     const byCommand = await client.searchOpenItemsByCommentPhraseAcrossOwner(config.owner, "/agent run", {
@@ -214,6 +216,17 @@ async function maybeRunWebhookCatchup(options: {
     if (!triggerCommentId) {
       continue;
     }
+    if (issue.isPullRequest) {
+      try {
+        await markManagedPullRequest(managedStatePath, issue.repo, issue.number);
+      } catch (error) {
+        hadErrors = true;
+        log("warn", "Failed to record managed PR during webhook catch-up scan.", json, {
+          issue: issue.url,
+          error: error instanceof Error ? error.message : String(error)
+        });
+      }
+    }
     try {
       await client.addLabels(issue, [config.labels.queued]);
     } catch (error) {
@@ -251,162 +264,21 @@ async function maybeEnqueueManagedPullRequestReviewFollowups(options: {
   maxEntries: number;
 }): Promise<void> {
   const { client, config, json, dryRun } = options;
-  const limit = Math.max(0, Math.floor(options.maxEntries));
-  if (limit <= 0) {
-    return;
-  }
-  if (!config.idle?.enabled) {
-    return;
-  }
-
-  const managedStatePath = resolveManagedPullRequestsStatePath(config.workdirRoot);
-  let managed: Array<{ repo: RepoInfo; prNumber: number; key: string }> = [];
   try {
-    managed = await listManagedPullRequests(managedStatePath, { limit: 50 });
+    const enqueued = await enqueueManagedPullRequestReviewFollowups({
+      client,
+      config,
+      maxEntries: options.maxEntries,
+      dryRun,
+      onLog: (level, message, data) => log(level, message, json, data)
+    });
+    if (enqueued > 0) {
+      log("info", `Managed PR catch-up scan enqueued ${enqueued} follow-up(s).`, json);
+    }
   } catch (error) {
-    log("warn", "Managed PR catch-up scan failed to read state.", json, {
+    log("warn", "Managed PR catch-up scan failed.", json, {
       error: error instanceof Error ? error.message : String(error)
     });
-    return;
-  }
-
-  if (managed.length === 0) {
-    return;
-  }
-
-  const reviewQueuePath = resolveReviewQueuePath(config.workdirRoot);
-  let enqueued = 0;
-  for (const entry of managed.slice().reverse()) {
-    if (enqueued >= limit) {
-      break;
-    }
-
-    let issue: IssueInfo | null;
-    try {
-      issue = await client.getIssue(entry.repo, entry.prNumber);
-    } catch (error) {
-      log("warn", "Managed PR catch-up scan failed to resolve issue.", json, {
-        pr: entry.key,
-        error: error instanceof Error ? error.message : String(error)
-      });
-      continue;
-    }
-    if (!issue || !issue.isPullRequest) {
-      continue;
-    }
-    if (!issue.labels.includes(config.labels.done)) {
-      continue;
-    }
-    if (
-      issue.labels.includes(config.labels.queued) ||
-      issue.labels.includes(config.labels.running) ||
-      issue.labels.includes(config.labels.needsUserReply) ||
-      issue.labels.includes(config.labels.failed)
-    ) {
-      continue;
-    }
-
-    const pr = await client.getPullRequest(entry.repo, entry.prNumber);
-    if (!pr || pr.state !== "open" || pr.merged || pr.draft) {
-      continue;
-    }
-
-    try {
-      const threads = await client.listPullRequestReviewThreads(entry.repo, entry.prNumber);
-      const unresolved = threads.filter((thread) => !thread.isResolved);
-      if (unresolved.length > 0) {
-        if (dryRun) {
-          log("info", "Dry-run: would enqueue managed PR review follow-up due to unresolved review threads.", json, {
-            url: issue.url,
-            unresolved: unresolved.length
-          });
-          enqueued += 1;
-          continue;
-        }
-        const added = await enqueueReviewTask(reviewQueuePath, {
-          issueId: issue.id,
-          prNumber: entry.prNumber,
-          repo: entry.repo,
-          url: issue.url,
-          reason: "review_comment",
-          requiresEngine: true
-        });
-        if (added) {
-          enqueued += 1;
-        }
-        continue;
-      }
-    } catch (error) {
-      log("warn", "Managed PR catch-up scan failed to read review threads.", json, {
-        url: issue.url,
-        error: error instanceof Error ? error.message : String(error)
-      });
-      continue;
-    }
-
-    let reviews;
-    try {
-      reviews = await client.listPullRequestReviews(entry.repo, entry.prNumber);
-    } catch (error) {
-      log("warn", "Managed PR catch-up scan failed to read PR reviews.", json, {
-        url: issue.url,
-        error: error instanceof Error ? error.message : String(error)
-      });
-      continue;
-    }
-
-    const summary = summarizeLatestReviews(
-      reviews.map((review) => ({
-        author: review.author,
-        state: review.state,
-        submittedAt: review.submittedAt,
-        body: review.body
-      })),
-      pr.requestedReviewerLogins
-    );
-
-    if (summary.changesRequested > 0 || summary.actionableComments > 0) {
-      if (dryRun) {
-        log("info", "Dry-run: would enqueue managed PR review follow-up due to changes requested.", json, { url: issue.url });
-        enqueued += 1;
-        continue;
-      }
-      const added = await enqueueReviewTask(reviewQueuePath, {
-        issueId: issue.id,
-        prNumber: entry.prNumber,
-        repo: entry.repo,
-        url: issue.url,
-        reason: "review",
-        requiresEngine: true
-      });
-      if (added) {
-        enqueued += 1;
-      }
-      continue;
-    }
-
-    if (summary.approved) {
-      if (dryRun) {
-        log("info", "Dry-run: would enqueue managed PR merge follow-up after approval.", json, { url: issue.url });
-        enqueued += 1;
-        continue;
-      }
-      const added = await enqueueReviewTask(reviewQueuePath, {
-        issueId: issue.id,
-        prNumber: entry.prNumber,
-        repo: entry.repo,
-        url: issue.url,
-        reason: "approval",
-        requiresEngine: false
-      });
-      if (added) {
-        enqueued += 1;
-      }
-    }
-  }
-
-  if (enqueued > 0) {
-    log("info", `Managed PR catch-up scan enqueued ${enqueued} follow-up(s).`, json);
   }
 }
 
@@ -618,23 +490,6 @@ program
       await client.comment(issue, body);
     };
 
-    const parsePullRequestUrl = (text: string): { repo: RepoInfo; number: number; url: string } | null => {
-      let last: { repo: RepoInfo; number: number; url: string } | null = null;
-      const pattern = /https:\/\/github\.com\/([^/\s]+)\/([^/\s]+)\/pull\/(\d+)/gi;
-      for (const match of text.matchAll(pattern)) {
-        const number = Number.parseInt(match[3], 10);
-        if (Number.isNaN(number) || number <= 0) {
-          continue;
-        }
-        last = {
-          repo: { owner: match[1], repo: match[2] },
-          number,
-          url: match[0]
-        };
-      }
-      return last;
-    };
-
     const maybeNotifyIdlePullRequest = async (result: IdleTaskResult): Promise<void> => {
       if (!notifyClient) {
         return;
@@ -669,9 +524,22 @@ program
       };
 
       const summaryText = result.summary ?? "";
-      const pr = parsePullRequestUrl(summaryText) ?? parsePullRequestUrl(readLogTail(result.logPath, 512 * 1024) ?? "");
+      const pr =
+        parseLastPullRequestUrl(summaryText) ?? parseLastPullRequestUrl(readLogTail(result.logPath, 512 * 1024) ?? "");
       if (!pr) {
         return;
+      }
+
+      try {
+        const prIssue = await notifyClient.getIssue(pr.repo, pr.number);
+        if (prIssue) {
+          await ensureManagedPullRequestRecorded(prIssue, config);
+        }
+      } catch (error) {
+        log("warn", "Failed to record managed PR from idle PR URL.", json, {
+          pr: pr.url,
+          error: error instanceof Error ? error.message : String(error)
+        });
       }
 
       const body = buildAgentComment(
@@ -894,6 +762,7 @@ program
         config.labels.needsUserReply
       ];
       const commandStatePath = resolveAgentCommandStatePath(config.workdirRoot);
+      const managedStatePath = resolveManagedPullRequestsStatePath(config.workdirRoot);
       const allowedRepos = new Set(repos.map((repo) => `${repo.owner.toLowerCase()}/${repo.repo.toLowerCase()}`));
 
       let found: IssueInfo[] = [];
@@ -949,6 +818,17 @@ program
           log("info", `Dry-run: would queue ${issue.url} via /agent run comment`, json);
           queued.push(issue);
           continue;
+        }
+
+        if (issue.isPullRequest) {
+          try {
+            await markManagedPullRequest(managedStatePath, issue.repo, issue.number);
+          } catch (error) {
+            log("warn", "Failed to record managed PR for /agent run catch-up.", json, {
+              issue: issue.url,
+              error: error instanceof Error ? error.message : String(error)
+            });
+          }
         }
 
         try {
@@ -1652,6 +1532,23 @@ program
               if (result.success) {
                 clearRetry(scheduledRetryStatePath, issue.id);
                 clearIssueSession(issueSessionStatePath, issue.id);
+                if (result.summary) {
+                  const pr = parseLastPullRequestUrl(result.summary);
+                  if (pr) {
+                    try {
+                      const prIssue = await client.getIssue(pr.repo, pr.number);
+                      if (prIssue) {
+                        await ensureManagedPullRequestRecorded(prIssue, config);
+                      }
+                    } catch (error) {
+                      log("warn", "Failed to record managed PR from run summary.", json, {
+                        issue: issue.url,
+                        pr: pr.url,
+                        error: error instanceof Error ? error.message : String(error)
+                      });
+                    }
+                  }
+                }
                 await client.addLabels(issue, [config.labels.done]);
                 await tryRemoveLabel(issue, config.labels.running);
                 await tryRemoveLabel(issue, config.labels.failed);
