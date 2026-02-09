@@ -6,5 +6,6 @@ state/
 .worktrees/
 git-cache/
 work/
+.githooks/
 .env
 .DS_Store
