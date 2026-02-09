@@ -128,3 +128,49 @@ describe("GitHubClient.searchOpenItemsByCommentPhraseAcrossOwner", () => {
     expect(items.find((item) => item.number === 789)?.isPullRequest).toBe(true);
   });
 });
+
+describe("GitHubClient.searchOpenPullRequestsByAuthorAcrossOwner", () => {
+  it("builds query with author qualifier, exclude labels, and parses repository_url", async () => {
+    const client = new GitHubClient("dummy");
+    let seenQuery: string | null = null;
+    (client as any).octokit = {
+      search: {
+        issuesAndPullRequests: async ({ q }: { q: string }) => {
+          seenQuery = q;
+          return {
+            data: {
+              items: [
+                {
+                  id: 10,
+                  number: 123,
+                  title: "PR",
+                  body: "Body",
+                  html_url: "https://github.com/metyatech/demo/pull/123",
+                  repository_url: "https://api.github.com/repos/metyatech/demo",
+                  user: { login: "app/agent-runner-bot" },
+                  labels: [{ name: "agent:queued" }],
+                  pull_request: { url: "https://api.github.com/repos/metyatech/demo/pulls/123" }
+                }
+              ]
+            }
+          };
+        }
+      }
+    };
+
+    const items = await client.searchOpenPullRequestsByAuthorAcrossOwner("metyatech", "app/agent-runner-bot", {
+      excludeLabels: ["agent:queued", "agent:running"],
+      perPage: 10,
+      maxPages: 1
+    });
+
+    expect(seenQuery).toContain("user:metyatech state:open");
+    expect(seenQuery).toContain('author:"app/agent-runner-bot"');
+    expect(seenQuery).toContain("is:pr");
+    expect(seenQuery).toContain('-label:"agent:queued"');
+    expect(seenQuery).toContain('-label:"agent:running"');
+    expect(items).toHaveLength(1);
+    expect(items[0].repo).toEqual({ owner: "metyatech", repo: "demo" });
+    expect(items[0].isPullRequest).toBe(true);
+  });
+});

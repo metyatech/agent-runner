@@ -8,9 +8,13 @@ import {
 
 export function isAgentRunnerBotLogin(login: string | null): boolean {
   if (!login) return false;
-  const normalized = login.trim().toLowerCase();
-  if (!normalized.endsWith("[bot]")) return false;
-  return normalized.includes("agent-runner");
+  const trimmed = login.trim().toLowerCase();
+  const normalized = trimmed.startsWith("app/") ? trimmed.slice("app/".length) : trimmed;
+  if (normalized.endsWith("[bot]")) {
+    return normalized.includes("agent-runner");
+  }
+
+  return normalized === "agent-runner-bot";
 }
 
 export async function isManagedPullRequestIssue(issue: IssueInfo, config: AgentRunnerConfig): Promise<boolean> {
@@ -41,4 +45,3 @@ export async function ensureManagedPullRequestRecorded(issue: IssueInfo, config:
   await markManagedPullRequest(statePath, issue.repo, issue.number);
   return true;
 }
-

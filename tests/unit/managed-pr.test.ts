@@ -47,6 +47,13 @@ describe("managed-pr", () => {
     await expect(isManagedPullRequestIssue(issue, config)).resolves.toBe(true);
   });
 
+  it("treats agent-runner GitHub App bot-authored PRs as managed even when state is empty", async () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "agent-runner-managed-pr-app-bot-"));
+    const config = makeConfig(root);
+    await expect(isManagedPullRequestIssue(makePullRequestIssue({ author: "agent-runner-bot" }), config)).resolves.toBe(true);
+    await expect(isManagedPullRequestIssue(makePullRequestIssue({ author: "app/agent-runner-bot" }), config)).resolves.toBe(true);
+  });
+
   it("treats state-recorded PRs as managed even when author is not an agent-runner bot", async () => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), "agent-runner-managed-pr-state-"));
     const config = makeConfig(root);
@@ -78,4 +85,3 @@ describe("managed-pr", () => {
     expect(fs.existsSync(statePath)).toBe(false);
   });
 });
-
