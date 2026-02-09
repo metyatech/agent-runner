@@ -22,6 +22,6 @@ export default [
     }
   },
   {
-    ignores: ["dist/**", ".worktrees/**", "git-cache/**", "logs/**", "reports/**", "state/**", "work/**"]
+    ignores: ["dist/**", ".githooks/**", ".worktrees/**", "git-cache/**", "logs/**", "reports/**", "state/**", "work/**"]
   }
 ];

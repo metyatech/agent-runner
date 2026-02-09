@@ -8,10 +8,10 @@ import {
   resolveAgentCommandStatePath
 } from "./agent-command-state.js";
 import {
-  isManagedPullRequest as isManagedPullRequestState,
   markManagedPullRequest,
   resolveManagedPullRequestsStatePath
 } from "./managed-pull-requests.js";
+import { ensureManagedPullRequestRecorded, isManagedPullRequestIssue } from "./managed-pr.js";
 import { enqueueWebhookIssue } from "./webhook-queue.js";
 import { enqueueReviewTask, resolveReviewQueuePath } from "./review-queue.js";
 import { reviewFeedbackIndicatesOk } from "./review-feedback.js";
@@ -121,24 +121,6 @@ function isBusyOrTerminal(issue: IssueInfo, config: AgentRunnerConfig): "running
     return "terminal";
   }
   return null;
-}
-
-function isAgentRunnerBotLogin(login: string | null): boolean {
-  if (!login) return false;
-  const normalized = login.trim().toLowerCase();
-  if (!normalized.endsWith("[bot]")) return false;
-  return normalized.includes("agent-runner");
-}
-
-async function isManagedPullRequest(issue: IssueInfo, config: AgentRunnerConfig): Promise<boolean> {
-  if (!issue.isPullRequest) {
-    return false;
-  }
-  if (isAgentRunnerBotLogin(issue.author ?? null)) {
-    return true;
-  }
-  const statePath = resolveManagedPullRequestsStatePath(config.workdirRoot);
-  return isManagedPullRequestState(statePath, issue.repo, issue.number);
 }
 
 async function ensureQueued(
@@ -253,8 +235,16 @@ async function handleReviewFollowup(options: {
     return;
   }
 
-  if (!(await isManagedPullRequest(issue, config))) {
+  if (!(await isManagedPullRequestIssue(issue, config))) {
     return;
+  }
+  try {
+    await ensureManagedPullRequestRecorded(issue, config);
+  } catch (error) {
+    onLog?.("warn", "Failed to record managed PR during review follow-up. Proceeding anyway.", {
+      url: issue.url,
+      error: error instanceof Error ? error.message : String(error)
+    });
   }
 
   await safeRemoveLabel(client, issue, config.labels.needsUserReply, onLog);

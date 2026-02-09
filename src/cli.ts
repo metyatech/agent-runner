@@ -82,12 +82,13 @@ import {
   reRequestAllReviewers,
   resolveAllUnresolvedReviewThreads
 } from "./pr-review-actions.js";
-import { summarizeLatestReviews } from "./pr-review-automation.js";
 import {
-  listManagedPullRequests,
   markManagedPullRequest,
   resolveManagedPullRequestsStatePath
 } from "./managed-pull-requests.js";
+import { ensureManagedPullRequestRecorded } from "./managed-pr.js";
+import { enqueueManagedPullRequestReviewFollowups } from "./managed-pr-review-catchup.js";
+import { parseLastPullRequestUrl } from "./pull-request-url.js";
 import {
   clearIssueSession,
   getIssueSession,
@@ -159,6 +160,7 @@ async function maybeRunWebhookCatchup(options: {
   const parsedLastRunAt = state.lastRunAt ? Date.parse(state.lastRunAt) : Number.NaN;
   const lastRunAt = Number.isNaN(parsedLastRunAt) ? now.getTime() - intervalMs : parsedLastRunAt;
   const commandStatePath = resolveAgentCommandStatePath(config.workdirRoot);
+  const managedStatePath = resolveManagedPullRequestsStatePath(config.workdirRoot);
   let found: IssueInfo[] = [];
   try {
     const byCommand = await client.searchOpenItemsByCommentPhraseAcrossOwner(config.owner, "/agent run", {
@@ -214,6 +216,17 @@ async function maybeRunWebhookCatchup(options: {
     if (!triggerCommentId) {
       continue;
     }
+    if (issue.isPullRequest) {
+      try {
+        await markManagedPullRequest(managedStatePath, issue.repo, issue.number);
+      } catch (error) {
+        hadErrors = true;
+        log("warn", "Failed to record managed PR during webhook catch-up scan.", json, {
+          issue: issue.url,
+          error: error instanceof Error ? error.message : String(error)
+        });
+      }
+    }
     try {
       await client.addLabels(issue, [config.labels.queued]);
     } catch (error) {
@@ -251,162 +264,21 @@ async function maybeEnqueueManagedPullRequestReviewFollowups(options: {
   maxEntries: number;
 }): Promise<void> {
   const { client, config, json, dryRun } = options;
-  const limit = Math.max(0, Math.floor(options.maxEntries));
-  if (limit <= 0) {
-    return;
-  }
-  if (!config.idle?.enabled) {
-    return;
-  }
-
-  const managedStatePath = resolveManagedPullRequestsStatePath(config.workdirRoot);
-  let managed: Array<{ repo: RepoInfo; prNumber: number; key: string }> = [];
   try {
-    managed = await listManagedPullRequests(managedStatePath, { limit: 50 });
+    const enqueued = await enqueueManagedPullRequestReviewFollowups({
+      client,
+      config,
+      maxEntries: options.maxEntries,
+      dryRun,
+      onLog: (level, message, data) => log(level, message, json, data)
+    });
+    if (enqueued > 0) {
+      log("info", `Managed PR catch-up scan enqueued ${enqueued} follow-up(s).`, json);
+    }
   } catch (error) {
-    log("warn", "Managed PR catch-up scan failed to read state.", json, {
+    log("warn", "Managed PR catch-up scan failed.", json, {
       error: error instanceof Error ? error.message : String(error)
     });
-    return;
-  }
-
-  if (managed.length === 0) {
-    return;
-  }
-
-  const reviewQueuePath = resolveReviewQueuePath(config.workdirRoot);
-  let enqueued = 0;
-  for (const entry of managed.slice().reverse()) {
-    if (enqueued >= limit) {
-      break;
-    }
-
-    let issue: IssueInfo | null;
-    try {
-      issue = await client.getIssue(entry.repo, entry.prNumber);
-    } catch (error) {
-      log("warn", "Managed PR catch-up scan failed to resolve issue.", json, {
-        pr: entry.key,
-        error: error instanceof Error ? error.message : String(error)
-      });
-      continue;
-    }
-    if (!issue || !issue.isPullRequest) {
-      continue;
-    }
-    if (!issue.labels.includes(config.labels.done)) {
-      continue;
-    }
-    if (
-      issue.labels.includes(config.labels.queued) ||
-      issue.labels.includes(config.labels.running) ||
-      issue.labels.includes(config.labels.needsUserReply) ||
-      issue.labels.includes(config.labels.failed)
-    ) {
-      continue;
-    }
-
-    const pr = await client.getPullRequest(entry.repo, entry.prNumber);
-    if (!pr || pr.state !== "open" || pr.merged || pr.draft) {
-      continue;
-    }
-
-    try {
-      const threads = await client.listPullRequestReviewThreads(entry.repo, entry.prNumber);
-      const unresolved = threads.filter((thread) => !thread.isResolved);
-      if (unresolved.length > 0) {
-        if (dryRun) {
-          log("info", "Dry-run: would enqueue managed PR review follow-up due to unresolved review threads.", json, {
-            url: issue.url,
-            unresolved: unresolved.length
-          });
-          enqueued += 1;
-          continue;
-        }
-        const added = await enqueueReviewTask(reviewQueuePath, {
-          issueId: issue.id,
-          prNumber: entry.prNumber,
-          repo: entry.repo,
-          url: issue.url,
-          reason: "review_comment",
-          requiresEngine: true
-        });
-        if (added) {
-          enqueued += 1;
-        }
-        continue;
-      }
-    } catch (error) {
-      log("warn", "Managed PR catch-up scan failed to read review threads.", json, {
-        url: issue.url,
-        error: error instanceof Error ? error.message : String(error)
-      });
-      continue;
-    }
-
-    let reviews;
-    try {
-      reviews = await client.listPullRequestReviews(entry.repo, entry.prNumber);
-    } catch (error) {
-      log("warn", "Managed PR catch-up scan failed to read PR reviews.", json, {
-        url: issue.url,
-        error: error instanceof Error ? error.message : String(error)
-      });
-      continue;
-    }
-
-    const summary = summarizeLatestReviews(
-      reviews.map((review) => ({
-        author: review.author,
-        state: review.state,
-        submittedAt: review.submittedAt,
-        body: review.body
-      })),
-      pr.requestedReviewerLogins
-    );
-
-    if (summary.changesRequested > 0 || summary.actionableComments > 0) {
-      if (dryRun) {
-        log("info", "Dry-run: would enqueue managed PR review follow-up due to changes requested.", json, { url: issue.url });
-        enqueued += 1;
-        continue;
-      }
-      const added = await enqueueReviewTask(reviewQueuePath, {
-        issueId: issue.id,
-        prNumber: entry.prNumber,
-        repo: entry.repo,
-        url: issue.url,
-        reason: "review",
-        requiresEngine: true
-      });
-      if (added) {
-        enqueued += 1;
-      }
-      continue;
-    }
-
-    if (summary.approved) {
-      if (dryRun) {
-        log("info", "Dry-run: would enqueue managed PR merge follow-up after approval.", json, { url: issue.url });
-        enqueued += 1;
-        continue;
-      }
-      const added = await enqueueReviewTask(reviewQueuePath, {
-        issueId: issue.id,
-        prNumber: entry.prNumber,
-        repo: entry.repo,
-        url: issue.url,
-        reason: "approval",
-        requiresEngine: false
-      });
-      if (added) {
-        enqueued += 1;
-      }
-    }
-  }
-
-  if (enqueued > 0) {
-    log("info", `Managed PR catch-up scan enqueued ${enqueued} follow-up(s).`, json);
   }
 }
 
@@ -618,23 +490,6 @@ program
       await client.comment(issue, body);
     };
 
-    const parsePullRequestUrl = (text: string): { repo: RepoInfo; number: number; url: string } | null => {
-      let last: { repo: RepoInfo; number: number; url: string } | null = null;
-      const pattern = /https:\/\/github\.com\/([^/\s]+)\/([^/\s]+)\/pull\/(\d+)/gi;
-      for (const match of text.matchAll(pattern)) {
-        const number = Number.parseInt(match[3], 10);
-        if (Number.isNaN(number) || number <= 0) {
-          continue;
-        }
-        last = {
-          repo: { owner: match[1], repo: match[2] },
-          number,
-          url: match[0]
-        };
-      }
-      return last;
-    };
-
     const maybeNotifyIdlePullRequest = async (result: IdleTaskResult): Promise<void> => {
       if (!notifyClient) {
         return;
@@ -669,9 +524,22 @@ program
       };
 
       const summaryText = result.summary ?? "";
-      const pr = parsePullRequestUrl(summaryText) ?? parsePullRequestUrl(readLogTail(result.logPath, 512 * 1024) ?? "");
+      const pr =
+        parseLastPullRequestUrl(summaryText) ?? parseLastPullRequestUrl(readLogTail(result.logPath, 512 * 1024) ?? "");
       if (!pr) {
         return;
+      }
+
+      try {
+        const prIssue = await notifyClient.getIssue(pr.repo, pr.number);
+        if (prIssue) {
+          await ensureManagedPullRequestRecorded(prIssue, config);
+        }
+      } catch (error) {
+        log("warn", "Failed to record managed PR from idle PR URL.", json, {
+          pr: pr.url,
+          error: error instanceof Error ? error.message : String(error)
+        });
       }
 
       const body = buildAgentComment(
@@ -791,7 +659,13 @@ program
       return resumed;
     };
 
-    const runIssueWithSessionResume = async (issue: IssueInfo): Promise<Awaited<ReturnType<typeof runIssue>>> => {
+    const runIssueWithSessionResume = async (
+      issue: IssueInfo,
+      engine: IdleEngine
+    ): Promise<Awaited<ReturnType<typeof runIssue>>> => {
+      if (engine !== "codex") {
+        return runIssue(client, config, issue, { engine });
+      }
       let resumeSessionId = getIssueSession(issueSessionStatePath, issue);
       let resumePrompt: string | null =
         resumeSessionId
@@ -800,7 +674,8 @@ program
       while (true) {
         const result = await runIssue(client, config, issue, {
           resumeSessionId,
-          resumePrompt
+          resumePrompt,
+          engine
         });
         if (result.sessionId) {
           setIssueSession(issueSessionStatePath, issue, result.sessionId);
@@ -894,6 +769,7 @@ program
         config.labels.needsUserReply
       ];
       const commandStatePath = resolveAgentCommandStatePath(config.workdirRoot);
+      const managedStatePath = resolveManagedPullRequestsStatePath(config.workdirRoot);
       const allowedRepos = new Set(repos.map((repo) => `${repo.owner.toLowerCase()}/${repo.repo.toLowerCase()}`));
 
       let found: IssueInfo[] = [];
@@ -949,6 +825,17 @@ program
           log("info", `Dry-run: would queue ${issue.url} via /agent run comment`, json);
           queued.push(issue);
           continue;
+        }
+
+        if (issue.isPullRequest) {
+          try {
+            await markManagedPullRequest(managedStatePath, issue.repo, issue.number);
+          } catch (error) {
+            log("warn", "Failed to record managed PR for /agent run catch-up.", json, {
+              issue: issue.url,
+              error: error instanceof Error ? error.message : String(error)
+            });
+          }
         }
 
         try {
@@ -1229,89 +1116,22 @@ program
         }
       };
 
-      if (idleEnabled && picked.length < config.concurrency) {
-        await maybeEnqueueManagedPullRequestReviewFollowups({
-          client,
-          config,
-          json,
-          dryRun,
-          maxEntries: config.concurrency - picked.length
-        });
-      }
-
-      let scheduledReviewFollowups: ScheduledReviewFollowup[] = [];
-      if (idleEnabled && picked.length < config.concurrency) {
-        const reviewQueuePath = resolveReviewQueuePath(config.workdirRoot);
-        const backlog = loadReviewQueue(reviewQueuePath);
-        if (backlog.length > 0) {
-          const maxEntries = config.concurrency - picked.length;
-          const mergeOnlyBacklog = backlog.filter((entry) => !entry.requiresEngine);
-          const engineBacklog = backlog.filter((entry) => entry.requiresEngine);
-
-          let queue: ReviewQueueEntry[] = [];
-          if (dryRun) {
-            queue = backlog.slice(0, maxEntries);
-          } else {
-            const mergeOnly = await takeReviewTasksWhere(reviewQueuePath, maxEntries, (entry) => !entry.requiresEngine);
-            queue.push(...mergeOnly);
-            const remaining = maxEntries - mergeOnly.length;
-            if (remaining > 0 && engineBacklog.length > 0) {
-              const codexAllowed = await evaluateCodexIdleAllowed();
-              if (!codexAllowed) {
-                log(
-                  "info",
-                  "Review follow-up backlog detected but Codex idle gate is blocked. Skipping engine-required review follow-ups.",
-                  json,
-                  { queued: engineBacklog.length }
-                );
-              } else {
-                const engineTasks = await takeReviewTasksWhere(reviewQueuePath, remaining, (entry) => entry.requiresEngine);
-                queue.push(...engineTasks);
-              }
-            }
-          }
-
-          if (queue.length === 0) {
-            if (mergeOnlyBacklog.length > 0) {
-              log("info", "Review follow-up merge-only backlog detected but nothing was scheduled.", json, {
-                queued: mergeOnlyBacklog.length
-              });
-            } else if (engineBacklog.length > 0) {
-              log("info", "Review follow-up backlog detected but nothing was scheduled.", json, {
-                queued: engineBacklog.length
-              });
-            }
-          } else {
-            scheduledReviewFollowups = scheduleReviewFollowups({
-              normalRunning: picked.length,
-              concurrency: config.concurrency,
-              allowedEngines: ["codex"],
-              queue
-            });
-          }
-        }
-      }
-
-      if (picked.length === 0 && scheduledReviewFollowups.length === 0) {
-        if (!config.idle?.enabled) {
-          log("info", "No queued requests.", json);
-          return;
-        }
-
+      const resolveAllowedIdleEngines = async (options: {
+        allowGeminiWarmup: boolean;
+      }): Promise<{
+        engines: IdleEngine[];
+        geminiWarmup: { warmupPro: boolean; warmupFlash: boolean; reason: string | null };
+      }> => {
         const codexAllowed = await evaluateCodexIdleAllowed();
 
         let copilotAllowed = false;
-        const copilotGate = config.idle.copilotUsageGate;
+        const copilotGate = config.idle?.copilotUsageGate;
         if (copilotGate?.enabled) {
           try {
             const copilotStart = Date.now();
             const usage = await fetchCopilotUsage(token, copilotGate);
             if (timingEnabled) {
-              log(
-                "info",
-                `${timingPrefix} (Copilot): rateLimits=${Date.now() - copilotStart}ms`,
-                json
-              );
+              log("info", `${timingPrefix} (Copilot): rateLimits=${Date.now() - copilotStart}ms`, json);
             }
             if (!usage) {
               log("warn", "Idle Copilot usage gate: unable to parse Copilot quota info.", json);
@@ -1341,11 +1161,7 @@ program
           } else {
             const exists = await commandExists(config.copilot.command);
             if (!exists) {
-              log(
-                "warn",
-                `Idle Copilot command not found (${config.copilot.command}). Skipping Copilot idle.`,
-                json
-              );
+              log("warn", `Idle Copilot command not found (${config.copilot.command}). Skipping Copilot idle.`, json);
               copilotAllowed = false;
             }
           }
@@ -1356,18 +1172,13 @@ program
         let geminiWarmupPro = false;
         let geminiWarmupFlash = false;
         let geminiWarmupReason: string | null = null;
-        let amazonQAllowed = false;
-        const geminiGate = config.idle.geminiUsageGate;
+        const geminiGate = config.idle?.geminiUsageGate;
         if (geminiGate?.enabled) {
           try {
             const geminiStart = Date.now();
             const usage = await fetchGeminiUsage();
             if (timingEnabled) {
-              log(
-                "info",
-                `${timingPrefix} (Gemini): rateLimits=${Date.now() - geminiStart}ms`,
-                json
-              );
+              log("info", `${timingPrefix} (Gemini): rateLimits=${Date.now() - geminiStart}ms`, json);
             }
             if (!usage) {
               log("warn", "Idle Gemini usage gate: unable to parse Gemini quota info.", json);
@@ -1375,23 +1186,27 @@ program
               const now = new Date();
               const decision = evaluateGeminiUsageGate(usage, geminiGate, now);
               if (!decision.allowPro && !decision.allowFlash) {
-                let warmupState = { models: {} };
-                try {
-                  warmupState = loadGeminiWarmupState(resolveGeminiWarmupStatePath(config.workdirRoot));
-                } catch (error) {
-                  log("warn", "Idle Gemini warmup: unable to read warmup state. Proceeding without cooldown.", json, {
-                    error: error instanceof Error ? error.message : String(error)
-                  });
-                }
+                if (options.allowGeminiWarmup) {
+                  let warmupState = { models: {} };
+                  try {
+                    warmupState = loadGeminiWarmupState(resolveGeminiWarmupStatePath(config.workdirRoot));
+                  } catch (error) {
+                    log("warn", "Idle Gemini warmup: unable to read warmup state. Proceeding without cooldown.", json, {
+                      error: error instanceof Error ? error.message : String(error)
+                    });
+                  }
 
-                const warmupDecision = evaluateGeminiWarmup(usage, geminiGate, warmupState, now);
-                if (warmupDecision?.warmupPro || warmupDecision?.warmupFlash) {
-                  geminiWarmupPro = warmupDecision.warmupPro;
-                  geminiWarmupFlash = warmupDecision.warmupFlash;
-                  geminiWarmupReason = warmupDecision.reason;
-                  if (geminiWarmupPro) geminiProAllowed = true;
-                  if (geminiWarmupFlash) geminiFlashAllowed = true;
-                  log("info", `Idle Gemini warmup allowed. ${warmupDecision.reason}`, json);
+                  const warmupDecision = evaluateGeminiWarmup(usage, geminiGate, warmupState, now);
+                  if (warmupDecision?.warmupPro || warmupDecision?.warmupFlash) {
+                    geminiWarmupPro = warmupDecision.warmupPro;
+                    geminiWarmupFlash = warmupDecision.warmupFlash;
+                    geminiWarmupReason = warmupDecision.reason;
+                    if (geminiWarmupPro) geminiProAllowed = true;
+                    if (geminiWarmupFlash) geminiFlashAllowed = true;
+                    log("info", `Idle Gemini warmup allowed. ${warmupDecision.reason}`, json);
+                  } else {
+                    log("info", `Idle Gemini usage gate blocked. ${decision.reason}`, json);
+                  }
                 } else {
                   log("info", `Idle Gemini usage gate blocked. ${decision.reason}`, json);
                 }
@@ -1429,12 +1244,13 @@ program
           }
         }
 
+        let amazonQAllowed = false;
         if (config.amazonQ?.enabled) {
           const exists = await commandExists(config.amazonQ.command);
           if (!exists) {
             log("warn", `Idle Amazon Q command not found (${config.amazonQ.command}).`, json);
           } else {
-            const amazonQGate = config.idle.amazonQUsageGate;
+            const amazonQGate = config.idle?.amazonQUsageGate;
             if (amazonQGate?.enabled) {
               try {
                 const now = new Date();
@@ -1482,6 +1298,94 @@ program
         if (amazonQAllowed) {
           engines.push("amazon-q");
         }
+
+        return {
+          engines,
+          geminiWarmup: {
+            warmupPro: geminiWarmupPro,
+            warmupFlash: geminiWarmupFlash,
+            reason: geminiWarmupReason
+          }
+        };
+      };
+
+      if (idleEnabled && picked.length < config.concurrency) {
+        await maybeEnqueueManagedPullRequestReviewFollowups({
+          client,
+          config,
+          json,
+          dryRun,
+          maxEntries: config.concurrency - picked.length
+        });
+      }
+
+      let scheduledReviewFollowups: ScheduledReviewFollowup[] = [];
+      if (idleEnabled && picked.length < config.concurrency) {
+        const reviewQueuePath = resolveReviewQueuePath(config.workdirRoot);
+        const backlog = loadReviewQueue(reviewQueuePath);
+        if (backlog.length > 0) {
+          const maxEntries = config.concurrency - picked.length;
+          const mergeOnlyBacklog = backlog.filter((entry) => !entry.requiresEngine);
+          const engineBacklog = backlog.filter((entry) => entry.requiresEngine);
+
+          let queue: ReviewQueueEntry[] = [];
+          let allowedEngines: IdleEngine[] = [];
+          if (dryRun) {
+            queue = backlog.slice(0, maxEntries);
+            allowedEngines = ["codex"];
+          } else {
+            const mergeOnly = await takeReviewTasksWhere(reviewQueuePath, maxEntries, (entry) => !entry.requiresEngine);
+            queue.push(...mergeOnly);
+            const remaining = maxEntries - mergeOnly.length;
+            if (remaining > 0 && engineBacklog.length > 0) {
+              const gate = await resolveAllowedIdleEngines({ allowGeminiWarmup: false });
+              allowedEngines = gate.engines;
+              if (allowedEngines.length === 0) {
+                log(
+                  "info",
+                  "Review follow-up backlog detected but all idle engine gates are blocked. Skipping engine-required review follow-ups.",
+                  json,
+                  { queued: engineBacklog.length }
+                );
+              } else {
+                const engineTasks = await takeReviewTasksWhere(reviewQueuePath, remaining, (entry) => entry.requiresEngine);
+                queue.push(...engineTasks);
+              }
+            }
+          }
+
+          if (queue.length === 0) {
+            if (mergeOnlyBacklog.length > 0) {
+              log("info", "Review follow-up merge-only backlog detected but nothing was scheduled.", json, {
+                queued: mergeOnlyBacklog.length
+              });
+            } else if (engineBacklog.length > 0) {
+              log("info", "Review follow-up backlog detected but nothing was scheduled.", json, {
+                queued: engineBacklog.length
+              });
+            }
+          } else {
+            scheduledReviewFollowups = scheduleReviewFollowups({
+              normalRunning: picked.length,
+              concurrency: config.concurrency,
+              allowedEngines,
+              queue
+            });
+          }
+        }
+      }
+
+      if (picked.length === 0 && scheduledReviewFollowups.length === 0) {
+        if (!config.idle?.enabled) {
+          log("info", "No queued requests.", json);
+          return;
+        }
+
+        const gate = await resolveAllowedIdleEngines({ allowGeminiWarmup: true });
+        const engines = gate.engines;
+        const geminiWarmupPro = gate.geminiWarmup.warmupPro;
+        const geminiWarmupFlash = gate.geminiWarmup.warmupFlash;
+        const geminiWarmupReason = gate.geminiWarmup.reason;
 
         if (engines.length === 0) {
           log("info", "Idle usage gate blocked for all engines. Skipping idle.", json);
@@ -1647,11 +1551,28 @@ program
                 await removeWebhookIssues(webhookQueuePath, [issue.id]);
               }
 
-              const result = await serviceLimiters.codex(() => runIssueWithSessionResume(issue));
+              const result = await serviceLimiters.codex(() => runIssueWithSessionResume(issue, "codex"));
               activityId = result.activityId;
               if (result.success) {
                 clearRetry(scheduledRetryStatePath, issue.id);
                 clearIssueSession(issueSessionStatePath, issue.id);
+                if (result.summary) {
+                  const pr = parseLastPullRequestUrl(result.summary);
+                  if (pr) {
+                    try {
+                      const prIssue = await client.getIssue(pr.repo, pr.number);
+                      if (prIssue) {
+                        await ensureManagedPullRequestRecorded(prIssue, config);
+                      }
+                    } catch (error) {
+                      log("warn", "Failed to record managed PR from run summary.", json, {
+                        issue: issue.url,
+                        pr: pr.url,
+                        error: error instanceof Error ? error.message : String(error)
+                      });
+                    }
+                  }
+                }
                 await client.addLabels(issue, [config.labels.done]);
                 await tryRemoveLabel(issue, config.labels.running);
                 await tryRemoveLabel(issue, config.labels.failed);
@@ -1757,7 +1678,8 @@ program
               );
               clearRetry(scheduledRetryStatePath, issue.id);
 
-              const result = await serviceLimiters.codex(() => runIssueWithSessionResume(issue));
+              const service = idleEngineToService(followup.engine);
+              const result = await serviceLimiters[service](() => runIssueWithSessionResume(issue, followup.engine));
               activityId = result.activityId;
               if (result.success) {
                 clearRetry(scheduledRetryStatePath, issue.id);

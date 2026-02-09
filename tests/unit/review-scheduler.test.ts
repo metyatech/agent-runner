@@ -36,5 +36,29 @@ describe("review-scheduler", () => {
     expect(scheduled[0].issueId).toBe(1);
     expect(scheduled[0].engine).toBe("codex");
   });
-});
 
+  it("schedules merge-only follow-ups even when no engines are allowed", () => {
+    const queue: ReviewQueueEntry[] = [
+      {
+        issueId: 1,
+        prNumber: 1,
+        repo: { owner: "metyatech", repo: "a" },
+        url: "x",
+        reason: "approval",
+        requiresEngine: false,
+        enqueuedAt: new Date().toISOString()
+      }
+    ];
+
+    const scheduled = scheduleReviewFollowups({
+      normalRunning: 0,
+      concurrency: 1,
+      allowedEngines: [],
+      queue
+    });
+
+    expect(scheduled).toHaveLength(1);
+    expect(scheduled[0].issueId).toBe(1);
+    expect(scheduled[0].engine).toBe("codex");
+  });
+});

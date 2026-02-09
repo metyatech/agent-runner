@@ -17,7 +17,7 @@
     "test:unit": "vitest run ./tests/unit",
     "test:e2e": "vitest run ./tests/e2e",
     "dev": "tsx src/cli.ts",
-    "prepare": "simple-git-hooks"
+    "prepare": "node scripts/setup-git-hooks.mjs && simple-git-hooks"
   },
   "dependencies": {
     "@octokit/auth-app": "^7.2.2",
