@@ -37,23 +37,28 @@ export async function enqueueManagedPullRequestReviewFollowups(options: {
     });
   }
 
-  const candidates: Array<{ repo: RepoInfo; prNumber: number; key: string }> = [];
+  const candidates: Array<{ repo: RepoInfo; prNumber: number; key: string; source: "state" | "search" }> = [];
   const seen = new Set<string>();
   for (const entry of managed.slice().reverse()) {
     if (seen.has(entry.key)) {
       continue;
     }
     seen.add(entry.key);
-    candidates.push(entry);
+    candidates.push({ ...entry, source: "state" });
   }
 
+  const targetCandidates = Math.max(1, Math.min(50, limit * 10));
   const botAuthorLogins = ["agent-runner-bot", "app/agent-runner-bot", "agent-runner-app[bot]"];
   for (const login of botAuthorLogins) {
+    if (candidates.length >= targetCandidates) {
+      break;
+    }
     let found: IssueInfo[] = [];
     try {
+      const remaining = targetCandidates - candidates.length;
       found = await options.client.searchOpenPullRequestsByAuthorAcrossOwner(options.config.owner, login, {
         excludeLabels,
-        perPage: 100,
+        perPage: remaining,
         maxPages: 1
       });
     } catch (error) {
@@ -64,6 +69,9 @@ export async function enqueueManagedPullRequestReviewFollowups(options: {
       continue;
     }
     for (const item of found) {
+      if (candidates.length >= targetCandidates) {
+        break;
+      }
       if (!item.isPullRequest) {
         continue;
       }
@@ -72,7 +80,7 @@ export async function enqueueManagedPullRequestReviewFollowups(options: {
         continue;
       }
       seen.add(key);
-      candidates.push({ repo: item.repo, prNumber: item.number, key });
+      candidates.push({ repo: item.repo, prNumber: item.number, key, source: "search" });
     }
   }
 
@@ -100,16 +108,28 @@ export async function enqueueManagedPullRequestReviewFollowups(options: {
     if (!issue || !issue.isPullRequest) {
       continue;
     }
-    if (!(await isManagedPullRequestIssue(issue, options.config))) {
-      continue;
-    }
-    try {
-      await ensureManagedPullRequestRecorded(issue, options.config);
-    } catch (error) {
-      options.onLog?.("warn", "Managed PR catch-up scan failed to record managed PR state.", {
-        url: issue.url,
-        error: error instanceof Error ? error.message : String(error)
-      });
+    if (entry.source === "search") {
+      let isManaged: boolean;
+      try {
+        isManaged = await isManagedPullRequestIssue(issue, options.config);
+      } catch (error) {
+        options.onLog?.("warn", "Managed PR catch-up scan failed to check managed PR state.", {
+          url: issue.url,
+          error: error instanceof Error ? error.message : String(error)
+        });
+        continue;
+      }
+      if (!isManaged) {
+        continue;
+      }
+      try {
+        await ensureManagedPullRequestRecorded(issue, options.config);
+      } catch (error) {
+        options.onLog?.("warn", "Managed PR catch-up scan failed to record managed PR state.", {
+          url: issue.url,
+          error: error instanceof Error ? error.message : String(error)
+        });
+      }
     }
     if (
       issue.labels.includes(options.config.labels.queued) ||

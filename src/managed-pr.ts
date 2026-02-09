@@ -10,8 +10,11 @@ export function isAgentRunnerBotLogin(login: string | null): boolean {
   if (!login) return false;
   const trimmed = login.trim().toLowerCase();
   const normalized = trimmed.startsWith("app/") ? trimmed.slice("app/".length) : trimmed;
-  if (!normalized.includes("agent-runner")) return false;
-  return normalized.endsWith("[bot]") || normalized.endsWith("-bot");
+  if (normalized.endsWith("[bot]")) {
+    return normalized.includes("agent-runner");
+  }
+
+  return normalized === "agent-runner-bot";
 }
 
 export async function isManagedPullRequestIssue(issue: IssueInfo, config: AgentRunnerConfig): Promise<boolean> {
