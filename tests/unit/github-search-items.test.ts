@@ -126,3 +126,60 @@ describe("GitHubClient.searchOpenItemsByCommentPhraseAcrossOwner", () => {
     expect(items.find((item) => item.number === 789)?.isPullRequest).toBe(true);
   });
 });
+
+describe("GitHubClient.searchOpenPullRequestsByAuthorAcrossOwner", () => {
+  it("queries open pull requests by author and filters out non-PR items", async () => {
+    const client = new GitHubClient("dummy");
+    const seenQueries: string[] = [];
+    (client as any).octokit = {
+      request: async (route: string, { q }: { q: string }) => {
+        expect(route).toBe("GET /search/issues");
+        seenQueries.push(q);
+        return {
+          data: {
+            items: [
+              {
+                id: 10,
+                number: 321,
+                title: "PR",
+                body: "Body",
+                html_url: "https://github.com/metyatech/demo/pull/321",
+                repository_url: "https://api.github.com/repos/metyatech/demo",
+                user: { login: "agent-runner-bot" },
+                labels: [{ name: "agent:done" }],
+                pull_request: { url: "https://api.github.com/repos/metyatech/demo/pulls/321" }
+              },
+              {
+                id: 11,
+                number: 322,
+                title: "Issue should be ignored",
+                body: "Body",
+                html_url: "https://github.com/metyatech/demo/issues/322",
+                repository_url: "https://api.github.com/repos/metyatech/demo",
+                user: { login: "agent-runner-bot" },
+                labels: [{ name: "agent:done" }]
+              }
+            ]
+          }
+        };
+      }
+    };
+
+    const pullRequests = await client.searchOpenPullRequestsByAuthorAcrossOwner("metyatech", "agent-runner-bot", {
+      excludeLabels: ["agent:failed"],
+      perPage: 100,
+      maxPages: 1
+    });
+
+    expect(seenQueries).toHaveLength(1);
+    expect(seenQueries[0]).toContain("user:metyatech");
+    expect(seenQueries[0]).toContain("is:pull-request");
+    expect(seenQueries[0]).toContain("state:open");
+    expect(seenQueries[0]).toContain('author:"agent-runner-bot"');
+    expect(seenQueries[0]).toContain('-label:"agent:failed"');
+
+    expect(pullRequests).toHaveLength(1);
+    expect(pullRequests[0]?.number).toBe(321);
+    expect(pullRequests[0]?.isPullRequest).toBe(true);
+  });
+});

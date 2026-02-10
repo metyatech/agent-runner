@@ -13,12 +13,23 @@
         "name": "kind",
         "label": "Kind",
         "type": "custom",
-        "query": "task-run,task-meta,webhook-run,webhook-meta,task-run-err,webhook-run-err,idle,issue,runner",
+        "query": "task-run,task-meta,webhook-run,webhook-meta,task-run-err,webhook-run-err,idle,issue,runner-out,runner-err",
         "current": { "text": "task-run", "value": "task-run" },
         "refresh": 1,
         "sort": 1,
         "multi": false,
         "includeAll": false
+      },
+      {
+        "name": "tag",
+        "label": "Tag",
+        "type": "custom",
+        "query": "init,catch-up,queue,resume,idle,review,run,maint,recovery,untagged",
+        "current": { "text": "All", "value": "$__all" },
+        "refresh": 1,
+        "sort": 1,
+        "multi": true,
+        "includeAll": true
       },
       {
         "name": "contains",
@@ -37,7 +48,7 @@
       "gridPos": { "h": 4, "w": 24, "x": 0, "y": 0 },
       "options": {
         "mode": "markdown",
-        "content": "- Use **Kind** to switch log groups.\n- If you see **No data**: widen the time range (top right) and clear **Contains**.\n- Tip: `Contains` is a plain substring filter."
+        "content": "- Use **Kind** to switch log groups.\n- Use **Tag** to filter by phase (only applies to `runner-out` kind).\n- If you see **No data**: widen the time range (top right) and clear **Contains**.\n- Tip: `Contains` is a plain substring filter."
       }
     },
     {
@@ -56,7 +67,7 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "{job=\"agent-runner\", kind=~\"$kind\"} |= \"$contains\""
+          "expr": "({job=\"agent-runner\", kind=\"runner-out\", kind=~\"$kind\", tag=~\"$tag\"} |= \"$contains\") or ({job=\"agent-runner\", kind!=\"runner-out\", kind=~\"$kind\"} |= \"$contains\")"
         }
       ]
     }

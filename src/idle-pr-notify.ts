@@ -20,7 +20,13 @@ export async function notifyIdlePullRequest(options: {
   config: AgentRunnerConfig;
   result: IdleTaskResult;
   json: boolean;
-  log: (level: "info" | "warn" | "error", message: string, json: boolean, meta?: Record<string, unknown>) => void;
+  log: (
+    level: "info" | "warn" | "error",
+    message: string,
+    json: boolean,
+    metaOrTag?: Record<string, unknown> | string,
+    tag?: string
+  ) => void;
 }): Promise<IdlePullRequestNotification | null> {
   const expectedRepo = options.result.repo;
   const isSameRepo = (left: RepoInfo, right: RepoInfo): boolean =>
@@ -76,7 +82,7 @@ export async function notifyIdlePullRequest(options: {
       parsedRepo: `${match.repo.owner}/${match.repo.repo}`,
       source,
       url: match.url
-    });
+    }, "idle");
     return null;
   };
 
@@ -106,7 +112,7 @@ export async function notifyIdlePullRequest(options: {
         repo: `${options.result.repo.owner}/${options.result.repo.repo}`,
         headBranch: options.result.headBranch,
         error: error instanceof Error ? error.message : String(error)
-      });
+      }, "idle");
     }
   }
 
@@ -123,7 +129,7 @@ export async function notifyIdlePullRequest(options: {
     options.log("warn", "Failed to record managed PR from idle PR notification.", options.json, {
       pr: pr.url,
       error: error instanceof Error ? error.message : String(error)
-    });
+    }, "idle");
   }
 
   const authLogin = await options.client.getAuthenticatedLogin();
@@ -135,7 +141,7 @@ export async function notifyIdlePullRequest(options: {
         pr: pr.url,
         assignee: authLogin,
         error: error instanceof Error ? error.message : String(error)
-      });
+      }, "idle");
     }
   }
 
@@ -160,7 +166,7 @@ export async function notifyIdlePullRequest(options: {
       options.log("warn", "Failed to post idle completion comment with notify client; falling back.", options.json, {
         pr: pr.url,
         error: error instanceof Error ? error.message : String(error)
-      });
+      }, "idle");
     }
   }
 
@@ -170,7 +176,7 @@ export async function notifyIdlePullRequest(options: {
     options.log("warn", "Failed to post idle completion comment to PR.", options.json, {
       pr: pr.url,
       error: error instanceof Error ? error.message : String(error)
-    });
+    }, "idle");
   }
 
   return pr;
