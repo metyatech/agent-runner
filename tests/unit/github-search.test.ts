@@ -7,26 +7,25 @@ describe("GitHubClient.searchOpenIssuesByLabelAcrossOwner", () => {
 
     let seenQuery: string | null = null;
     (client as any).octokit = {
-      search: {
-        issuesAndPullRequests: async ({ q }: { q: string }) => {
-          seenQuery = q;
-          return {
-            data: {
-              items: [
-                {
-                  id: 1,
-                  number: 123,
-                  title: "Test",
-                  body: "Body",
-                  html_url: "https://github.com/metyatech/demo/issues/123",
-                  repository_url: "https://api.github.com/repos/metyatech/demo",
-                  user: { login: "metyatech" },
-                  labels: [{ name: "agent:queued" }]
-                }
-              ]
-            }
-          };
-        }
+      request: async (route: string, { q }: { q: string }) => {
+        expect(route).toBe("GET /search/issues");
+        seenQuery = q;
+        return {
+          data: {
+            items: [
+              {
+                id: 1,
+                number: 123,
+                title: "Test",
+                body: "Body",
+                html_url: "https://github.com/metyatech/demo/issues/123",
+                repository_url: "https://api.github.com/repos/metyatech/demo",
+                user: { login: "metyatech" },
+                labels: [{ name: "agent:queued" }]
+              }
+            ]
+          }
+        };
       }
     };
 

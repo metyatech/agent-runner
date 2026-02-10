@@ -17,17 +17,19 @@
     "test:unit": "vitest run ./tests/unit",
     "test:e2e": "vitest run ./tests/e2e",
     "dev": "tsx src/cli.ts",
-    "prepare": "node scripts/setup-git-hooks.mjs && simple-git-hooks"
+    "prepare": "simple-git-hooks"
   },
   "dependencies": {
     "@octokit/auth-app": "^7.2.2",
     "@octokit/rest": "^21.0.0",
     "ajv": "^8.12.0",
     "ajv-formats": "^3.0.1",
+    "better-sqlite3": "^12.6.2",
     "commander": "^12.1.0",
     "p-limit": "^5.0.0"
   },
   "devDependencies": {
+    "@types/better-sqlite3": "^7.6.13",
     "@types/node": "^22.10.0",
     "@typescript-eslint/eslint-plugin": "^8.17.0",
     "@typescript-eslint/parser": "^8.17.0",

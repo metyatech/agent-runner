@@ -1,16 +1,10 @@
 import fs from "node:fs";
 import path from "node:path";
-import { createRequire } from "node:module";
+import Database from "better-sqlite3";
 import type { RepoInfo } from "./github.js";
 
 const SCHEMA_VERSION = 1;
-type DatabaseSync = import("node:sqlite").DatabaseSync;
-
-function resolveDatabaseSync(): new (path: string) => DatabaseSync {
-  const require = createRequire(import.meta.url);
-  const sqlite = require(`node:${"sqlite"}`) as typeof import("node:sqlite");
-  return sqlite.DatabaseSync;
-}
+type DatabaseSync = Database.Database;
 
 function runMigrations(db: DatabaseSync): void {
   db.exec(`
@@ -82,8 +76,7 @@ export function resolveStateDbPath(workdirRoot: string): string {
 
 export function withStateDb<T>(dbPath: string, action: (db: DatabaseSync) => T): T {
   fs.mkdirSync(path.dirname(dbPath), { recursive: true });
-  const DatabaseSyncCtor = resolveDatabaseSync();
-  const db = new DatabaseSyncCtor(dbPath);
+  const db = new Database(dbPath);
   try {
     db.exec("PRAGMA journal_mode = WAL;");
     db.exec("PRAGMA foreign_keys = ON;");

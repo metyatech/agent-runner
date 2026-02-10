@@ -32,4 +32,10 @@ describe("cli", () => {
     expect(data).toHaveProperty("generatedAtLocal");
     expect(data).toHaveProperty("busy");
   });
+
+  it("does not print SQLite ExperimentalWarning", () => {
+    const result = runCli(["status", "--json"]);
+    expect(result.status).toBe(0);
+    expect(result.stderr).not.toContain("ExperimentalWarning: SQLite");
+  });
 });
