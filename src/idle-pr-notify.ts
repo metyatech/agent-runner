@@ -20,7 +20,13 @@ export async function notifyIdlePullRequest(options: {
   config: AgentRunnerConfig;
   result: IdleTaskResult;
   json: boolean;
-  log: (level: "info" | "warn" | "error", message: string, json: boolean, meta?: Record<string, unknown>, tag?: string) => void;
+  log: (
+    level: "info" | "warn" | "error",
+    message: string,
+    json: boolean,
+    metaOrTag?: Record<string, unknown> | string,
+    tag?: string
+  ) => void;
 }): Promise<IdlePullRequestNotification | null> {
   const expectedRepo = options.result.repo;
   const isSameRepo = (left: RepoInfo, right: RepoInfo): boolean =>

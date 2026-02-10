@@ -190,7 +190,7 @@ async function maybeRunWebhookCatchup(options: {
   let hadErrors = false;
   for (const issue of limited) {
     if (dryRun) {
-      log("info", `Dry-run: would queue catch-up issue ${issue.url}`, json, undefined, "catch-up");
+      log("info", `Dry-run: would queue catch-up issue ${issue.url}`, json, "catch-up");
       continue;
     }
 
@@ -274,7 +274,7 @@ async function maybeEnqueueManagedPullRequestReviewFollowups(options: {
       onLog: (level, message, data) => log(level, message, json, data, "review")
     });
     if (enqueued > 0) {
-      log("info", `Managed PR catch-up scan enqueued ${enqueued} follow-up(s).`, json, undefined, "review");
+      log("info", `Managed PR catch-up scan enqueued ${enqueued} follow-up(s).`, json, "review");
     }
   } catch (error) {
     log("warn", "Managed PR catch-up scan failed.", json, {
@@ -332,7 +332,7 @@ async function resolveWebhookQueuedIssues(
 
     if (!issue.labels.includes(config.labels.queued)) {
       if (dryRun) {
-        log("info", `Dry-run: would add queued label to ${issue.url}`, json, undefined, "queue");
+        log("info", `Dry-run: would add queued label to ${issue.url}`, json, "queue");
         issue.labels = [...issue.labels, config.labels.queued];
       } else {
         try {
@@ -446,7 +446,7 @@ program
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       if (options.once && message.startsWith("Runner already active")) {
-        log("info", message, json, undefined, "init");
+        log("info", message, json, "init");
         return;
       }
       throw error;
@@ -501,7 +501,13 @@ program
           config,
           result,
           json,
-          log
+          log: (level, message, jsonValue, metaOrTag, tag) => {
+            if (typeof metaOrTag === "string") {
+              log(level, message, jsonValue, metaOrTag);
+              return;
+            }
+            log(level, message, jsonValue, metaOrTag, tag);
+          }
         });
       } catch (error) {
         log("warn", "Failed to notify idle PR.", json, {
@@ -577,7 +583,7 @@ program
           }
 
           if (dryRun) {
-            log("info", `Dry-run: would re-queue ${issue.url}`, json, undefined, "resume");
+            log("info", `Dry-run: would re-queue ${issue.url}`, json, "resume");
             resumed += 1;
             continue;
           }
@@ -774,7 +780,7 @@ program
         }
 
         if (dryRun) {
-          log("info", `Dry-run: would queue ${issue.url} via /agent run comment`, json, undefined, "queue");
+          log("info", `Dry-run: would queue ${issue.url} via /agent run comment`, json, "queue");
           queued.push(issue);
           continue;
         }
@@ -850,18 +856,18 @@ program
             "init"
           );
         } else if (repoResult.source === "cache") {
-          log("info", "Using cached repo list.", json, undefined, "init");
+          log("info", "Using cached repo list.", json, "init");
         } else if (repoResult.source === "local") {
-          log("info", "Using local workspace repo list.", json, undefined, "init");
+          log("info", "Using local workspace repo list.", json, "init");
         }
         repos = repoResult.repos;
-        log("info", `Discovered ${repos.length} repositories.`, json, undefined, "init");
+        log("info", `Discovered ${repos.length} repositories.`, json, "init");
       } else {
-        log("info", "Skipping repo discovery; webhooks enabled.", json, undefined, "init");
+        log("info", "Skipping repo discovery; webhooks enabled.", json, "init");
       }
 
       if (rateLimitedUntil && shouldPollIssues) {
-        log("warn", `Skipping GitHub issue polling until ${rateLimitedUntil}.`, json, undefined, "init");
+        log("warn", `Skipping GitHub issue polling until ${rateLimitedUntil}.`, json, "init");
       }
 
       const statePath = resolveRunnerStatePath(config.workdirRoot);
@@ -949,12 +955,12 @@ program
       const resumed =
         shouldPollIssues && !rateLimitedUntil ? await resumeAwaitingUser(repos) : 0;
       if (resumed > 0) {
-        log("info", `Re-queued ${resumed} request(s) after user reply.`, json, undefined, "resume");
+        log("info", `Re-queued ${resumed} request(s) after user reply.`, json, "resume");
       }
 
       const resumedBySchedule = await enqueueDueScheduledRetries();
       if (resumedBySchedule > 0) {
-        log("info", `Re-queued ${resumedBySchedule} request(s) after scheduled retry time.`, json, undefined, "resume");
+        log("info", `Re-queued ${resumedBySchedule} request(s) after scheduled retry time.`, json, "resume");
       }
 
       if (webhooksEnabled && webhookQueuePath && webhookConfig) {
@@ -974,7 +980,7 @@ program
       if (shouldPollIssues && !rateLimitedUntil) {
         const queued = await queueNewRequestsByAgentRunComment(repos);
         if (queued.length > 0) {
-          log("info", `Queued ${queued.length} request(s) via /agent run comments.`, json, undefined, "queue");
+          log("info", `Queued ${queued.length} request(s) via /agent run comments.`, json, "queue");
         }
         for (const issue of queued) {
           if (queuedIds.has(issue.id)) {
@@ -1040,13 +1046,13 @@ program
           );
           const status = rateLimits ? rateLimitSnapshotToStatus(rateLimits, new Date()) : null;
           if (!status) {
-            log("warn", "Idle Codex usage gate: unable to read rate limits from app-server.", json, undefined, "idle");
+            log("warn", "Idle Codex usage gate: unable to read rate limits from app-server.", json, "idle");
             return false;
           }
 
           const decision = evaluateUsageGate(status, usageGate);
           if (!decision.allow) {
-            log("info", `Idle Codex usage gate blocked. ${decision.reason}`, json, undefined, "idle");
+            log("info", `Idle Codex usage gate blocked. ${decision.reason}`, json, "idle");
             return false;
           }
 
@@ -1089,14 +1095,14 @@ program
             const copilotStart = Date.now();
             const usage = await fetchCopilotUsage(token, copilotGate);
             if (timingEnabled) {
-              log("info", `${timingPrefix} (Copilot): rateLimits=${Date.now() - copilotStart}ms`, json, undefined, "idle");
+              log("info", `${timingPrefix} (Copilot): rateLimits=${Date.now() - copilotStart}ms`, json, "idle");
             }
             if (!usage) {
-              log("warn", "Idle Copilot usage gate: unable to parse Copilot quota info.", json, undefined, "idle");
+              log("warn", "Idle Copilot usage gate: unable to parse Copilot quota info.", json, "idle");
             } else {
               const decision = evaluateCopilotUsageGate(usage, copilotGate);
               if (!decision.allow) {
-                log("info", `Idle Copilot usage gate blocked. ${decision.reason}`, json, undefined, "idle");
+                log("info", `Idle Copilot usage gate blocked. ${decision.reason}`, json, "idle");
               } else {
                 copilotAllowed = true;
                 log("info", `Idle Copilot usage gate allowed. ${decision.reason}`, json, {
@@ -1114,12 +1120,12 @@ program
 
         if (copilotAllowed) {
           if (!config.copilot) {
-            log("warn", "Idle Copilot enabled but no copilot command configured. Skipping Copilot idle.", json, undefined, "idle");
+            log("warn", "Idle Copilot enabled but no copilot command configured. Skipping Copilot idle.", json, "idle");
             copilotAllowed = false;
           } else {
             const exists = await commandExists(config.copilot.command);
             if (!exists) {
-              log("warn", `Idle Copilot command not found (${config.copilot.command}). Skipping Copilot idle.`, json, undefined, "idle");
+              log("warn", `Idle Copilot command not found (${config.copilot.command}). Skipping Copilot idle.`, json, "idle");
               copilotAllowed = false;
             }
           }
@@ -1136,10 +1142,10 @@ program
             const geminiStart = Date.now();
             const usage = await fetchGeminiUsage();
             if (timingEnabled) {
-              log("info", `${timingPrefix} (Gemini): rateLimits=${Date.now() - geminiStart}ms`, json, undefined, "idle");
+              log("info", `${timingPrefix} (Gemini): rateLimits=${Date.now() - geminiStart}ms`, json, "idle");
             }
             if (!usage) {
-              log("warn", "Idle Gemini usage gate: unable to parse Gemini quota info.", json, undefined, "idle");
+              log("warn", "Idle Gemini usage gate: unable to parse Gemini quota info.", json, "idle");
             } else {
               const now = new Date();
               const decision = evaluateGeminiUsageGate(usage, geminiGate, now);
@@ -1161,17 +1167,17 @@ program
                     geminiWarmupReason = warmupDecision.reason;
                     if (geminiWarmupPro) geminiProAllowed = true;
                     if (geminiWarmupFlash) geminiFlashAllowed = true;
-                    log("info", `Idle Gemini warmup allowed. ${warmupDecision.reason}`, json, undefined, "idle");
+                    log("info", `Idle Gemini warmup allowed. ${warmupDecision.reason}`, json, "idle");
                   } else {
-                    log("info", `Idle Gemini usage gate blocked. ${decision.reason}`, json, undefined, "idle");
+                    log("info", `Idle Gemini usage gate blocked. ${decision.reason}`, json, "idle");
                   }
                 } else {
-                  log("info", `Idle Gemini usage gate blocked. ${decision.reason}`, json, undefined, "idle");
+                  log("info", `Idle Gemini usage gate blocked. ${decision.reason}`, json, "idle");
                 }
               } else {
                 if (decision.allowPro) geminiProAllowed = true;
                 if (decision.allowFlash) geminiFlashAllowed = true;
-                log("info", `Idle Gemini usage gate allowed. ${decision.reason}`, json, undefined, "idle");
+                log("info", `Idle Gemini usage gate allowed. ${decision.reason}`, json, "idle");
               }
             }
           } catch (error) {
@@ -1183,7 +1189,7 @@ program
 
         if (geminiProAllowed || geminiFlashAllowed) {
           if (!config.gemini) {
-            log("warn", "Idle Gemini enabled but no gemini command configured. Skipping Gemini idle.", json, undefined, "idle");
+            log("warn", "Idle Gemini enabled but no gemini command configured. Skipping Gemini idle.", json, "idle");
             geminiProAllowed = false;
             geminiFlashAllowed = false;
             geminiWarmupPro = false;
@@ -1192,7 +1198,7 @@ program
           } else {
             const exists = await commandExists(config.gemini.command);
             if (!exists) {
-              log("warn", `Idle Gemini command not found (${config.gemini.command}).`, json, undefined, "idle");
+              log("warn", `Idle Gemini command not found (${config.gemini.command}).`, json, "idle");
               geminiProAllowed = false;
               geminiFlashAllowed = false;
               geminiWarmupPro = false;
@@ -1206,7 +1212,7 @@ program
         if (config.amazonQ?.enabled) {
           const exists = await commandExists(config.amazonQ.command);
           if (!exists) {
-            log("warn", `Idle Amazon Q command not found (${config.amazonQ.command}).`, json, undefined, "idle");
+            log("warn", `Idle Amazon Q command not found (${config.amazonQ.command}).`, json, "idle");
           } else {
             const amazonQGate = config.idle?.amazonQUsageGate;
             if (amazonQGate?.enabled) {
@@ -1219,7 +1225,7 @@ program
                 );
                 const decision = evaluateAmazonQUsageGate(usage, amazonQGate, now);
                 if (!decision.allow) {
-                  log("info", `Idle Amazon Q usage gate blocked. ${decision.reason}`, json, undefined, "idle");
+                  log("info", `Idle Amazon Q usage gate blocked. ${decision.reason}`, json, "idle");
                 } else {
                   amazonQAllowed = true;
                   log("info", `Idle Amazon Q usage gate allowed. ${decision.reason}`, json, {
@@ -1336,7 +1342,7 @@ program
 
       if (picked.length === 0 && scheduledReviewFollowups.length === 0) {
         if (!config.idle?.enabled) {
-          log("info", "No queued requests.", json, undefined, "queue");
+          log("info", "No queued requests.", json, "queue");
           return;
         }
 
@@ -1347,7 +1353,7 @@ program
         const geminiWarmupReason = gate.geminiWarmup.reason;
 
         if (engines.length === 0) {
-          log("info", "Idle usage gate blocked for all engines. Skipping idle.", json, undefined, "idle");
+          log("info", "Idle usage gate blocked for all engines. Skipping idle.", json, "idle");
           return;
         }
 
@@ -1379,7 +1385,7 @@ program
           now: new Date()
         });
         if (idleTasks.length === 0) {
-          log("info", "No queued requests. Idle cooldown active or no eligible repos.", json, undefined, "idle");
+          log("info", "No queued requests. Idle cooldown active or no eligible repos.", json, "idle");
           return;
         }
 
@@ -1734,7 +1740,7 @@ program
       const interval = Number.parseInt(options.interval, 10);
       if (options.once) {
         if (isStopRequested(config.workdirRoot)) {
-          log("info", "Stop requested. Exiting runner loop.", json, undefined, "init");
+          log("info", "Stop requested. Exiting runner loop.", json, "init");
           releaseLock(lock);
           return;
         }
@@ -1745,12 +1751,12 @@ program
 
       while (true) {
         if (isStopRequested(config.workdirRoot)) {
-          log("info", "Stop requested. Exiting runner loop.", json, undefined, "init");
+          log("info", "Stop requested. Exiting runner loop.", json, "init");
           break;
         }
         await runCycle();
         if (isStopRequested(config.workdirRoot)) {
-          log("info", "Stop requested. Exiting runner loop.", json, undefined, "init");
+          log("info", "Stop requested. Exiting runner loop.", json, "init");
           break;
         }
         await new Promise((resolve) => setTimeout(resolve, interval * 1000));
@@ -1795,18 +1801,18 @@ program
     const repos = repoResult.repos;
     const labels = buildAgentLabels(config);
 
-    log("info", `Syncing labels across ${repos.length} repositories.`, json, undefined, "init");
+    log("info", `Syncing labels across ${repos.length} repositories.`, json, "init");
 
     for (const repo of repos) {
       for (const label of labels) {
         const existing = await client.getLabel(repo, label.name);
         if (!existing) {
           if (dryRun) {
-            log("info", `Would create label ${label.name} in ${repo.repo}.`, json, undefined, "init");
+            log("info", `Would create label ${label.name} in ${repo.repo}.`, json, "init");
             continue;
           }
           await client.createLabel(repo, label);
-          log("info", `Created label ${label.name} in ${repo.repo}.`, json, undefined, "init");
+          log("info", `Created label ${label.name} in ${repo.repo}.`, json, "init");
           continue;
         }
 
@@ -1819,7 +1825,7 @@ program
         }
 
         if (dryRun) {
-          log("info", `Would update label ${label.name} in ${repo.repo}.`, json, undefined, "init");
+          log("info", `Would update label ${label.name} in ${repo.repo}.`, json, "init");
           continue;
         }
 
@@ -1829,7 +1835,7 @@ program
           description: label.description
         };
         await client.updateLabel(repo, payload);
-        log("info", `Updated label ${label.name} in ${repo.repo}.`, json, undefined, "init");
+        log("info", `Updated label ${label.name} in ${repo.repo}.`, json, "init");
       }
     }
   });
@@ -2037,7 +2043,7 @@ program
 
     if (!client && token) {
       client = new GitHubClient(token);
-      log("info", "Webhook listener GitHub client configured via environment token.", json, undefined, "init");
+      log("info", "Webhook listener GitHub client configured via environment token.", json, "init");
     }
 
     if (!client) {
@@ -2062,8 +2068,7 @@ program
         }),
       onLog: (level, message, data) => log(level, message, json, data, "queue")
     });
-    log("info", `Webhook listener ready on http://${host}:${portRaw}${pathValue}`, json, undefined, "init");
+    log("info", `Webhook listener ready on http://${host}:${portRaw}${pathValue}`, json, "init");
   });
 
 program.parseAsync(process.argv);
-

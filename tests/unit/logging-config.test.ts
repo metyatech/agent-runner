@@ -1,0 +1,46 @@
+import fs from "node:fs";
+import path from "node:path";
+import { describe, expect, it } from "vitest";
+
+function readRepoFile(...segments: string[]): string {
+  return fs.readFileSync(path.join(process.cwd(), ...segments), "utf8");
+}
+
+describe("logging config", () => {
+  it("applies runner-out parsing stages only to matching bracketed lines", () => {
+    const promtail = readRepoFile("ops", "logging", "promtail-config.yml");
+    const runnerOutStart = promtail.indexOf("  - job_name: agent-runner-runner-out");
+    const runnerErrStart = promtail.indexOf("  - job_name: agent-runner-runner-err");
+
+    expect(runnerOutStart).toBeGreaterThan(-1);
+    expect(runnerErrStart).toBeGreaterThan(runnerOutStart);
+
+    const runnerOutBlock = promtail.slice(runnerOutStart, runnerErrStart);
+    expect(runnerOutBlock).toContain("- match:");
+    expect(runnerOutBlock).toContain("selector: '{job=\"agent-runner\", kind=\"runner-out\"} |~ ");
+    expect(runnerOutBlock).toContain("stages:");
+    expect(runnerOutBlock).toContain("source: msg");
+  });
+
+  it("filters by tag only for runner-out logs in the Grafana query", () => {
+    const dashboardText = readRepoFile(
+      "ops",
+      "logging",
+      "grafana",
+      "provisioning",
+      "dashboards-json",
+      "agent-runner-logs.json"
+    );
+    const dashboard = JSON.parse(dashboardText) as {
+      panels?: Array<{ id?: number; targets?: Array<{ expr?: string }> }>;
+    };
+
+    const logsPanel = dashboard.panels?.find((panel) => panel.id === 1);
+    const expr = logsPanel?.targets?.[0]?.expr ?? "";
+
+    expect(expr).toContain("kind=\"runner-out\"");
+    expect(expr).toContain("tag=~\"$tag\"");
+    expect(expr).toContain("kind!=\"runner-out\"");
+    expect(expr).toContain(" or ");
+  });
+});

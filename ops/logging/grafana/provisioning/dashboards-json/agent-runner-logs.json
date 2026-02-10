@@ -67,7 +67,7 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "{job=\"agent-runner\", kind=~\"$kind\", tag=~\"$tag\"} |= \"$contains\""
+          "expr": "({job=\"agent-runner\", kind=\"runner-out\", kind=~\"$kind\", tag=~\"$tag\"} |= \"$contains\") or ({job=\"agent-runner\", kind!=\"runner-out\", kind=~\"$kind\"} |= \"$contains\")"
         }
       ]
     }
