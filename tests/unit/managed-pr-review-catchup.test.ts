@@ -81,7 +81,7 @@ describe("managed-pr-review-catchup", () => {
       listPullRequestReviewThreads: async () => [{ id: "t1", isResolved: false, isOutdated: false }],
       listPullRequestReviews: async () => [],
       searchOpenPullRequestsByAuthorAcrossOwner: async (_owner: string, author: string) =>
-        author === "agent-runner-bot" ? [{ ...issue, author: "agent-runner-bot" }] : []
+        author === "app/agent-runner-bot" ? [{ ...issue, author: "app/agent-runner-bot" }] : []
     };
 
     const enqueued = await enqueueManagedPullRequestReviewFollowups({
@@ -115,7 +115,7 @@ describe("managed-pr-review-catchup", () => {
       listPullRequestReviewThreads: async () => [{ id: "t1", isResolved: false, isOutdated: false }],
       listPullRequestReviews: async () => [],
       searchOpenPullRequestsByAuthorAcrossOwner: async (_owner: string, author: string) =>
-        author === "agent-runner-bot" ? [outOfScope] : []
+        author === "app/agent-runner-bot" ? [outOfScope] : []
     };
 
     const enqueued = await enqueueManagedPullRequestReviewFollowups({
@@ -253,7 +253,7 @@ describe("managed-pr-review-catchup", () => {
       listPullRequestReviewThreads: async () => [{ id: "t1", isResolved: false, isOutdated: false }],
       listPullRequestReviews: async () => [],
       searchOpenPullRequestsByAuthorAcrossOwner: async (_owner: string, author: string) =>
-        author === "agent-runner-bot" ? [issue] : []
+        author === "app/agent-runner-bot" ? [issue] : []
     };
 
     const enqueued = await enqueueManagedPullRequestReviewFollowups({
@@ -269,5 +269,34 @@ describe("managed-pr-review-catchup", () => {
     expect(queued).toHaveLength(1);
     expect(queued[0]?.reason).toBe("review_comment");
     expect(queued[0]?.requiresEngine).toBe(true);
+  });
+
+  it("searches managed app PRs with the GitHub App login format", async () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "agent-runner-managed-pr-catchup-app-login-"));
+    const config = makeConfig(root);
+    const repo = makeRepo();
+    const issue: IssueInfo = { ...makeIssue(repo), author: "app/agent-runner-bot" };
+    const searchAuthors: string[] = [];
+
+    const client = {
+      getIssue: async () => issue,
+      getPullRequest: async () => makePullRequestDetails(),
+      listPullRequestReviewThreads: async () => [{ id: "t1", isResolved: false, isOutdated: false }],
+      listPullRequestReviews: async () => [],
+      searchOpenPullRequestsByAuthorAcrossOwner: async (_owner: string, author: string) => {
+        searchAuthors.push(author);
+        return author === "app/agent-runner-bot" ? [issue] : [];
+      }
+    };
+
+    const enqueued = await enqueueManagedPullRequestReviewFollowups({
+      client: client as any,
+      config,
+      dryRun: false,
+      maxEntries: 5
+    });
+
+    expect(enqueued).toBe(1);
+    expect(searchAuthors).toEqual(["app/agent-runner-bot"]);
   });
 });

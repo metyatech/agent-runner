@@ -58,7 +58,7 @@ export async function enqueueManagedPullRequestReviewFollowups(options: {
       : null;
 
   const targetCandidates = Math.max(1, Math.min(50, limit * 10));
-  const botAuthorLogins = ["agent-runner-bot", "app/agent-runner-bot", "agent-runner-app[bot]"];
+  const botAuthorLogins = ["app/agent-runner-bot"];
   for (const login of botAuthorLogins) {
     if (candidates.length >= targetCandidates) {
       break;
