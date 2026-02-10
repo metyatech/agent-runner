@@ -464,7 +464,6 @@ program
           ? "GitHub notify client configured via GitHub App. Completion comments will be posted as the app installation."
           : "GitHub notify token detected. Completion comments will be posted as a bot user.",
         json,
-        undefined,
         "init"
       );
     }
@@ -844,7 +843,6 @@ program
             "warn",
             `Using cached repo list due to rate limit until ${repoResult.blockedUntil}.`,
             json,
-            undefined,
             "init"
           );
         } else if (repoResult.source === "local" && repoResult.blockedUntil) {
@@ -852,7 +850,6 @@ program
             "warn",
             `Using local workspace repo list due to rate limit until ${repoResult.blockedUntil}.`,
             json,
-            undefined,
             "init"
           );
         } else if (repoResult.source === "cache") {
@@ -1066,7 +1063,6 @@ program
               "info",
               `${timingPrefix} (Codex): ${timingEvents.map((event) => `${event.phase}=${event.durationMs}ms`).join(", ")}`,
               json,
-              undefined,
               "idle"
             );
           }
@@ -1364,7 +1360,6 @@ program
             "info",
             `Idle repo scope set to local. Using ${idleRepos.length} workspace repo(s).`,
             json,
-            undefined,
             "idle"
           );
         }
@@ -1375,7 +1370,6 @@ program
             "warn",
             `Idle maxRunsPerCycle (${maxRuns}) is below available engines (${engines.length}). Scheduling ${engines.length} idle task(s).`,
             json,
-            undefined,
             "idle"
           );
           maxRuns = engines.length;
@@ -1394,7 +1388,6 @@ program
             "warn",
             `Only ${idleTasks.length} idle task(s) available for ${engines.length} engine(s).`,
             json,
-            undefined,
             "idle"
           );
         }
@@ -2036,7 +2029,6 @@ program
           ? "Webhook listener GitHub client configured via GitHub App."
           : "Webhook listener GitHub client configured via notify token.",
         json,
-        undefined,
         "init"
       );
     }

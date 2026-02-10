@@ -120,7 +120,7 @@ scrape_configs:
   - job_name: agent-runner-runner-out
     pipeline_stages:
       - match:
-          selector: '{job="agent-runner", kind="runner-out"} |~ "^(?:\\uFEFF)?\\[[^\\]]+\\]\\s+\\[[A-Z]+\\]\\s+"'
+          selector: '{job="agent-runner", kind="runner-out"} |~ "\\[[^\\]]+\\]\\s+\\[[A-Z]+\\]\\s+"'
           stages:
             - regex:
                 expression: "^(?:\uFEFF)?\\[(?P<ts>[^\\]]+)\\]\\s+\\[(?P<level>[A-Z]+)\\]\\s+(?:\\[(?P<tag>[^\\]]+)\\]\\s+)?(?P<msg>.*)$"

@@ -22,6 +22,14 @@ describe("logging config", () => {
     expect(runnerOutBlock).toContain("source: msg");
   });
 
+  it("uses a selector that keeps optional BOM-prefixed bracketed lines eligible for parsing", () => {
+    const promtail = readRepoFile("ops", "logging", "promtail-config.yml");
+    const selectorPattern = "selector: '{job=\"agent-runner\", kind=\"runner-out\"} |~ \"\\\\[[^\\\\]]+\\\\]\\\\s+\\\\[[A-Z]+\\\\]\\\\s+\"'";
+
+    expect(promtail).toContain(selectorPattern);
+    expect(promtail).not.toContain("selector: '{job=\"agent-runner\", kind=\"runner-out\"} |~ \"^(?:\\\\uFEFF)?");
+  });
+
   it("filters by tag only for runner-out logs in the Grafana query", () => {
     const dashboardText = readRepoFile(
       "ops",
