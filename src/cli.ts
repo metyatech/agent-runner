@@ -156,7 +156,7 @@ async function maybeRunWebhookCatchup(options: {
   log("info", "Webhook catch-up scan: searching for missed /agent run comment requests.", json, {
     intervalMinutes: catchup.intervalMinutes,
     maxIssuesPerRun: maxIssues
-  });
+  }, "catch-up");
 
   const parsedLastRunAt = state.lastRunAt ? Date.parse(state.lastRunAt) : Number.NaN;
   const lastRunAt = Number.isNaN(parsedLastRunAt) ? now.getTime() - intervalMs : parsedLastRunAt;
@@ -173,7 +173,7 @@ async function maybeRunWebhookCatchup(options: {
   } catch (error) {
     log("warn", "Webhook catch-up scan failed.", json, {
       error: error instanceof Error ? error.message : String(error)
-    });
+    }, "catch-up");
     return;
   }
 
@@ -185,12 +185,12 @@ async function maybeRunWebhookCatchup(options: {
   const limited = found.slice(0, maxIssues);
   log("info", `Webhook catch-up scan found ${found.length} issue(s).`, json, {
     queued: limited.length
-  });
+  }, "catch-up");
 
   let hadErrors = false;
   for (const issue of limited) {
     if (dryRun) {
-      log("info", `Dry-run: would queue catch-up issue ${issue.url}`, json);
+      log("info", `Dry-run: would queue catch-up issue ${issue.url}`, json, undefined, "catch-up");
       continue;
     }
 
@@ -225,7 +225,7 @@ async function maybeRunWebhookCatchup(options: {
         log("warn", "Failed to record managed PR during webhook catch-up scan.", json, {
           issue: issue.url,
           error: error instanceof Error ? error.message : String(error)
-        });
+        }, "catch-up");
       }
     }
     try {
@@ -235,7 +235,7 @@ async function maybeRunWebhookCatchup(options: {
       log("warn", "Failed to add queued label during catch-up.", json, {
         issue: issue.url,
         error: error instanceof Error ? error.message : String(error)
-      });
+      }, "catch-up");
       continue;
     }
     try {
@@ -245,7 +245,7 @@ async function maybeRunWebhookCatchup(options: {
       log("warn", "Failed to enqueue catch-up issue.", json, {
         issue: issue.url,
         error: error instanceof Error ? error.message : String(error)
-      });
+      }, "catch-up");
       continue;
     }
 
@@ -271,15 +271,15 @@ async function maybeEnqueueManagedPullRequestReviewFollowups(options: {
       config,
       maxEntries: options.maxEntries,
       dryRun,
-      onLog: (level, message, data) => log(level, message, json, data)
+      onLog: (level, message, data) => log(level, message, json, data, "review")
     });
     if (enqueued > 0) {
-      log("info", `Managed PR catch-up scan enqueued ${enqueued} follow-up(s).`, json);
+      log("info", `Managed PR catch-up scan enqueued ${enqueued} follow-up(s).`, json, undefined, "review");
     }
   } catch (error) {
     log("warn", "Managed PR catch-up scan failed.", json, {
       error: error instanceof Error ? error.message : String(error)
-    });
+    }, "review");
   }
 }
 
@@ -312,7 +312,7 @@ async function resolveWebhookQueuedIssues(
       log("warn", "Failed to resolve webhook queued issue; will retry.", json, {
         issue: `${entry.repo.owner}/${entry.repo.repo}#${entry.issueNumber}`,
         error: error instanceof Error ? error.message : String(error)
-      });
+      }, "queue");
       continue;
     }
     if (!issue) {
@@ -332,7 +332,7 @@ async function resolveWebhookQueuedIssues(
 
     if (!issue.labels.includes(config.labels.queued)) {
       if (dryRun) {
-        log("info", `Dry-run: would add queued label to ${issue.url}`, json);
+        log("info", `Dry-run: would add queued label to ${issue.url}`, json, undefined, "queue");
         issue.labels = [...issue.labels, config.labels.queued];
       } else {
         try {
@@ -342,7 +342,7 @@ async function resolveWebhookQueuedIssues(
           log("warn", "Failed to add queued label to webhook issue.", json, {
             issue: issue.url,
             error: error instanceof Error ? error.message : String(error)
-          });
+          }, "queue");
           continue;
         }
       }
@@ -420,7 +420,7 @@ program
         deletedMB: Math.round((pruneResult.deletedBytes / (1024 * 1024)) * 100) / 100,
         skipped: pruneResult.skipped,
         kept: pruneResult.kept
-      });
+      }, "maint");
     }
 
     const reportDecision = resolveReportMaintenance(config);
@@ -437,7 +437,7 @@ program
         deletedMB: Math.round((pruneReportsResult.deletedBytes / (1024 * 1024)) * 100) / 100,
         skipped: pruneReportsResult.skipped,
         kept: pruneReportsResult.kept
-      });
+      }, "maint");
     }
 
     let lock: ReturnType<typeof acquireLock>;
@@ -446,7 +446,7 @@ program
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       if (options.once && message.startsWith("Runner already active")) {
-        log("info", message, json);
+        log("info", message, json, undefined, "init");
         return;
       }
       throw error;
@@ -463,7 +463,9 @@ program
         notifySource === "github-app"
           ? "GitHub notify client configured via GitHub App. Completion comments will be posted as the app installation."
           : "GitHub notify token detected. Completion comments will be posted as a bot user.",
-        json
+        json,
+        undefined,
+        "init"
       );
     }
     const tryRemoveLabel = async (issue: IssueInfo, label: string): Promise<void> => {
@@ -472,7 +474,7 @@ program
       } catch (error) {
         log("warn", `Failed to remove label ${label} from ${issue.url}`, json, {
           error: error instanceof Error ? error.message : String(error)
-        });
+        }, "run");
       }
     };
 
@@ -485,7 +487,7 @@ program
           log("warn", "Failed to post completion comment with notify token; falling back.", json, {
             issue: issue.url,
             error: error instanceof Error ? error.message : String(error)
-          });
+          }, "run");
         }
       }
       await client.comment(issue, body);
@@ -505,7 +507,7 @@ program
         log("warn", "Failed to notify idle PR.", json, {
           repo: `${result.repo.owner}/${result.repo.repo}`,
           error: error instanceof Error ? error.message : String(error)
-        });
+        }, "idle");
       }
     };
 
@@ -555,7 +557,7 @@ program
             log("warn", "Failed to enqueue scheduled retry in webhook queue.", json, {
               issue: issue.url,
               error: error instanceof Error ? error.message : String(error)
-            });
+            }, "resume");
           }
         }
         resumed += 1;
@@ -575,7 +577,7 @@ program
           }
 
           if (dryRun) {
-            log("info", `Dry-run: would re-queue ${issue.url}`, json);
+            log("info", `Dry-run: would re-queue ${issue.url}`, json, undefined, "resume");
             resumed += 1;
             continue;
           }
@@ -600,7 +602,7 @@ program
               log("warn", "Failed to enqueue resumed issue in webhook queue.", json, {
                 issue: issue.url,
                 error: error instanceof Error ? error.message : String(error)
-              });
+              }, "resume");
             }
           }
           resumed += 1;
@@ -732,7 +734,7 @@ program
       } catch (error) {
         log("warn", "Failed to search for /agent run comment requests.", json, {
           error: error instanceof Error ? error.message : String(error)
-        });
+        }, "queue");
         return [];
       }
 
@@ -763,7 +765,7 @@ program
           log("warn", "Failed to inspect /agent run comments; will retry.", json, {
             issue: issue.url,
             error: error instanceof Error ? error.message : String(error)
-          });
+          }, "queue");
           continue;
         }
 
@@ -772,7 +774,7 @@ program
         }
 
         if (dryRun) {
-          log("info", `Dry-run: would queue ${issue.url} via /agent run comment`, json);
+          log("info", `Dry-run: would queue ${issue.url} via /agent run comment`, json, undefined, "queue");
           queued.push(issue);
           continue;
         }
@@ -784,7 +786,7 @@ program
             log("warn", "Failed to record managed PR for /agent run catch-up.", json, {
               issue: issue.url,
               error: error instanceof Error ? error.message : String(error)
-            });
+            }, "queue");
           }
         }
 
@@ -796,7 +798,7 @@ program
           log("warn", "Failed to add queued label for /agent run request.", json, {
             issue: issue.url,
             error: error instanceof Error ? error.message : String(error)
-          });
+          }, "queue");
           continue;
         }
 
@@ -807,7 +809,7 @@ program
             issue: issue.url,
             commentId: triggerCommentId,
             error: error instanceof Error ? error.message : String(error)
-          });
+          }, "queue");
         }
       }
 
@@ -826,7 +828,7 @@ program
       let rateLimitedUntil: string | null = null;
       const prunedActivityCount = pruneDeadActivityRecords(activityPath, isProcessAlive, ["idle"]);
       if (prunedActivityCount > 0) {
-        log("info", "Pruned stale activity records.", json, { removed: prunedActivityCount });
+        log("info", "Pruned stale activity records.", json, { removed: prunedActivityCount }, "maint");
       }
       if (shouldListRepos) {
         const repoResult = await listTargetRepos(client, config, config.workdirRoot);
@@ -835,27 +837,31 @@ program
           log(
             "warn",
             `Using cached repo list due to rate limit until ${repoResult.blockedUntil}.`,
-            json
+            json,
+            undefined,
+            "init"
           );
         } else if (repoResult.source === "local" && repoResult.blockedUntil) {
           log(
             "warn",
             `Using local workspace repo list due to rate limit until ${repoResult.blockedUntil}.`,
-            json
+            json,
+            undefined,
+            "init"
           );
         } else if (repoResult.source === "cache") {
-          log("info", "Using cached repo list.", json);
+          log("info", "Using cached repo list.", json, undefined, "init");
         } else if (repoResult.source === "local") {
-          log("info", "Using local workspace repo list.", json);
+          log("info", "Using local workspace repo list.", json, undefined, "init");
         }
         repos = repoResult.repos;
-        log("info", `Discovered ${repos.length} repositories.`, json);
+        log("info", `Discovered ${repos.length} repositories.`, json, undefined, "init");
       } else {
-        log("info", "Skipping repo discovery; webhooks enabled.", json);
+        log("info", "Skipping repo discovery; webhooks enabled.", json, undefined, "init");
       }
 
       if (rateLimitedUntil && shouldPollIssues) {
-        log("warn", `Skipping GitHub issue polling until ${rateLimitedUntil}.`, json);
+        log("warn", `Skipping GitHub issue polling until ${rateLimitedUntil}.`, json, undefined, "init");
       }
 
       const statePath = resolveRunnerStatePath(config.workdirRoot);
@@ -865,7 +871,7 @@ program
       } catch (error) {
         log("warn", "Failed to read runner state; skipping running issue checks.", json, {
           error: error instanceof Error ? error.message : String(error)
-        });
+        }, "init");
       }
 
       if (state) {
@@ -891,7 +897,7 @@ program
                 removeRunningIssue: (issueId) => removeRunningIssue(statePath, issueId),
                 removeActivity: (activityId) => removeActivity(activityPath, activityId),
                 clearRetry: (issueId) => clearRetry(scheduledRetryStatePath, issueId),
-                log: (level, message, data) => log(level, message, json, data)
+                log: (level, message, data) => log(level, message, json, data, "recovery")
               });
             }
 
@@ -908,7 +914,7 @@ program
                 removeRunningIssue: (issueId) => removeRunningIssue(statePath, issueId),
                 removeActivity: (activityId) => removeActivity(activityPath, activityId),
                 clearRetry: (issueId) => clearRetry(scheduledRetryStatePath, issueId),
-                log: (level, message, data) => log(level, message, json, data)
+                log: (level, message, data) => log(level, message, json, data, "recovery")
               });
             }
           }
@@ -934,7 +940,7 @@ program
               removeRunningIssue: (issueId) => removeRunningIssue(statePath, issueId),
               removeActivity: (activityId) => removeActivity(activityPath, activityId),
               clearRetry: (issueId) => clearRetry(scheduledRetryStatePath, issueId),
-              log: (level, message, data) => log(level, message, json, data)
+              log: (level, message, data) => log(level, message, json, data, "recovery")
             });
           }
         }
@@ -943,12 +949,12 @@ program
       const resumed =
         shouldPollIssues && !rateLimitedUntil ? await resumeAwaitingUser(repos) : 0;
       if (resumed > 0) {
-        log("info", `Re-queued ${resumed} request(s) after user reply.`, json);
+        log("info", `Re-queued ${resumed} request(s) after user reply.`, json, undefined, "resume");
       }
 
       const resumedBySchedule = await enqueueDueScheduledRetries();
       if (resumedBySchedule > 0) {
-        log("info", `Re-queued ${resumedBySchedule} request(s) after scheduled retry time.`, json);
+        log("info", `Re-queued ${resumedBySchedule} request(s) after scheduled retry time.`, json, undefined, "resume");
       }
 
       if (webhooksEnabled && webhookQueuePath && webhookConfig) {
@@ -968,7 +974,7 @@ program
       if (shouldPollIssues && !rateLimitedUntil) {
         const queued = await queueNewRequestsByAgentRunComment(repos);
         if (queued.length > 0) {
-          log("info", `Queued ${queued.length} request(s) via /agent run comments.`, json);
+          log("info", `Queued ${queued.length} request(s) via /agent run comments.`, json, undefined, "queue");
         }
         for (const issue of queued) {
           if (queuedIds.has(issue.id)) {
@@ -1034,26 +1040,28 @@ program
           );
           const status = rateLimits ? rateLimitSnapshotToStatus(rateLimits, new Date()) : null;
           if (!status) {
-            log("warn", "Idle Codex usage gate: unable to read rate limits from app-server.", json);
+            log("warn", "Idle Codex usage gate: unable to read rate limits from app-server.", json, undefined, "idle");
             return false;
           }
 
           const decision = evaluateUsageGate(status, usageGate);
           if (!decision.allow) {
-            log("info", `Idle Codex usage gate blocked. ${decision.reason}`, json);
+            log("info", `Idle Codex usage gate blocked. ${decision.reason}`, json, undefined, "idle");
             return false;
           }
 
           log("info", `Idle Codex usage gate allowed. ${decision.reason}`, json, {
             window: decision.window?.label,
             minutesToReset: decision.minutesToReset
-          });
+          }, "idle");
 
           if (timingEnabled && timingEvents.length > 0) {
             log(
               "info",
               `${timingPrefix} (Codex): ${timingEvents.map((event) => `${event.phase}=${event.durationMs}ms`).join(", ")}`,
-              json
+              json,
+              undefined,
+              "idle"
             );
           }
 
@@ -1061,7 +1069,7 @@ program
         } catch (error) {
           log("warn", "Idle Codex usage gate failed. Codex idle disabled.", json, {
             error: error instanceof Error ? error.message : String(error)
-          });
+          }, "idle");
           return false;
         }
       };
@@ -1081,37 +1089,37 @@ program
             const copilotStart = Date.now();
             const usage = await fetchCopilotUsage(token, copilotGate);
             if (timingEnabled) {
-              log("info", `${timingPrefix} (Copilot): rateLimits=${Date.now() - copilotStart}ms`, json);
+              log("info", `${timingPrefix} (Copilot): rateLimits=${Date.now() - copilotStart}ms`, json, undefined, "idle");
             }
             if (!usage) {
-              log("warn", "Idle Copilot usage gate: unable to parse Copilot quota info.", json);
+              log("warn", "Idle Copilot usage gate: unable to parse Copilot quota info.", json, undefined, "idle");
             } else {
               const decision = evaluateCopilotUsageGate(usage, copilotGate);
               if (!decision.allow) {
-                log("info", `Idle Copilot usage gate blocked. ${decision.reason}`, json);
+                log("info", `Idle Copilot usage gate blocked. ${decision.reason}`, json, undefined, "idle");
               } else {
                 copilotAllowed = true;
                 log("info", `Idle Copilot usage gate allowed. ${decision.reason}`, json, {
                   percentRemaining: decision.percentRemaining,
                   minutesToReset: decision.minutesToReset
-                });
+                }, "idle");
               }
             }
           } catch (error) {
             log("warn", "Idle Copilot usage gate failed. Copilot idle disabled.", json, {
               error: error instanceof Error ? error.message : String(error)
-            });
+            }, "idle");
           }
         }
 
         if (copilotAllowed) {
           if (!config.copilot) {
-            log("warn", "Idle Copilot enabled but no copilot command configured. Skipping Copilot idle.", json);
+            log("warn", "Idle Copilot enabled but no copilot command configured. Skipping Copilot idle.", json, undefined, "idle");
             copilotAllowed = false;
           } else {
             const exists = await commandExists(config.copilot.command);
             if (!exists) {
-              log("warn", `Idle Copilot command not found (${config.copilot.command}). Skipping Copilot idle.`, json);
+              log("warn", `Idle Copilot command not found (${config.copilot.command}). Skipping Copilot idle.`, json, undefined, "idle");
               copilotAllowed = false;
             }
           }
@@ -1128,10 +1136,10 @@ program
             const geminiStart = Date.now();
             const usage = await fetchGeminiUsage();
             if (timingEnabled) {
-              log("info", `${timingPrefix} (Gemini): rateLimits=${Date.now() - geminiStart}ms`, json);
+              log("info", `${timingPrefix} (Gemini): rateLimits=${Date.now() - geminiStart}ms`, json, undefined, "idle");
             }
             if (!usage) {
-              log("warn", "Idle Gemini usage gate: unable to parse Gemini quota info.", json);
+              log("warn", "Idle Gemini usage gate: unable to parse Gemini quota info.", json, undefined, "idle");
             } else {
               const now = new Date();
               const decision = evaluateGeminiUsageGate(usage, geminiGate, now);
@@ -1143,7 +1151,7 @@ program
                   } catch (error) {
                     log("warn", "Idle Gemini warmup: unable to read warmup state. Proceeding without cooldown.", json, {
                       error: error instanceof Error ? error.message : String(error)
-                    });
+                    }, "idle");
                   }
 
                   const warmupDecision = evaluateGeminiWarmup(usage, geminiGate, warmupState, now);
@@ -1153,29 +1161,29 @@ program
                     geminiWarmupReason = warmupDecision.reason;
                     if (geminiWarmupPro) geminiProAllowed = true;
                     if (geminiWarmupFlash) geminiFlashAllowed = true;
-                    log("info", `Idle Gemini warmup allowed. ${warmupDecision.reason}`, json);
+                    log("info", `Idle Gemini warmup allowed. ${warmupDecision.reason}`, json, undefined, "idle");
                   } else {
-                    log("info", `Idle Gemini usage gate blocked. ${decision.reason}`, json);
+                    log("info", `Idle Gemini usage gate blocked. ${decision.reason}`, json, undefined, "idle");
                   }
                 } else {
-                  log("info", `Idle Gemini usage gate blocked. ${decision.reason}`, json);
+                  log("info", `Idle Gemini usage gate blocked. ${decision.reason}`, json, undefined, "idle");
                 }
               } else {
                 if (decision.allowPro) geminiProAllowed = true;
                 if (decision.allowFlash) geminiFlashAllowed = true;
-                log("info", `Idle Gemini usage gate allowed. ${decision.reason}`, json);
+                log("info", `Idle Gemini usage gate allowed. ${decision.reason}`, json, undefined, "idle");
               }
             }
           } catch (error) {
             log("warn", "Idle Gemini usage gate failed. Gemini idle disabled.", json, {
               error: error instanceof Error ? error.message : String(error)
-            });
+            }, "idle");
           }
         }
 
         if (geminiProAllowed || geminiFlashAllowed) {
           if (!config.gemini) {
-            log("warn", "Idle Gemini enabled but no gemini command configured. Skipping Gemini idle.", json);
+            log("warn", "Idle Gemini enabled but no gemini command configured. Skipping Gemini idle.", json, undefined, "idle");
             geminiProAllowed = false;
             geminiFlashAllowed = false;
             geminiWarmupPro = false;
@@ -1184,7 +1192,7 @@ program
           } else {
             const exists = await commandExists(config.gemini.command);
             if (!exists) {
-              log("warn", `Idle Gemini command not found (${config.gemini.command}).`, json);
+              log("warn", `Idle Gemini command not found (${config.gemini.command}).`, json, undefined, "idle");
               geminiProAllowed = false;
               geminiFlashAllowed = false;
               geminiWarmupPro = false;
@@ -1198,7 +1206,7 @@ program
         if (config.amazonQ?.enabled) {
           const exists = await commandExists(config.amazonQ.command);
           if (!exists) {
-            log("warn", `Idle Amazon Q command not found (${config.amazonQ.command}).`, json);
+            log("warn", `Idle Amazon Q command not found (${config.amazonQ.command}).`, json, undefined, "idle");
           } else {
             const amazonQGate = config.idle?.amazonQUsageGate;
             if (amazonQGate?.enabled) {
@@ -1211,7 +1219,7 @@ program
                 );
                 const decision = evaluateAmazonQUsageGate(usage, amazonQGate, now);
                 if (!decision.allow) {
-                  log("info", `Idle Amazon Q usage gate blocked. ${decision.reason}`, json);
+                  log("info", `Idle Amazon Q usage gate blocked. ${decision.reason}`, json, undefined, "idle");
                 } else {
                   amazonQAllowed = true;
                   log("info", `Idle Amazon Q usage gate allowed. ${decision.reason}`, json, {
@@ -1219,12 +1227,12 @@ program
                     minutesToReset: decision.minutesToReset,
                     used: decision.used,
                     limit: decision.limit
-                  });
+                  }, "idle");
                 }
               } catch (error) {
                 log("warn", "Idle Amazon Q usage gate failed. Amazon Q idle disabled.", json, {
                   error: error instanceof Error ? error.message : String(error)
-                });
+                }, "idle");
               }
             } else {
               amazonQAllowed = true;
@@ -1295,7 +1303,8 @@ program
                   "info",
                   "Review follow-up backlog detected but all idle engine gates are blocked. Skipping engine-required review follow-ups.",
                   json,
-                  { queued: engineBacklog.length }
+                  { queued: engineBacklog.length },
+                  "review"
                 );
               } else {
                 const engineTasks = await takeReviewTasksWhere(reviewQueuePath, remaining, (entry) => entry.requiresEngine);
@@ -1308,11 +1317,11 @@ program
             if (mergeOnlyBacklog.length > 0) {
               log("info", "Review follow-up merge-only backlog detected but nothing was scheduled.", json, {
                 queued: mergeOnlyBacklog.length
-              });
+              }, "review");
             } else if (engineBacklog.length > 0) {
               log("info", "Review follow-up backlog detected but nothing was scheduled.", json, {
                 queued: engineBacklog.length
-              });
+              }, "review");
             }
           } else {
             scheduledReviewFollowups = scheduleReviewFollowups({
@@ -1327,7 +1336,7 @@ program
 
       if (picked.length === 0 && scheduledReviewFollowups.length === 0) {
         if (!config.idle?.enabled) {
-          log("info", "No queued requests.", json);
+          log("info", "No queued requests.", json, undefined, "queue");
           return;
         }
 
@@ -1338,7 +1347,7 @@ program
         const geminiWarmupReason = gate.geminiWarmup.reason;
 
         if (engines.length === 0) {
-          log("info", "Idle usage gate blocked for all engines. Skipping idle.", json);
+          log("info", "Idle usage gate blocked for all engines. Skipping idle.", json, undefined, "idle");
           return;
         }
 
@@ -1348,7 +1357,9 @@ program
           log(
             "info",
             `Idle repo scope set to local. Using ${idleRepos.length} workspace repo(s).`,
-            json
+            json,
+            undefined,
+            "idle"
           );
         }
 
@@ -1357,7 +1368,9 @@ program
           log(
             "warn",
             `Idle maxRunsPerCycle (${maxRuns}) is below available engines (${engines.length}). Scheduling ${engines.length} idle task(s).`,
-            json
+            json,
+            undefined,
+            "idle"
           );
           maxRuns = engines.length;
         }
@@ -1366,7 +1379,7 @@ program
           now: new Date()
         });
         if (idleTasks.length === 0) {
-          log("info", "No queued requests. Idle cooldown active or no eligible repos.", json);
+          log("info", "No queued requests. Idle cooldown active or no eligible repos.", json, undefined, "idle");
           return;
         }
 
@@ -1374,7 +1387,9 @@ program
           log(
             "warn",
             `Only ${idleTasks.length} idle task(s) available for ${engines.length} engine(s).`,
-            json
+            json,
+            undefined,
+            "idle"
           );
         }
 
@@ -1393,7 +1408,8 @@ program
               engine: task.engine,
               task: task.task
             }))
-          }
+          },
+          "idle"
         );
 
         if (dryRun) {
@@ -1403,7 +1419,7 @@ program
               engine: task.engine,
               task: task.task
             }))
-          });
+          }, "idle");
           return;
         }
 
@@ -1422,12 +1438,12 @@ program
               warmupPro: geminiWarmupPro && scheduledEngines.has("gemini-pro"),
               warmupFlash: geminiWarmupFlash && scheduledEngines.has("gemini-flash"),
               reason: geminiWarmupReason
-            });
+            }, "idle");
           } catch (error) {
             log("warn", "Idle Gemini warmup: unable to record warmup attempt.", json, {
               error: error instanceof Error ? error.message : String(error),
               reason: geminiWarmupReason
-            });
+            }, "idle");
           }
         }
 
@@ -1446,7 +1462,7 @@ program
                   engine: result.engine,
                   report: result.reportPath,
                   log: result.logPath
-                });
+                }, "idle");
                 return;
               }
               log("warn", "Idle task failed.", json, {
@@ -1454,7 +1470,7 @@ program
                 engine: result.engine,
                 report: result.reportPath,
                 log: result.logPath
-              });
+              }, "idle");
             })
           )
         );
@@ -1465,7 +1481,7 @@ program
       if (dryRun) {
         log("info", `Dry-run: would process ${picked.length} request(s).`, json, {
           issues: picked.map((issue) => issue.url)
-        });
+        }, "run");
         if (scheduledReviewFollowups.length > 0) {
           log("info", `Dry-run: would process ${scheduledReviewFollowups.length} review follow-up(s).`, json, {
             followups: scheduledReviewFollowups.map((followup) => ({
@@ -1473,7 +1489,7 @@ program
               reason: followup.reason,
               requiresEngine: followup.requiresEngine
             }))
-          });
+          }, "review");
         }
         return;
       }
@@ -1519,7 +1535,7 @@ program
                         issue: issue.url,
                         pr: pr.url,
                         error: error instanceof Error ? error.message : String(error)
-                      });
+                      }, "run");
                     }
                   }
                 }
@@ -1564,7 +1580,7 @@ program
           limit(async () => {
             const issue = await client.getIssue(followup.repo, followup.prNumber);
             if (!issue) {
-              log("warn", "Review follow-up skipped: unable to resolve PR.", json, { url: followup.url });
+              log("warn", "Review follow-up skipped: unable to resolve PR.", json, { url: followup.url }, "review");
               return;
             }
 
@@ -1602,16 +1618,16 @@ program
                   log("info", "Auto-merge not ready yet; re-queued approval follow-up.", json, {
                     url: followup.url,
                     reason: merge.reason
-                  });
+                  }, "review");
                   return;
                 }
 
-                log("info", "Auto-merge skipped.", json, { url: followup.url, reason: merge.reason });
+                log("info", "Auto-merge skipped.", json, { url: followup.url, reason: merge.reason }, "review");
               } catch (error) {
                 log("warn", "Auto-merge failed.", json, {
                   url: followup.url,
                   error: error instanceof Error ? error.message : String(error)
-                });
+                }, "review");
               }
               return;
             }
@@ -1646,13 +1662,13 @@ program
                       resolved: resolved.resolved,
                       unresolvedBefore: resolved.unresolvedBefore,
                       total: resolved.total
-                    });
+                    }, "review");
                   }
                 } catch (error) {
                   log("warn", "Failed to resolve PR review threads after follow-up run.", json, {
                     url: followup.url,
                     error: error instanceof Error ? error.message : String(error)
-                  });
+                  }, "review");
                 }
                 try {
                   const requested = await reRequestAllReviewers({
@@ -1666,12 +1682,12 @@ program
                     humanReviewers: requested.requestedHumanReviewers,
                     copilot: requested.requestedCopilot,
                     codex: requested.requestedCodex
-                  });
+                  }, "review");
                 } catch (error) {
                   log("warn", "Failed to re-request reviewers after follow-up run.", json, {
                     url: followup.url,
                     error: error instanceof Error ? error.message : String(error)
-                  });
+                  }, "review");
                 }
 
                 await client.addLabels(issue, [config.labels.done]);
@@ -1718,7 +1734,7 @@ program
       const interval = Number.parseInt(options.interval, 10);
       if (options.once) {
         if (isStopRequested(config.workdirRoot)) {
-          log("info", "Stop requested. Exiting runner loop.", json);
+          log("info", "Stop requested. Exiting runner loop.", json, undefined, "init");
           releaseLock(lock);
           return;
         }
@@ -1729,12 +1745,12 @@ program
 
       while (true) {
         if (isStopRequested(config.workdirRoot)) {
-          log("info", "Stop requested. Exiting runner loop.", json);
+          log("info", "Stop requested. Exiting runner loop.", json, undefined, "init");
           break;
         }
         await runCycle();
         if (isStopRequested(config.workdirRoot)) {
-          log("info", "Stop requested. Exiting runner loop.", json);
+          log("info", "Stop requested. Exiting runner loop.", json, undefined, "init");
           break;
         }
         await new Promise((resolve) => setTimeout(resolve, interval * 1000));
@@ -1779,18 +1795,18 @@ program
     const repos = repoResult.repos;
     const labels = buildAgentLabels(config);
 
-    log("info", `Syncing labels across ${repos.length} repositories.`, json);
+    log("info", `Syncing labels across ${repos.length} repositories.`, json, undefined, "init");
 
     for (const repo of repos) {
       for (const label of labels) {
         const existing = await client.getLabel(repo, label.name);
         if (!existing) {
           if (dryRun) {
-            log("info", `Would create label ${label.name} in ${repo.repo}.`, json);
+            log("info", `Would create label ${label.name} in ${repo.repo}.`, json, undefined, "init");
             continue;
           }
           await client.createLabel(repo, label);
-          log("info", `Created label ${label.name} in ${repo.repo}.`, json);
+          log("info", `Created label ${label.name} in ${repo.repo}.`, json, undefined, "init");
           continue;
         }
 
@@ -1803,7 +1819,7 @@ program
         }
 
         if (dryRun) {
-          log("info", `Would update label ${label.name} in ${repo.repo}.`, json);
+          log("info", `Would update label ${label.name} in ${repo.repo}.`, json, undefined, "init");
           continue;
         }
 
@@ -1813,7 +1829,7 @@ program
           description: label.description
         };
         await client.updateLabel(repo, payload);
-        log("info", `Updated label ${label.name} in ${repo.repo}.`, json);
+        log("info", `Updated label ${label.name} in ${repo.repo}.`, json, undefined, "init");
       }
     }
   });
@@ -1847,7 +1863,7 @@ program
           deletedMB: Math.round((result.deletedBytes / (1024 * 1024)) * 100) / 100,
           skipped: result.skipped,
           kept: result.kept
-        });
+        }, "maint");
       })
   );
 
@@ -1880,7 +1896,7 @@ program
           deletedMB: Math.round((result.deletedBytes / (1024 * 1024)) * 100) / 100,
           skipped: result.skipped,
           kept: result.kept
-        });
+        }, "maint");
       })
   );
 
@@ -2013,13 +2029,15 @@ program
         notify?.source === "github-app"
           ? "Webhook listener GitHub client configured via GitHub App."
           : "Webhook listener GitHub client configured via notify token.",
-        json
+        json,
+        undefined,
+        "init"
       );
     }
 
     if (!client && token) {
       client = new GitHubClient(token);
-      log("info", "Webhook listener GitHub client configured via environment token.", json);
+      log("info", "Webhook listener GitHub client configured via environment token.", json, undefined, "init");
     }
 
     if (!client) {
@@ -2040,11 +2058,11 @@ program
           client,
           config,
           queuePath,
-          onLog: (level, message, data) => log(level, message, json, data)
+          onLog: (level, message, data) => log(level, message, json, data, "queue")
         }),
-      onLog: (level, message, data) => log(level, message, json, data)
+      onLog: (level, message, data) => log(level, message, json, data, "queue")
     });
-    log("info", `Webhook listener ready on http://${host}:${portRaw}${pathValue}`, json);
+    log("info", `Webhook listener ready on http://${host}:${portRaw}${pathValue}`, json, undefined, "init");
   });
 
 program.parseAsync(process.argv);
