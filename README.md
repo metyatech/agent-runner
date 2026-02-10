@@ -281,7 +281,7 @@ When `webhooks.enabled` is true, repo-wide issue polling is skipped and the runn
 relies on webhook-queued issues. Keep the webhook listener running (for example,
 as a background service or scheduled task).
 If `webhooks.catchup.enabled` is true, the runner also performs a low-frequency
-Search API scan to catch requests created while the webhook listener was down.
+Search API scan to catch requests missed while the webhook listener was down.
 
 ## Idle runs (issue-less)
 
@@ -668,8 +668,13 @@ Tip:
 If `webhooks.enabled` is true, the tray helper will also ensure the webhook listener
 is running in the background.
 
-## Release / deploy
+## License
 
-Not applicable. This repository is intended to run locally.
+[MIT](LICENSE)
 
+## Project Standards
 
+- [Security Policy](SECURITY.md)
+- [Contributing Guidelines](CONTRIBUTING.md)
+- [Code of Conduct](CODE_OF_CONDUCT.md)
+- [Changelog](CHANGELOG.md)
