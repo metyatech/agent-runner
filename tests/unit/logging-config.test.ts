@@ -30,6 +30,15 @@ describe("logging config", () => {
     expect(promtail).not.toContain("selector: '{job=\"agent-runner\", kind=\"runner-out\"} |~ \"^(?:\\\\uFEFF)?");
   });
 
+  it("assigns a default tag label to runner-out logs that bypass parsing", () => {
+    const promtail = readRepoFile("ops", "logging", "promtail-config.yml");
+    const runnerOutStart = promtail.indexOf("  - job_name: agent-runner-runner-out");
+    const runnerErrStart = promtail.indexOf("  - job_name: agent-runner-runner-err");
+    const runnerOutBlock = promtail.slice(runnerOutStart, runnerErrStart);
+
+    expect(runnerOutBlock).toContain("tag: untagged");
+  });
+
   it("filters by tag only for runner-out logs in the Grafana query", () => {
     const dashboardText = readRepoFile(
       "ops",
@@ -50,5 +59,23 @@ describe("logging config", () => {
     expect(expr).toContain("tag=~\"$tag\"");
     expect(expr).toContain("kind!=\"runner-out\"");
     expect(expr).toContain(" or ");
+  });
+
+  it("includes untagged in the dashboard Tag variable values", () => {
+    const dashboardText = readRepoFile(
+      "ops",
+      "logging",
+      "grafana",
+      "provisioning",
+      "dashboards-json",
+      "agent-runner-logs.json"
+    );
+    const dashboard = JSON.parse(dashboardText) as {
+      templating?: { list?: Array<{ name?: string; query?: string }> };
+    };
+    const tagVariable = dashboard.templating?.list?.find((entry) => entry.name === "tag");
+    const query = tagVariable?.query ?? "";
+
+    expect(query.split(",")).toContain("untagged");
   });
 });

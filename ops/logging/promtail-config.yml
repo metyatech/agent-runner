@@ -139,6 +139,7 @@ scrape_configs:
         labels:
           job: agent-runner
           kind: runner-out
+          tag: untagged
           __path__: /var/log/agent-runner/agent-runner-run-*.out.log
 
   - job_name: agent-runner-runner-err

@@ -24,7 +24,7 @@
         "name": "tag",
         "label": "Tag",
         "type": "custom",
-        "query": "init,catch-up,queue,resume,idle,review,run,maint,recovery",
+        "query": "init,catch-up,queue,resume,idle,review,run,maint,recovery,untagged",
         "current": { "text": "All", "value": "$__all" },
         "refresh": 1,
         "sort": 1,
