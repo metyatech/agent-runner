@@ -396,7 +396,7 @@ describe("renderIdlePrompt", () => {
     expect(prompt).toContain("Duplicate-work guard");
   });
 
-  it("appends open PR context when placeholders are missing", () => {
+  it("appends open PR count before context when placeholders are missing", () => {
     const prompt = renderIdlePrompt("Repo {{repo}}\nTask {{task}}", repo, "Improve retries", {
       openPrCount: 1,
       openPrContext: "- #22 Another PR",
@@ -405,8 +405,10 @@ describe("renderIdlePrompt", () => {
 
     expect(prompt).toContain("Repo metyatech/demo");
     expect(prompt).toContain("Task Improve retries");
+    expect(prompt).toContain("Open PR count: 1");
     expect(prompt).toContain("Open PR context:");
     expect(prompt).toContain("- #22 Another PR");
+    expect(prompt.indexOf("Open PR count: 1")).toBeLessThan(prompt.indexOf("Open PR context:"));
   });
 
   it("renders unknown open PR count when context lookup fails", () => {

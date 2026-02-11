@@ -354,11 +354,11 @@ export function renderIdlePrompt(
       placeholders[key] ?? ""
   );
 
-  if (!template.includes("{{openPrContext}}")) {
-    rendered = `${rendered}\n\nOpen PR context:\n${openPrContext}`;
-  }
   if (!template.includes("{{openPrCount}}")) {
     rendered = `${rendered}\nOpen PR count: ${openPrCountLabel}`;
+  }
+  if (!template.includes("{{openPrContext}}")) {
+    rendered = `${rendered}\n\nOpen PR context:\n${openPrContext}`;
   }
 
   const guard = buildIdleDuplicateWorkGuard(options.openPrCount, options.openPrContextAvailable);
