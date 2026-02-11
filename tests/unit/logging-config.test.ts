@@ -49,16 +49,17 @@ describe("logging config", () => {
       "agent-runner-logs.json"
     );
     const dashboard = JSON.parse(dashboardText) as {
-      panels?: Array<{ id?: number; targets?: Array<{ expr?: string }> }>;
+      panels?: Array<{ id?: number; targets?: Array<{ refId?: string; expr?: string }> }>;
     };
 
     const logsPanel = dashboard.panels?.find((panel) => panel.id === 1);
-    const expr = logsPanel?.targets?.[0]?.expr ?? "";
+    const runnerOutExpr = logsPanel?.targets?.find((target) => target.refId === "A")?.expr ?? "";
+    const nonRunnerOutExpr = logsPanel?.targets?.find((target) => target.refId === "B")?.expr ?? "";
 
-    expect(expr).toContain("kind=\"runner-out\"");
-    expect(expr).toContain("tag=~\"$tag\"");
-    expect(expr).toContain("kind!=\"runner-out\"");
-    expect(expr).toContain(" or ");
+    expect(runnerOutExpr).toContain("kind=\"runner-out\"");
+    expect(runnerOutExpr).toContain("tag=~\"$tag\"");
+    expect(nonRunnerOutExpr).toContain("kind!=\"runner-out\"");
+    expect(nonRunnerOutExpr).not.toContain("tag=~\"$tag\"");
   });
 
   it("includes untagged in the dashboard Tag variable values", () => {

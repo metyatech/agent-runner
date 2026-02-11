@@ -382,4 +382,5 @@ $timer.Start()
 
 Start-LogsStack
 Ensure-WebhookServer
+Ensure-StatusServer
 [System.Windows.Forms.Application]::Run()

@@ -1,6 +1,7 @@
 services:
   loki:
     image: grafana/loki:2.9.4
+    user: "0:0"
     command: -config.file=/etc/loki/config.yml
     ports:
       - "127.0.0.1:3100:3100"
@@ -22,6 +23,7 @@ services:
 
   grafana:
     image: grafana/grafana:10.4.7
+    user: "0:0"
     ports:
       - "127.0.0.1:3000:3000"
     volumes:
@@ -30,4 +32,3 @@ services:
     depends_on:
       - loki
     restart: unless-stopped
-
