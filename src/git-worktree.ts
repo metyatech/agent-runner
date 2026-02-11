@@ -153,7 +153,6 @@ export async function createWorktreeFromDefaultBranch(options: {
 }): Promise<void> {
   fs.mkdirSync(path.dirname(options.worktreePath), { recursive: true });
   await ensureDirAbsent(options.worktreePath);
-  fs.mkdirSync(options.worktreePath, { recursive: true });
 
   await withGitCacheLock(
     options.workdirRoot,
@@ -190,7 +189,6 @@ export async function createWorktreeForRemoteBranch(options: {
 }): Promise<void> {
   fs.mkdirSync(path.dirname(options.worktreePath), { recursive: true });
   await ensureDirAbsent(options.worktreePath);
-  fs.mkdirSync(options.worktreePath, { recursive: true });
 
   await withGitCacheLock(
     options.workdirRoot,

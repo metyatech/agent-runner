@@ -18,7 +18,8 @@ describe("git-worktree", () => {
     const runCommandMock = vi.fn(async (_command: string, args: string[]) => {
       const candidate = args.at(-1);
       const isShowRef =
-        args.length >= 7 &&
+        args.length >= 6 &&
+        args[0] === "-C" &&
         args[2] === "show-ref" &&
         args[3] === "--verify" &&
         args[4] === "--quiet";
