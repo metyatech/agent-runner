@@ -35,7 +35,7 @@ describe("status-server", () => {
       }
       const html = await fetchText(`http://127.0.0.1:${address.port}/`);
       expect(html).toContain("Agent Runner Status");
-      expect(html).toContain("Latest Logs");
+      expect(html).toContain("Running Tasks");
     } finally {
       await new Promise<void>((resolve, reject) => {
         server.close((error) => (error ? reject(error) : resolve()));

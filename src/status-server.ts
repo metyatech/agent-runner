@@ -53,95 +53,214 @@ function renderHtml(): string {
         --ok: #1a7f37;
         --warn: #b54708;
       }
+      * { box-sizing: border-box; }
       body {
         margin: 0;
-        background: radial-gradient(circle at 10% 10%, #f7eee5 0%, var(--bg) 45%, #efe7df 100%);
+        background: var(--bg);
         color: var(--ink);
         font-family: "Segoe UI", "Helvetica Neue", Arial, sans-serif;
       }
-      header {
-        padding: 24px 32px 8px;
+
+      /* ── Hero Banner ── */
+      .hero {
+        padding: 28px 32px;
         display: flex;
         flex-wrap: wrap;
         align-items: center;
         gap: 16px;
+        transition: background 0.4s;
       }
-      h1 {
-        margin: 0;
-        font-size: 28px;
+      .hero.running { background: #22c55e; color: #fff; }
+      .hero.idle    { background: #f59e0b; color: #fff; }
+      .hero.paused  { background: #8b5cf6; color: #fff; }
+      .hero-title {
+        font-size: 26px;
+        font-weight: 700;
         letter-spacing: -0.02em;
       }
-      .badge {
-        padding: 6px 14px;
-        border-radius: 999px;
-        font-weight: 700;
-        font-size: 12px;
-        text-transform: uppercase;
-        letter-spacing: 0.08em;
-      }
-      .badge.running {
-        background: #e7f5ec;
-        color: var(--ok);
-        border: 1px solid #b8e2c4;
-      }
-      .badge.idle {
-        background: #f8e9e0;
-        color: var(--warn);
-        border: 1px solid #f2c6ad;
-      }
-      .badge.paused {
-        background: #efe6ff;
-        color: #4b2fa3;
-        border: 1px solid #d4c6ff;
-      }
-      .meta {
-        color: var(--muted);
+      .hero-sub {
         font-size: 13px;
+        opacity: 0.85;
       }
-      .control {
-        padding: 8px 14px;
-        border-radius: 999px;
-        border: 1px solid #d0d0d0;
-        background: #ffffff;
-        color: var(--accent);
-        font-weight: 700;
+      .hero-right {
+        margin-left: auto;
+        display: flex;
+        align-items: center;
+        gap: 12px;
+      }
+      .pulse {
+        width: 10px; height: 10px;
+        border-radius: 50%;
+        background: rgba(255,255,255,0.9);
+        animation: pulse-ring 2s ease-in-out infinite;
+      }
+      @keyframes pulse-ring {
+        0%, 100% { box-shadow: 0 0 0 0 rgba(255,255,255,0.5); }
+        50%      { box-shadow: 0 0 0 6px rgba(255,255,255,0); }
+      }
+      .hero-meta {
         font-size: 12px;
-        cursor: pointer;
+        opacity: 0.75;
       }
-      .control:disabled {
-        opacity: 0.6;
-        cursor: not-allowed;
-      }
+
+      /* ── Layout ── */
       .wrap {
-        padding: 0 32px 32px;
+        padding: 20px 32px 32px;
         display: grid;
         gap: 20px;
       }
+
+      /* ── Panels ── */
       .panel {
         background: var(--panel);
         border-radius: 16px;
-        padding: 16px;
-        box-shadow: 0 10px 25px rgba(0, 0, 0, 0.05);
+        padding: 16px 20px;
+        box-shadow: 0 10px 25px rgba(0,0,0,0.05);
       }
       .panel h2 {
         margin: 0 0 12px;
         font-size: 18px;
       }
-      table {
+      .empty {
+        color: var(--muted);
+        font-size: 13px;
+      }
+
+      /* ── Task Cards ── */
+      .card-grid {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 16px;
+      }
+      .task-card {
+        flex: 1 1 320px;
+        max-width: 480px;
+        background: #fafafa;
+        border: 1px solid #e5e5e5;
+        border-radius: 14px;
+        padding: 16px 18px;
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+      }
+      .card-header {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        flex-wrap: wrap;
+      }
+      .card-repo {
+        font-size: 17px;
+        font-weight: 700;
+        letter-spacing: -0.01em;
+      }
+      .issue-badge {
+        background: #111;
+        color: #fff;
+        font-weight: 700;
+        font-size: 13px;
+        padding: 2px 10px;
+        border-radius: 999px;
+      }
+      .kind-tag {
+        font-size: 11px;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+        padding: 2px 8px;
+        border-radius: 6px;
+        background: #e8e8e8;
+        color: var(--muted);
+      }
+      .card-task {
+        font-size: 13px;
+        color: var(--muted);
+        line-height: 1.4;
+      }
+      .card-footer {
+        display: flex;
+        align-items: center;
+        gap: 14px;
+        margin-top: 4px;
+        font-size: 13px;
+      }
+      .age { font-weight: 700; }
+      .age.green  { color: #16a34a; }
+      .age.yellow { color: #ca8a04; }
+      .age.red    { color: #dc2626; }
+      .card-footer a {
+        color: var(--accent);
+        text-decoration: underline;
+        text-underline-offset: 2px;
+        cursor: pointer;
+        font-size: 12px;
+      }
+
+      /* ── Stale toggle ── */
+      .stale-toggle {
+        background: none;
+        border: 1px solid #d0d0d0;
+        border-radius: 8px;
+        padding: 8px 14px;
+        font-size: 13px;
+        cursor: pointer;
+        color: var(--muted);
+        font-weight: 600;
+      }
+      .stale-toggle:hover { background: #f5f5f5; }
+      .stale-details { margin-top: 12px; }
+      .stale-details table {
         width: 100%;
         border-collapse: collapse;
         font-size: 13px;
       }
-      th, td {
+      .stale-details th, .stale-details td {
         text-align: left;
-        padding: 8px 6px;
+        padding: 6px;
         border-bottom: 1px solid #efefef;
         vertical-align: top;
       }
-      th {
+      .stale-details th {
         color: var(--muted);
         font-weight: 600;
       }
+
+      /* ── Compact log list ── */
+      .log-list {
+        list-style: none;
+        margin: 0;
+        padding: 0;
+      }
+      .log-list li {
+        padding: 5px 0;
+        border-bottom: 1px solid #f0f0f0;
+        font-size: 13px;
+        display: flex;
+        align-items: baseline;
+        gap: 8px;
+      }
+      .log-list li:last-child { border-bottom: none; }
+      .log-list a {
+        color: var(--accent);
+        text-decoration: underline;
+        text-underline-offset: 2px;
+        cursor: pointer;
+        word-break: break-all;
+      }
+      .log-time {
+        color: var(--muted);
+        font-size: 12px;
+        white-space: nowrap;
+      }
+      .log-label {
+        font-weight: 600;
+        font-size: 11px;
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+        color: var(--muted);
+        white-space: nowrap;
+      }
+
       code {
         font-family: "Cascadia Mono", "Consolas", monospace;
         font-size: 12px;
@@ -149,194 +268,281 @@ function renderHtml(): string {
         padding: 2px 6px;
         border-radius: 6px;
       }
-      ul {
-        margin: 0;
-        padding-left: 18px;
-        color: var(--muted);
-      }
-      .empty {
-        color: var(--muted);
-        font-size: 13px;
-      }
-      @media (max-width: 900px) {
-        header, .wrap {
-          padding-left: 16px;
-          padding-right: 16px;
-        }
-        table {
-          display: block;
-          overflow-x: auto;
-        }
+
+      @media (max-width: 700px) {
+        .hero, .wrap { padding-left: 16px; padding-right: 16px; }
+        .task-card { max-width: 100%; }
+        .hero-right { margin-left: 0; }
       }
     </style>
   </head>
   <body>
-    <header>
-      <h1>Agent Runner Status</h1>
-      <span id="statusBadge" class="badge idle">Idle</span>
-      <div class="meta">
-        Updated: <span id="generatedAt">-</span><br />
-        Workdir: <code id="workdir">-</code><br />
+    <!-- Hero Banner -->
+    <div id="hero" class="hero idle">
+      <div>
+        <div id="heroTitle" class="hero-title">Idle</div>
+        <div id="heroSub" class="hero-sub"></div>
       </div>
-    </header>
+      <div class="hero-right">
+        <div class="pulse"></div>
+        <div class="hero-meta">
+          <span id="heroMeta"></span><br/>
+          <code id="workdir" style="background:rgba(255,255,255,0.2);color:inherit;">-</code>
+        </div>
+      </div>
+    </div>
+
     <div class="wrap">
+      <!-- Running Tasks Cards -->
       <section class="panel">
         <h2>Running Tasks</h2>
         <div id="runningEmpty" class="empty">No active tasks.</div>
-        <table id="runningTable" hidden>
-          <thead>
-            <tr>
-              <th>Kind</th>
-              <th>Repo</th>
-              <th>Issue</th>
-              <th>Task</th>
-              <th>PID</th>
-              <th>Age (min)</th>
-              <th>Started</th>
-              <th>Log</th>
-            </tr>
-          </thead>
-          <tbody id="runningBody"></tbody>
-        </table>
+        <div id="cardGrid" class="card-grid"></div>
+      </section>
+
+      <!-- Stale Records (collapsed) -->
+      <section class="panel" id="staleSection" hidden>
+        <button id="staleToggle" class="stale-toggle"></button>
+        <div id="staleDetails" class="stale-details" hidden>
+          <table>
+            <thead>
+              <tr>
+                <th>Repo</th>
+                <th>Issue</th>
+                <th>Kind</th>
+                <th>Age</th>
+                <th>Log</th>
+              </tr>
+            </thead>
+            <tbody id="staleBody"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- Logs & Reports -->
+      <section class="panel">
+        <h2>Logs</h2>
+        <ul id="logsList" class="log-list"></ul>
       </section>
       <section class="panel">
-        <h2>Stale Records</h2>
-        <div id="staleEmpty" class="empty">No stale records.</div>
-        <table id="staleTable" hidden>
-          <thead>
-            <tr>
-              <th>Kind</th>
-              <th>Repo</th>
-              <th>Issue</th>
-              <th>Task</th>
-              <th>PID</th>
-              <th>Age (min)</th>
-              <th>Started</th>
-              <th>Log</th>
-            </tr>
-          </thead>
-          <tbody id="staleBody"></tbody>
-        </table>
-      </section>
-      <section class="panel">
-        <h2>Latest Logs</h2>
-        <ul id="latestLogsList"></ul>
-      </section>
-      <section class="panel">
-        <h2>Recent Logs</h2>
-        <ul id="logsList"></ul>
-      </section>
-      <section class="panel">
-        <h2>Recent Reports</h2>
-        <ul id="reportsList"></ul>
+        <h2>Reports</h2>
+        <ul id="reportsList" class="log-list"></ul>
       </section>
     </div>
-    <script>
-      const statusBadge = document.getElementById("statusBadge");
-      const generatedAt = document.getElementById("generatedAt");
-      const workdir = document.getElementById("workdir");
-      const runningTable = document.getElementById("runningTable");
-      const runningBody = document.getElementById("runningBody");
-      const runningEmpty = document.getElementById("runningEmpty");
-      const staleTable = document.getElementById("staleTable");
-      const staleBody = document.getElementById("staleBody");
-      const staleEmpty = document.getElementById("staleEmpty");
-      const latestLogsList = document.getElementById("latestLogsList");
-      const logsList = document.getElementById("logsList");
-      const reportsList = document.getElementById("reportsList");
 
-      const formatLocal = (value) => {
-        if (!value) return "-";
-        const date = new Date(value);
-        if (Number.isNaN(date.getTime())) return value;
-        return date.toLocaleString(undefined, { timeZoneName: "short" });
+    <script>
+      const $ = (id) => document.getElementById(id);
+      const hero = $("hero");
+      const heroTitle = $("heroTitle");
+      const heroSub = $("heroSub");
+      const heroMeta = $("heroMeta");
+      const workdir = $("workdir");
+      const cardGrid = $("cardGrid");
+      const runningEmpty = $("runningEmpty");
+      const staleSection = $("staleSection");
+      const staleToggle = $("staleToggle");
+      const staleDetails = $("staleDetails");
+      const staleBody = $("staleBody");
+      const logsList = $("logsList");
+      const reportsList = $("reportsList");
+
+      staleToggle.addEventListener("click", () => {
+        staleDetails.hidden = !staleDetails.hidden;
+        staleToggle.textContent = staleDetails.hidden
+          ? staleToggle.dataset.label
+          : staleToggle.dataset.label + " (click to collapse)";
+      });
+
+      const timeAgo = (isoStr) => {
+        if (!isoStr) return "";
+        const diff = (Date.now() - new Date(isoStr).getTime()) / 1000;
+        if (diff < 0) return "just now";
+        if (diff < 60) return Math.round(diff) + "s ago";
+        if (diff < 3600) return Math.round(diff / 60) + " min ago";
+        if (diff < 86400) {
+          const h = Math.floor(diff / 3600);
+          const m = Math.round((diff % 3600) / 60);
+          return h + "h " + m + "min ago";
+        }
+        return Math.round(diff / 86400) + "d ago";
+      };
+
+      const humanAge = (minutes) => {
+        if (minutes == null) return "-";
+        if (minutes < 1) return "<1 min";
+        if (minutes < 60) return Math.round(minutes) + " min";
+        const h = Math.floor(minutes / 60);
+        const m = Math.round(minutes % 60);
+        return h + "h " + m + "min";
+      };
+
+      const ageClass = (minutes) => {
+        if (minutes == null) return "";
+        if (minutes < 30) return "green";
+        if (minutes <= 60) return "yellow";
+        return "red";
       };
 
       const openPath = (pathValue) => {
         if (!pathValue) return;
-        const url = "/open?path=" + encodeURIComponent(pathValue);
-        fetch(url, { method: "POST" }).catch(() => {});
+        fetch("/open?path=" + encodeURIComponent(pathValue), { method: "POST" }).catch(() => {});
       };
 
-      const buildLink = (pathValue) => {
-        const link = document.createElement("a");
-        link.href = "/open?path=" + encodeURIComponent(pathValue);
-        link.textContent = pathValue;
-        link.addEventListener("click", (event) => {
-          event.preventDefault();
-          openPath(pathValue);
+      const makeLink = (pathValue, label) => {
+        const a = document.createElement("a");
+        a.href = "#";
+        a.textContent = label || pathValue;
+        a.addEventListener("click", (e) => { e.preventDefault(); openPath(pathValue); });
+        return a;
+      };
+
+      /* ── Render running task cards ── */
+      const renderCards = (rows) => {
+        cardGrid.textContent = "";
+        runningEmpty.hidden = rows.length > 0;
+        rows.forEach((row) => {
+          const card = document.createElement("div");
+          card.className = "task-card";
+
+          const hdr = document.createElement("div");
+          hdr.className = "card-header";
+
+          const repo = document.createElement("span");
+          repo.className = "card-repo";
+          repo.textContent = row.repo ? row.repo.owner + "/" + row.repo.repo : "-";
+          hdr.appendChild(repo);
+
+          if (row.issueNumber) {
+            const ib = document.createElement("span");
+            ib.className = "issue-badge";
+            ib.textContent = "#" + row.issueNumber;
+            hdr.appendChild(ib);
+          }
+
+          const kindLabel = row.engine ? row.kind + "/" + row.engine : row.kind;
+          const kt = document.createElement("span");
+          kt.className = "kind-tag";
+          kt.textContent = kindLabel;
+          hdr.appendChild(kt);
+
+          card.appendChild(hdr);
+
+          if (row.task) {
+            const desc = document.createElement("div");
+            desc.className = "card-task";
+            desc.textContent = row.task;
+            card.appendChild(desc);
+          }
+
+          const footer = document.createElement("div");
+          footer.className = "card-footer";
+
+          const ageSp = document.createElement("span");
+          ageSp.className = "age " + ageClass(row.ageMinutes);
+          ageSp.textContent = humanAge(row.ageMinutes);
+          footer.appendChild(ageSp);
+
+          if (row.logPath) {
+            footer.appendChild(makeLink(row.logPath, "Open log"));
+          }
+
+          card.appendChild(footer);
+          cardGrid.appendChild(card);
         });
-        return link;
       };
 
-      const renderRows = (target, rows) => {
-        target.textContent = "";
+      /* ── Render stale table rows ── */
+      const renderStale = (rows) => {
+        staleSection.hidden = rows.length === 0;
+        const label = rows.length + " stale record" + (rows.length === 1 ? "" : "s");
+        staleToggle.textContent = label;
+        staleToggle.dataset.label = label;
+        staleDetails.hidden = true;
+
+        staleBody.textContent = "";
         rows.forEach((row) => {
           const tr = document.createElement("tr");
-          const kindLabel = row.engine ? row.kind + " (" + row.engine + ")" : row.kind;
           const cells = [
-            { value: kindLabel },
-            { value: row.repo ? row.repo.owner + "/" + row.repo.repo : "-" },
-            { value: row.issueNumber ? "#" + row.issueNumber : "-" },
-            { value: row.task || "-" },
-            { value: row.pid || "-" },
-            { value: row.ageMinutes != null ? row.ageMinutes.toFixed(1) : "-" },
-            { value: row.startedAtLocal || formatLocal(row.startedAt) },
-            { value: row.logPath || "-", link: row.logPath }
+            row.repo ? row.repo.owner + "/" + row.repo.repo : "-",
+            row.issueNumber ? "#" + row.issueNumber : "-",
+            row.engine ? row.kind + "/" + row.engine : row.kind,
+            humanAge(row.ageMinutes)
           ];
-          cells.forEach((cell) => {
+          cells.forEach((v) => {
             const td = document.createElement("td");
-            if (cell.link) {
-              td.appendChild(buildLink(cell.link));
-            } else {
-              td.textContent = String(cell.value);
-            }
+            td.textContent = v;
             tr.appendChild(td);
           });
-          target.appendChild(tr);
+          const logTd = document.createElement("td");
+          if (row.logPath) {
+            logTd.appendChild(makeLink(row.logPath, "Open"));
+          } else {
+            logTd.textContent = "-";
+          }
+          tr.appendChild(logTd);
+          staleBody.appendChild(tr);
         });
       };
 
-      const renderList = (target, rows) => {
+      /* ── Render combined log list ── */
+      const renderLogs = (target, latestTaskRun, latestIdle, recentLogs) => {
         target.textContent = "";
-        if (!rows.length) {
+
+        const items = [];
+
+        if (latestTaskRun && latestTaskRun.path) {
+          items.push({ label: "task-run", path: latestTaskRun.path, time: latestTaskRun.updatedAt });
+        }
+        if (latestIdle && latestIdle.path) {
+          items.push({ label: "idle", path: latestIdle.path, time: latestIdle.updatedAt });
+        }
+        (recentLogs || []).forEach((f) => {
+          if (items.some((i) => i.path === f.path)) return;
+          items.push({ path: f.path, time: f.updatedAt });
+        });
+
+        if (!items.length) {
           const li = document.createElement("li");
           li.textContent = "None";
+          li.className = "empty";
+          target.appendChild(li);
+          return;
+        }
+
+        items.forEach((item) => {
+          const li = document.createElement("li");
+          if (item.label) {
+            const lb = document.createElement("span");
+            lb.className = "log-label";
+            lb.textContent = item.label;
+            li.appendChild(lb);
+          }
+          li.appendChild(makeLink(item.path, item.path));
+          const ts = document.createElement("span");
+          ts.className = "log-time";
+          ts.textContent = timeAgo(item.time);
+          li.appendChild(ts);
+          target.appendChild(li);
+        });
+      };
+
+      /* ── Render report list ── */
+      const renderReports = (target, rows) => {
+        target.textContent = "";
+        if (!rows || !rows.length) {
+          const li = document.createElement("li");
+          li.textContent = "None";
+          li.className = "empty";
           target.appendChild(li);
           return;
         }
         rows.forEach((row) => {
           const li = document.createElement("li");
-          const updated = row.updatedAtLocal || formatLocal(row.updatedAt);
-          li.appendChild(buildLink(row.path));
-          const time = document.createElement("span");
-          time.textContent = " (" + updated + ")";
-          li.appendChild(time);
-          target.appendChild(li);
-        });
-      };
-
-      const renderLatestLogs = (target, snapshot) => {
-        const rows = [
-          { label: "task-run", file: snapshot.latestTaskRun },
-          { label: "idle", file: snapshot.latestIdle }
-        ];
-        target.textContent = "";
-        rows.forEach((row) => {
-          const li = document.createElement("li");
-          const label = document.createElement("strong");
-          label.textContent = row.label + ": ";
-          li.appendChild(label);
-          if (!row.file || !row.file.path) {
-            li.appendChild(document.createTextNode("None"));
-            target.appendChild(li);
-            return;
-          }
-          const updated = row.file.updatedAtLocal || formatLocal(row.file.updatedAt);
-          li.appendChild(buildLink(row.file.path));
-          const time = document.createElement("span");
-          time.textContent = " (" + updated + ")";
-          li.appendChild(time);
+          li.appendChild(makeLink(row.path, row.path));
+          const ts = document.createElement("span");
+          ts.className = "log-time";
+          ts.textContent = timeAgo(row.updatedAt);
+          li.appendChild(ts);
           target.appendChild(li);
         });
       };
@@ -344,39 +550,42 @@ function renderHtml(): string {
       async function refresh() {
         try {
           const res = await fetch("/api/status");
-          if (!res.ok) {
-            throw new Error("status fetch failed");
-          }
+          if (!res.ok) throw new Error("status fetch failed");
           const data = await res.json();
+
           const stopRequested = Boolean(data.stopRequested);
-          let label = "Idle";
-          let style = "idle";
+          const running = data.running || [];
+          let label, style;
+
           if (data.busy) {
-            label = stopRequested ? "Running (stop requested)" : "Running";
+            const n = running.length;
+            label = "Running " + n + " task" + (n === 1 ? "" : "s");
+            if (stopRequested) label += " (stop requested)";
             style = "running";
           } else if (stopRequested) {
             label = "Paused";
             style = "paused";
+          } else {
+            label = "Idle";
+            style = "idle";
           }
-          statusBadge.textContent = label;
-          statusBadge.className = "badge " + style;
-          generatedAt.textContent = data.generatedAtLocal || formatLocal(data.generatedAt);
+
+          heroTitle.textContent = label;
+          hero.className = "hero " + style;
+
+          const activityAgo = timeAgo(data.activityUpdatedAt);
+          heroSub.textContent = activityAgo ? "Last activity: " + activityAgo : "";
+
+          heroMeta.textContent = "Updated: " + timeAgo(data.generatedAt);
           workdir.textContent = data.workdirRoot || "-";
 
-          renderRows(runningBody, data.running || []);
-          runningTable.hidden = !(data.running && data.running.length);
-          runningEmpty.hidden = data.running && data.running.length;
-
-          renderRows(staleBody, data.stale || []);
-          staleTable.hidden = !(data.stale && data.stale.length);
-          staleEmpty.hidden = data.stale && data.stale.length;
-
-          renderLatestLogs(latestLogsList, data || {});
-          renderList(logsList, data.logs || []);
-          renderList(reportsList, data.reports || []);
+          renderCards(running);
+          renderStale(data.stale || []);
+          renderLogs(logsList, data.latestTaskRun, data.latestIdle, data.logs);
+          renderReports(reportsList, data.reports || []);
         } catch (error) {
-          statusBadge.textContent = "Error";
-          statusBadge.className = "badge idle";
+          heroTitle.textContent = "Error";
+          hero.className = "hero idle";
         }
       }
 
