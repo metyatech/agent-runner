@@ -55,6 +55,17 @@ function toNonNegativeInteger(value: number | null | undefined): number | null {
   return rounded >= 0 ? rounded : null;
 }
 
+function shouldWarnUnknownTotalCount(options: {
+  totalCountHint: number | null;
+  fetchedCount: number;
+  maxEntries: number;
+}): boolean {
+  if (options.totalCountHint !== null) {
+    return false;
+  }
+  return options.fetchedCount >= options.maxEntries;
+}
+
 function buildEntry(pull: OpenPullRequestInfo): string {
   return [
     `- #${pull.number} ${summarizeTitle(pull.title)}`,
@@ -75,6 +86,11 @@ export function buildIdleOpenPrContext(
   const maxChars = toPositiveInteger(options.maxChars, DEFAULT_MAX_CONTEXT_CHARS);
   const totalCountHint = toNonNegativeInteger(options.totalCount);
   const totalCount = Math.max(openPullRequests.length, totalCountHint ?? openPullRequests.length);
+  const warnUnknownTotalCount = shouldWarnUnknownTotalCount({
+    totalCountHint,
+    fetchedCount: openPullRequests.length,
+    maxEntries
+  });
   const candidates = openPullRequests.slice(0, maxEntries);
   const entries: string[] = [];
   let length = 0;
@@ -97,6 +113,16 @@ export function buildIdleOpenPrContext(
   let output = entries.join("\n");
   if (omittedCount > 0) {
     const suffix = `${output.length > 0 ? "\n" : ""}- ...and ${omittedCount} more open pull request(s) omitted.`;
+    if (output.length + suffix.length <= maxChars) {
+      output += suffix;
+    } else {
+      const available = Math.max(0, maxChars - suffix.length);
+      const trimmed = output.slice(0, available).trimEnd();
+      output = `${trimmed}${suffix}`.trim();
+    }
+  }
+  if (warnUnknownTotalCount) {
+    const suffix = `${output.length > 0 ? "\n" : ""}- Additional open pull request(s) may exist beyond this fetched set because total count is unknown.`;
     if (output.length + suffix.length <= maxChars) {
       output += suffix;
     } else {

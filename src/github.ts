@@ -744,11 +744,20 @@ export class GitHubClient {
 
   async listOpenPullRequests(repo: RepoInfo, options?: { limit?: number }): Promise<OpenPullRequestInfo[]> {
     const pulls: OpenPullRequestInfo[] = [];
-    const limit = Math.max(1, Math.floor(options?.limit ?? Number.POSITIVE_INFINITY));
+    const requestedLimit = options?.limit;
+    if (requestedLimit !== undefined) {
+      if (!Number.isFinite(requestedLimit)) {
+        throw new Error(`Invalid limit for listOpenPullRequests: ${requestedLimit}`);
+      }
+      if (requestedLimit <= 0) {
+        return [];
+      }
+    }
+    const limit =
+      requestedLimit === undefined ? Number.POSITIVE_INFINITY : Math.max(1, Math.floor(requestedLimit));
+    const perPage = Math.min(100, limit);
     let page = 1;
     while (pulls.length < limit) {
-      const remaining = limit - pulls.length;
-      const perPage = Math.min(100, remaining);
       const response = await this.octokit.pulls.list({
         owner: repo.owner,
         repo: repo.repo,

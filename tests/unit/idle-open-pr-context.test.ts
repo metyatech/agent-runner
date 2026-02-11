@@ -98,6 +98,25 @@ describe("buildIdleOpenPrContext", () => {
     expect(context).toContain("#1");
     expect(context).toContain("...and 2 more open pull request(s) omitted.");
   });
+
+  it("flags potential omission when total count is unknown and fetch may be capped", () => {
+    const pulls: OpenPullRequestInfo[] = Array.from({ length: 50 }, (_v, index) => ({
+      number: index + 1,
+      title: `PR-${index + 1}`,
+      body: `Body ${index + 1}`,
+      url: `https://github.com/metyatech/demo/pull/${index + 1}`,
+      updatedAt: "2026-02-11T09:00:00Z",
+      author: "metyatech"
+    }));
+
+    const context = buildIdleOpenPrContext(pulls, {
+      maxEntries: 50,
+      maxChars: 200_000,
+      totalCount: null
+    });
+
+    expect(context).toContain("Additional open pull request(s) may exist beyond this fetched set");
+  });
 });
 
 describe("open PR count and duplicate-work guard", () => {

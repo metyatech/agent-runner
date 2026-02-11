@@ -161,6 +161,67 @@ describe("GitHubClient.listOpenPullRequests", () => {
       page: 1
     });
   });
+
+  it("keeps per_page constant across paginated requests", async () => {
+    const client = new GitHubClient("dummy");
+    const calls: any[] = [];
+    (client as any).octokit = {
+      pulls: {
+        list: async (params: any) => {
+          calls.push(params);
+          if (params.page === 1) {
+            return {
+              data: Array.from({ length: 100 }, (_v, index) => ({
+                number: index + 1,
+                title: `PR-${index + 1}`,
+                body: null,
+                html_url: `https://github.com/metyatech/demo/pull/${index + 1}`,
+                updated_at: "2026-02-11T10:00:00Z",
+                user: { login: "alice" }
+              }))
+            };
+          }
+          return {
+            data: Array.from({ length: 100 }, (_v, index) => ({
+              number: index + 101,
+              title: `PR-${index + 101}`,
+              body: null,
+              html_url: `https://github.com/metyatech/demo/pull/${index + 101}`,
+              updated_at: "2026-02-11T09:00:00Z",
+              user: { login: "alice" }
+            }))
+          };
+        }
+      }
+    };
+
+    const listed = await client.listOpenPullRequests({ owner: "metyatech", repo: "demo" }, { limit: 150 });
+    expect(listed).toHaveLength(150);
+    expect(calls).toHaveLength(2);
+    expect(calls[0]?.per_page).toBe(100);
+    expect(calls[1]?.per_page).toBe(100);
+  });
+
+  it("throws for non-finite limit and returns empty for non-positive limit", async () => {
+    const client = new GitHubClient("dummy");
+    const calls: any[] = [];
+    (client as any).octokit = {
+      pulls: {
+        list: async (params: any) => {
+          calls.push(params);
+          return { data: [] };
+        }
+      }
+    };
+
+    await expect(
+      client.listOpenPullRequests({ owner: "metyatech", repo: "demo" }, { limit: Number.NaN })
+    ).rejects.toThrow(/Invalid limit/);
+    await expect(
+      client.listOpenPullRequests({ owner: "metyatech", repo: "demo" }, { limit: 0 })
+    ).resolves.toEqual([]);
+    expect(calls).toHaveLength(0);
+  });
 });
 
 describe("GitHubClient.getOpenPullRequestCount", () => {
