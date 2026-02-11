@@ -71,7 +71,7 @@ function renderHtml(): string {
         transition: background 0.4s;
       }
       .hero.running { background: #22c55e; color: #fff; }
-      .hero.idle    { background: #f59e0b; color: #fff; }
+      .hero.idle    { background: #b45309; color: #fff; }
       .hero.paused  { background: #8b5cf6; color: #fff; }
       .hero-title {
         font-size: 26px;
@@ -97,6 +97,14 @@ function renderHtml(): string {
       @keyframes pulse-ring {
         0%, 100% { box-shadow: 0 0 0 0 rgba(255,255,255,0.5); }
         50%      { box-shadow: 0 0 0 6px rgba(255,255,255,0); }
+      }
+      @media (prefers-reduced-motion: reduce) {
+        .hero {
+          transition: none;
+        }
+        .pulse {
+          animation: none;
+        }
       }
       .hero-meta {
         font-size: 12px;
@@ -302,7 +310,7 @@ function renderHtml(): string {
 
       <!-- Stale Records (collapsed) -->
       <section class="panel" id="staleSection" hidden>
-        <button id="staleToggle" class="stale-toggle" type="button"></button>
+        <button id="staleToggle" class="stale-toggle" type="button" aria-controls="staleDetails" aria-expanded="false"></button>
         <div id="staleDetails" class="stale-details" hidden>
           <table>
             <thead>
@@ -348,6 +356,7 @@ function renderHtml(): string {
 
       staleToggle.addEventListener("click", () => {
         staleDetails.hidden = !staleDetails.hidden;
+        staleToggle.setAttribute("aria-expanded", String(!staleDetails.hidden));
         staleToggle.textContent = staleDetails.hidden
           ? staleToggle.dataset.label
           : staleToggle.dataset.label + " (click to collapse)";
@@ -385,6 +394,13 @@ function renderHtml(): string {
         if (minutes < 30) return "green";
         if (minutes <= 60) return "yellow";
         return "red";
+      };
+
+      const ageLevel = (minutes) => {
+        if (minutes == null) return "Unknown";
+        if (minutes < 30) return "Low";
+        if (minutes <= 60) return "Medium";
+        return "High";
       };
 
       const openPath = (pathValue) => {
@@ -444,7 +460,7 @@ function renderHtml(): string {
 
           const ageSp = document.createElement("span");
           ageSp.className = "age " + ageClass(row.ageMinutes);
-          ageSp.textContent = humanAge(row.ageMinutes);
+          ageSp.textContent = ageLevel(row.ageMinutes) + " " + humanAge(row.ageMinutes);
           footer.appendChild(ageSp);
 
           if (row.logPath) {
@@ -465,6 +481,7 @@ function renderHtml(): string {
         if (rows.length === 0 || !hadRows) {
           staleDetails.hidden = true;
         }
+        staleToggle.setAttribute("aria-expanded", String(!staleDetails.hidden));
         staleToggle.textContent = staleDetails.hidden ? label : label + " (click to collapse)";
 
         staleBody.textContent = "";

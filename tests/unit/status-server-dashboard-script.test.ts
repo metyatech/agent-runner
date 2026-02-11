@@ -17,6 +17,13 @@ type DashboardExports = {
   humanAge: (minutes: number | null) => string;
   renderCards: (rows: Array<Record<string, unknown>>) => void;
   renderStale: (rows: Array<Record<string, unknown>>) => void;
+  renderLogs: (
+    target: FakeElement,
+    latestTaskRun: Record<string, unknown> | null,
+    latestIdle: Record<string, unknown> | null,
+    recentLogs: Array<Record<string, unknown>>
+  ) => void;
+  renderReports: (target: FakeElement, rows: Array<Record<string, unknown>>) => void;
   makeLink: (pathValue: string, label?: string) => FakeElement;
   refresh: () => Promise<void>;
 };
@@ -28,6 +35,7 @@ class FakeElement {
   dataset: Record<string, string> = {};
   style: Record<string, string> = {};
   children: FakeElement[] = [];
+  private attributes: Record<string, string> = {};
   private listeners: Record<string, Array<(event: { preventDefault: () => void }) => void>> = {};
   private value = "";
 
@@ -56,6 +64,16 @@ class FakeElement {
     for (const listener of this.listeners[type] ?? []) {
       listener({ preventDefault: () => {} });
     }
+  }
+
+  setAttribute(name: string, value: string): void {
+    this.attributes[name] = String(value);
+  }
+
+  getAttribute(name: string): string | null {
+    return Object.prototype.hasOwnProperty.call(this.attributes, name)
+      ? this.attributes[name]
+      : null;
   }
 }
 
@@ -106,7 +124,7 @@ async function loadDashboardScript(): Promise<string> {
 function instrumentDashboardScript(script: string): string {
   return script.replace(
     /refresh\(\);\s*setInterval\(\s*refresh\s*,\s*[\d_]+\s*\);\s*/,
-    "globalThis.__testExports = { timeAgo, humanAge, renderCards, renderStale, makeLink, refresh };\n"
+    "globalThis.__testExports = { timeAgo, humanAge, renderCards, renderStale, renderLogs, renderReports, makeLink, refresh };\n"
   );
 }
 
@@ -242,10 +260,12 @@ setInterval( refresh , 5_000 );
     const firstCard = elements.cardGrid.children[0];
     const firstHeader = firstCard.children[0];
     const firstFooter = firstCard.children[firstCard.children.length - 1];
+    const firstAge = firstFooter.children[0];
     expect(
       firstHeader.children.some((child) => child.className === "issue-badge" && child.textContent === "#10")
     ).toBe(true);
     expect(firstFooter.children.some((child) => child.textContent === "Open log")).toBe(true);
+    expect(firstAge.textContent).toMatch(/^Low\s/);
 
     const secondCard = elements.cardGrid.children[1];
     const secondHeader = secondCard.children[0];
@@ -298,6 +318,77 @@ setInterval( refresh , 5_000 );
     elements.staleDetails.hidden = false;
     api.renderStale(staleRows);
     expect(elements.staleDetails.hidden).toBe(false);
+  });
+
+  it("syncs stale toggle aria-expanded with details visibility", async () => {
+    const { api, elements } = await createDashboardRuntime();
+    const staleRows: Array<Record<string, unknown>> = [
+      {
+        repo: { owner: "metyatech", repo: "agent-runner" },
+        kind: "task",
+        ageMinutes: 12
+      }
+    ];
+
+    api.renderStale(staleRows);
+    expect(elements.staleToggle.getAttribute("aria-expanded")).toBe("false");
+
+    elements.staleToggle.dispatch("click");
+    expect(elements.staleDetails.hidden).toBe(false);
+    expect(elements.staleToggle.getAttribute("aria-expanded")).toBe("true");
+  });
+
+  it("renderLogs deduplicates entries and renders labels and timestamps", async () => {
+    const { api, elements } = await createDashboardRuntime();
+    const now = new Date().toISOString();
+
+    api.renderLogs(
+      elements.logsList,
+      { path: "C:/tmp/task.log", updatedAt: now },
+      { path: "C:/tmp/idle.log", updatedAt: now },
+      [
+        { path: "C:/tmp/task.log", updatedAt: now },
+        { path: "C:/tmp/other.log", updatedAt: now }
+      ]
+    );
+
+    expect(elements.logsList.children).toHaveLength(3);
+    const linkTexts = elements.logsList.children
+      .map((li) => li.children.find((child) => child.href)?.textContent)
+      .filter((value): value is string => typeof value === "string");
+    expect(linkTexts.filter((value) => value === "C:/tmp/task.log")).toHaveLength(1);
+    expect(
+      elements.logsList.children[0].children.some(
+        (child) => child.className === "log-label" && child.textContent === "task-run"
+      )
+    ).toBe(true);
+    expect(
+      elements.logsList.children[0].children.some(
+        (child) => child.className === "log-time" && child.textContent.length > 0
+      )
+    ).toBe(true);
+  });
+
+  it("renderReports handles empty and populated rows", async () => {
+    const { api, elements } = await createDashboardRuntime();
+
+    api.renderReports(elements.reportsList, []);
+    expect(elements.reportsList.children).toHaveLength(1);
+    expect(elements.reportsList.children[0].textContent).toBe("None");
+
+    const now = new Date().toISOString();
+    api.renderReports(elements.reportsList, [{ path: "C:/tmp/report.json", updatedAt: now }]);
+    expect(elements.reportsList.children).toHaveLength(1);
+    expect(
+      elements.reportsList.children[0].children.some(
+        (child) => child.href === "/open?path=C%3A%2Ftmp%2Freport.json"
+      )
+    ).toBe(true);
+    expect(
+      elements.reportsList.children[0].children.some(
+        (child) => child.className === "log-time" && child.textContent.length > 0
+      )
+    ).toBe(true);
   });
 
   it("clears hero metadata when refresh fails after a successful render", async () => {
