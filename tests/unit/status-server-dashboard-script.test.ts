@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import fs from "node:fs";
 import http from "node:http";
 import os from "node:os";
@@ -15,6 +15,7 @@ type FetchScenario = {
 type DashboardExports = {
   timeAgo: (isoStr: string) => string;
   humanAge: (minutes: number | null) => string;
+  renderCards: (rows: Array<Record<string, unknown>>) => void;
   renderStale: (rows: Array<Record<string, unknown>>) => void;
   refresh: () => Promise<void>;
 };
@@ -91,10 +92,21 @@ async function loadDashboardScript(): Promise<string> {
     }
     return match[1];
   } finally {
-    await new Promise<void>((resolve, reject) => {
-      server.close((error) => (error ? reject(error) : resolve()));
-    });
+    try {
+      await new Promise<void>((resolve, reject) => {
+        server.close((error) => (error ? reject(error) : resolve()));
+      });
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true });
+    }
   }
+}
+
+function instrumentDashboardScript(script: string): string {
+  return script.replace(
+    /refresh\(\);\s*setInterval\(\s*refresh\s*,\s*[\d_]+\s*\);\s*/,
+    "globalThis.__testExports = { timeAgo, humanAge, renderCards, renderStale, refresh };\n"
+  );
 }
 
 async function createDashboardRuntime(scenarios: FetchScenario[] = []): Promise<{
@@ -102,10 +114,7 @@ async function createDashboardRuntime(scenarios: FetchScenario[] = []): Promise<
   elements: Record<string, FakeElement>;
 }> {
   const script = await loadDashboardScript();
-  const instrumented = script.replace(
-    /refresh\(\);\s*[\r\n]+\s*setInterval\(refresh, 5000\);\s*/,
-    "globalThis.__testExports = { timeAgo, humanAge, renderStale, refresh };\n"
-  );
+  const instrumented = instrumentDashboardScript(script);
   if (!instrumented.includes("__testExports")) {
     throw new Error("Failed to instrument dashboard script for tests.");
   }
@@ -172,6 +181,80 @@ async function createDashboardRuntime(scenarios: FetchScenario[] = []): Promise<
 }
 
 describe("status-server dashboard script regressions", () => {
+  it("cleans up temporary workdir after loading dashboard script", async () => {
+    const rmSpy = vi.spyOn(fs, "rmSync");
+    try {
+      await loadDashboardScript();
+      const cleanupCall = rmSpy.mock.calls.find(
+        ([target, options]) =>
+          typeof target === "string" &&
+          target.includes(`${path.sep}agent-runner-ui-`) &&
+          options &&
+          typeof options === "object" &&
+          "recursive" in options &&
+          "force" in options
+      );
+      expect(cleanupCall).toBeDefined();
+      expect(cleanupCall?.[1]).toEqual({ recursive: true, force: true });
+    } finally {
+      rmSpy.mockRestore();
+    }
+  });
+
+  it("instrumentation tolerates whitespace around setInterval arguments", () => {
+    const source = `
+function timeAgo() {}
+function humanAge() {}
+function renderCards() {}
+function renderStale() {}
+async function refresh() {}
+refresh();
+setInterval( refresh , 5_000 );
+`;
+    const instrumented = instrumentDashboardScript(source);
+    expect(instrumented).toContain("__testExports");
+  });
+
+  it("renders running cards with key fields", async () => {
+    const { api, elements } = await createDashboardRuntime();
+    const rows: Array<Record<string, unknown>> = [
+      {
+        repo: { owner: "metyatech", repo: "agent-runner" },
+        issueNumber: 10,
+        kind: "task",
+        engine: "codex",
+        task: "Handle dashboard comments",
+        ageMinutes: 8.4,
+        logPath: "C:/tmp/task.log"
+      },
+      {
+        repo: { owner: "metyatech", repo: "agent-runner" },
+        kind: "task",
+        ageMinutes: 61
+      }
+    ];
+
+    api.renderCards(rows);
+    expect(elements.runningEmpty.hidden).toBe(true);
+    expect(elements.cardGrid.children).toHaveLength(2);
+
+    const firstCard = elements.cardGrid.children[0];
+    const firstHeader = firstCard.children[0];
+    const firstFooter = firstCard.children[firstCard.children.length - 1];
+    expect(
+      firstHeader.children.some((child) => child.className === "issue-badge" && child.textContent === "#10")
+    ).toBe(true);
+    expect(firstFooter.children.some((child) => child.textContent === "Open log")).toBe(true);
+
+    const secondCard = elements.cardGrid.children[1];
+    const secondHeader = secondCard.children[0];
+    expect(secondHeader.children.some((child) => child.className === "issue-badge")).toBe(false);
+
+    api.renderCards([]);
+    expect(elements.runningEmpty.hidden).toBe(false);
+    expect(elements.cardGrid.children).toHaveLength(0);
+  });
+
   it("humanAge normalizes rounding at hour boundaries", async () => {
     const { api } = await createDashboardRuntime();
     expect(api.humanAge(119.9)).toBe("2h 0min");
