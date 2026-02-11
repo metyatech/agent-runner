@@ -772,7 +772,11 @@ export class GitHubClient {
         if (pulls.length >= limit) {
           break;
         }
-        if (!pull.number || !pull.html_url) {
+        if (
+          typeof pull.number !== "number" ||
+          typeof pull.html_url !== "string" ||
+          pull.html_url.length === 0
+        ) {
           continue;
         }
         pulls.push({

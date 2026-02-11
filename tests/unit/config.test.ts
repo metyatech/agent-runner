@@ -175,3 +175,23 @@ describe("loadConfig", () => {
   });
 });
 
+describe("default config quality", () => {
+  it("keeps idle overlap guard in runner logic, not duplicated in template text", () => {
+    const configPath = path.resolve("agent-runner.config.json");
+    const raw = fs.readFileSync(configPath, "utf8");
+    const parsed = JSON.parse(raw) as {
+      idle?: {
+        promptTemplate?: string;
+      };
+    };
+    const promptTemplate = parsed.idle?.promptTemplate ?? "";
+
+    expect(promptTemplate).not.toContain(
+      "Use the open PR context above and avoid overlapping work already in progress."
+    );
+    expect(promptTemplate).not.toContain(
+      "If proposed work overlaps an open PR, do not open a new PR; exit cleanly and explain overlap in the AGENT_RUNNER_SUMMARY_START/END block."
+    );
+  });
+});
+

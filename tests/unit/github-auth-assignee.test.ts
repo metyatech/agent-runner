@@ -222,6 +222,62 @@ describe("GitHubClient.listOpenPullRequests", () => {
     ).resolves.toEqual([]);
     expect(calls).toHaveLength(0);
   });
+
+  it("skips items without typed number and non-empty URL", async () => {
+    const client = new GitHubClient("dummy");
+    (client as any).octokit = {
+      pulls: {
+        list: async () => ({
+          data: [
+            {
+              number: "9",
+              title: "invalid-number",
+              body: "x",
+              html_url: "https://github.com/metyatech/demo/pull/9",
+              updated_at: "2026-02-11T10:00:00Z",
+              user: { login: "alice" }
+            },
+            {
+              number: 10,
+              title: "invalid-url-empty",
+              body: "x",
+              html_url: "",
+              updated_at: "2026-02-11T09:59:00Z",
+              user: { login: "alice" }
+            },
+            {
+              number: 11,
+              title: "invalid-url-null",
+              body: "x",
+              html_url: null,
+              updated_at: "2026-02-11T09:58:00Z",
+              user: { login: "alice" }
+            },
+            {
+              number: 12,
+              title: "valid",
+              body: "ok",
+              html_url: "https://github.com/metyatech/demo/pull/12",
+              updated_at: "2026-02-11T09:57:00Z",
+              user: { login: "alice" }
+            }
+          ]
+        })
+      }
+    };
+
+    const listed = await client.listOpenPullRequests({ owner: "metyatech", repo: "demo" }, { limit: 20 });
+    expect(listed).toEqual([
+      {
+        number: 12,
+        title: "valid",
+        body: "ok",
+        url: "https://github.com/metyatech/demo/pull/12",
+        updatedAt: "2026-02-11T09:57:00Z",
+        author: "alice"
+      }
+    ]);
+  });
 });
 
 describe("GitHubClient.getOpenPullRequestCount", () => {
