@@ -19,9 +19,10 @@ export function resolveRunnerStatePath(workdirRoot: string): string {
 }
 
 export function loadRunnerState(statePath: string): RunnerState {
-  return withStateDb(statePath, (db) => {
+  return withStateDb(statePath, db => {
     const rows = db
-      .prepare(`
+      .prepare(
+        `
         SELECT
           a.issue_id AS issueId,
           a.issue_number AS issueNumber,
@@ -33,7 +34,8 @@ export function loadRunnerState(statePath: string): RunnerState {
         FROM activities a
         JOIN repos r ON r.id = a.repo_id
         WHERE a.kind = 'issue'
-      `)
+      `
+      )
       .all() as Array<{
       issueId: number;
       issueNumber: number;
@@ -45,7 +47,7 @@ export function loadRunnerState(statePath: string): RunnerState {
     }>;
 
     return {
-      running: rows.map((row) => ({
+      running: rows.map(row => ({
         issueId: row.issueId,
         issueNumber: row.issueNumber,
         repo: { owner: row.owner, repo: row.repo },
@@ -58,7 +60,7 @@ export function loadRunnerState(statePath: string): RunnerState {
 }
 
 export function saveRunnerState(statePath: string, state: RunnerState): void {
-  withStateDb(statePath, (db) => {
+  withStateDb(statePath, db => {
     db.prepare("DELETE FROM activities WHERE kind = 'issue'").run();
     const insert = db.prepare(`
       INSERT INTO activities (
@@ -67,16 +69,25 @@ export function saveRunnerState(statePath: string, state: RunnerState): void {
     `);
     for (const record of state.running) {
       const repoId = upsertRepo(db, record.repo);
-      insert.run(`issue:${record.issueId}`, repoId, record.startedAt, record.pid, record.logPath, record.issueId, record.issueNumber);
+      insert.run(
+        `issue:${record.issueId}`,
+        repoId,
+        record.startedAt,
+        record.pid,
+        record.logPath,
+        record.issueId,
+        record.issueNumber
+      );
     }
   });
 }
 
 export function recordRunningIssue(statePath: string, record: RunningIssueRecord): void {
-  withStateDb(statePath, (db) => {
+  withStateDb(statePath, db => {
     const repoId = upsertRepo(db, record.repo);
     db.prepare("DELETE FROM activities WHERE issue_id = ? AND id <> ?").run(record.issueId, `issue:${record.issueId}`);
-    db.prepare(`
+    db.prepare(
+      `
       INSERT INTO activities (
         id, kind, engine, repo_id, started_at, pid, log_path, issue_id, issue_number, task
       ) VALUES (?, 'issue', 'codex', ?, ?, ?, ?, ?, ?, NULL)
@@ -87,7 +98,8 @@ export function recordRunningIssue(statePath: string, record: RunningIssueRecord
         pid = excluded.pid,
         log_path = excluded.log_path,
         issue_number = excluded.issue_number
-    `).run(
+    `
+    ).run(
       `issue:${record.issueId}`,
       repoId,
       record.startedAt,
@@ -100,13 +112,13 @@ export function recordRunningIssue(statePath: string, record: RunningIssueRecord
 }
 
 export function removeRunningIssue(statePath: string, issueId: number): void {
-  withStateDb(statePath, (db) => {
+  withStateDb(statePath, db => {
     db.prepare("DELETE FROM activities WHERE issue_id = ?").run(issueId);
   });
 }
 
 export function findRunningRecord(state: RunnerState, issue: IssueInfo): RunningIssueRecord | null {
-  return state.running.find((entry) => entry.issueId === issue.id) ?? null;
+  return state.running.find(entry => entry.issueId === issue.id) ?? null;
 }
 
 export function isProcessAlive(pid: number): boolean {

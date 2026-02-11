@@ -94,14 +94,7 @@
         "repoScope": { "type": "string", "enum": ["all", "local"] },
         "usageGate": {
           "type": "object",
-          "required": [
-            "enabled",
-            "command",
-            "args",
-            "timeoutSeconds",
-            "minRemainingPercent",
-            "weeklySchedule"
-          ],
+          "required": ["enabled", "command", "args", "timeoutSeconds", "minRemainingPercent", "weeklySchedule"],
           "properties": {
             "enabled": { "type": "boolean" },
             "command": { "type": "string", "minLength": 1 },
@@ -120,11 +113,7 @@
             },
             "weeklySchedule": {
               "type": "object",
-              "required": [
-                "startMinutes",
-                "minRemainingPercentAtStart",
-                "minRemainingPercentAtEnd"
-              ],
+              "required": ["startMinutes", "minRemainingPercentAtStart", "minRemainingPercentAtEnd"],
               "properties": {
                 "startMinutes": { "type": "integer", "minimum": 0, "maximum": 10080 },
                 "minRemainingPercentAtStart": { "type": "number", "minimum": 0, "maximum": 100 },
@@ -145,11 +134,7 @@
             "apiVersion": { "type": "string", "minLength": 1 },
             "monthlySchedule": {
               "type": "object",
-              "required": [
-                "startMinutes",
-                "minRemainingPercentAtStart",
-                "minRemainingPercentAtEnd"
-              ],
+              "required": ["startMinutes", "minRemainingPercentAtStart", "minRemainingPercentAtEnd"],
               "properties": {
                 "startMinutes": { "type": "integer", "minimum": 0, "maximum": 525600 },
                 "minRemainingPercentAtStart": { "type": "number", "minimum": 0, "maximum": 100 },
@@ -162,13 +147,7 @@
         },
         "geminiUsageGate": {
           "type": "object",
-          "required": [
-            "enabled",
-            "strategy",
-            "startMinutes",
-            "minRemainingPercentAtStart",
-            "minRemainingPercentAtEnd"
-          ],
+          "required": ["enabled", "strategy", "startMinutes", "minRemainingPercentAtStart", "minRemainingPercentAtEnd"],
           "properties": {
             "enabled": { "type": "boolean" },
             "strategy": { "type": "string", "enum": ["spare-only"] },
@@ -194,11 +173,7 @@
             "monthlyLimit": { "type": "integer", "minimum": 1, "maximum": 1000000 },
             "monthlySchedule": {
               "type": "object",
-              "required": [
-                "startMinutes",
-                "minRemainingPercentAtStart",
-                "minRemainingPercentAtEnd"
-              ],
+              "required": ["startMinutes", "minRemainingPercentAtStart", "minRemainingPercentAtEnd"],
               "properties": {
                 "startMinutes": { "type": "integer", "minimum": 0, "maximum": 525600 },
                 "minRemainingPercentAtStart": { "type": "number", "minimum": 0, "maximum": 100 },
@@ -289,4 +264,3 @@
   },
   "additionalProperties": false
 }
-

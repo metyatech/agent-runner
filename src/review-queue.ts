@@ -109,7 +109,7 @@ async function withQueueLock<T>(queuePath: string, action: () => T | Promise<T>)
       if (Date.now() - start >= DEFAULT_LOCK_TIMEOUT_MS) {
         throw new Error("Timed out waiting for review queue lock.");
       }
-      await new Promise((resolve) => setTimeout(resolve, DEFAULT_LOCK_RETRY_MS));
+      await new Promise(resolve => setTimeout(resolve, DEFAULT_LOCK_RETRY_MS));
     }
   }
 
@@ -134,7 +134,7 @@ export async function enqueueReviewTask(
 ): Promise<boolean> {
   return withQueueLock(queuePath, () => {
     const state = readQueueState(queuePath);
-    if (state.queued.some((existing) => existing.issueId === entry.issueId)) {
+    if (state.queued.some(existing => existing.issueId === entry.issueId)) {
       return false;
     }
     const next: ReviewQueueEntry[] = [
@@ -157,7 +157,7 @@ export async function removeReviewTasks(queuePath: string, issueIds: number[]): 
   const uniqueIds = new Set(issueIds);
   await withQueueLock(queuePath, () => {
     const state = readQueueState(queuePath);
-    const next = state.queued.filter((entry) => !uniqueIds.has(entry.issueId));
+    const next = state.queued.filter(entry => !uniqueIds.has(entry.issueId));
     writeQueueState(queuePath, next);
   });
 }

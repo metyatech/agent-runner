@@ -71,8 +71,8 @@ function listRecentFiles(dir: string, limit: number, exclude?: RegExp): FileSnap
   }
   const entries = fs
     .readdirSync(dir, { withFileTypes: true })
-    .filter((entry) => entry.isFile() && (!exclude || !exclude.test(entry.name)))
-    .map((entry) => {
+    .filter(entry => entry.isFile() && (!exclude || !exclude.test(entry.name)))
+    .map(entry => {
       const fullPath = path.join(dir, entry.name);
       const stat = fs.statSync(fullPath);
       const updatedAt = new Date(stat.mtimeMs).toISOString();
@@ -114,23 +114,18 @@ function snapshotFromPointer(pointerPath: string): FileSnapshot | null {
   return snapshotFile(target);
 }
 
-function mergeRunnerState(
-  records: ActivityRecord[],
-  workdirRoot: string
-): ActivityRecord[] {
+function mergeRunnerState(records: ActivityRecord[], workdirRoot: string): ActivityRecord[] {
   const statePath = resolveRunnerStatePath(workdirRoot);
   if (!fs.existsSync(statePath)) {
     return records;
   }
   const state = loadRunnerState(statePath);
   const existingIssueIds = new Set(
-    records
-      .filter((record) => record.issueId !== undefined)
-      .map((record) => record.issueId)
+    records.filter(record => record.issueId !== undefined).map(record => record.issueId)
   );
   const additions = state.running
-    .filter((record) => !existingIssueIds.has(record.issueId))
-    .map((record) => ({
+    .filter(record => !existingIssueIds.has(record.issueId))
+    .map(record => ({
       id: `issue:${record.issueId}`,
       kind: "issue" as const,
       engine: "codex" as const,
@@ -164,9 +159,9 @@ export function buildStatusSnapshot(workdirRoot: string): StatusSnapshot {
   }
 
   records = mergeRunnerState(records, workdirRoot);
-  const snapshots = records.map((record) => toSnapshot(record, nowMs));
-  const running = snapshots.filter((record) => record.alive);
-  const stale = snapshots.filter((record) => !record.alive);
+  const snapshots = records.map(record => toSnapshot(record, nowMs));
+  const running = snapshots.filter(record => record.alive);
+  const stale = snapshots.filter(record => !record.alive);
 
   const logsDir = path.resolve(workdirRoot, "agent-runner", "logs");
   const reportsDir = path.resolve(workdirRoot, "agent-runner", "reports");

@@ -7,10 +7,10 @@ import { startStatusServer } from "../../src/status-server.js";
 
 function fetchText(url: string): Promise<string> {
   return new Promise((resolve, reject) => {
-    const req = http.get(url, (res) => {
+    const req = http.get(url, res => {
       let body = "";
       res.setEncoding("utf8");
-      res.on("data", (chunk) => {
+      res.on("data", chunk => {
         body += chunk;
       });
       res.on("end", () => resolve(body));
@@ -38,7 +38,7 @@ describe("status-server", () => {
       expect(html).toContain("Latest Logs");
     } finally {
       await new Promise<void>((resolve, reject) => {
-        server.close((error) => (error ? reject(error) : resolve()));
+        server.close(error => (error ? reject(error) : resolve()));
       });
     }
   });

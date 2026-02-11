@@ -67,9 +67,9 @@ describe("runner-state", () => {
       ]
     };
 
-    const result = evaluateRunningIssues([issueA, issueB], state, (pid) => pid === 123);
-    expect(result.deadProcess.map((entry) => entry.issue.id)).toEqual([issueA.id]);
-    expect(result.missingRecord.map((entry) => entry.id)).toEqual([issueB.id]);
+    const result = evaluateRunningIssues([issueA, issueB], state, pid => pid === 123);
+    expect(result.deadProcess.map(entry => entry.issue.id)).toEqual([issueA.id]);
+    expect(result.missingRecord.map(entry => entry.id)).toEqual([issueB.id]);
   });
 
   it("treats EPERM from process.kill(pid, 0) as alive", () => {

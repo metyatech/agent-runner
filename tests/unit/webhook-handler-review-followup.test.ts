@@ -357,4 +357,3 @@ describe("webhook-handler review followup", () => {
     expect(loadReviewQueue(reviewQueuePath)).toHaveLength(1);
   });
 });
-

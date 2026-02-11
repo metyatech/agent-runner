@@ -38,15 +38,15 @@ export async function runCommand(
       reject(new Error(`Timed out running: ${command} ${args.join(" ")}`));
     }, timeoutMs);
 
-    child.stdout.on("data", (chunk) => stdoutChunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk)));
-    child.stderr.on("data", (chunk) => stderrChunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk)));
+    child.stdout.on("data", chunk => stdoutChunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk)));
+    child.stderr.on("data", chunk => stderrChunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk)));
 
-    child.on("error", (error) => {
+    child.on("error", error => {
       clearTimeout(timer);
       reject(error);
     });
 
-    child.on("close", (code) => {
+    child.on("close", code => {
       clearTimeout(timer);
       const stdout = Buffer.concat(stdoutChunks).toString("utf8");
       const stderr = Buffer.concat(stderrChunks).toString("utf8");
@@ -59,4 +59,3 @@ export async function runCommand(
     });
   });
 }
-

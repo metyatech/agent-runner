@@ -7,8 +7,7 @@ describe("pull-request-url", () => {
   });
 
   it("parses the last GitHub PR URL in text", () => {
-    const text =
-      "first https://github.com/metyatech/demo/pull/1 and then https://github.com/metyatech/demo/pull/42";
+    const text = "first https://github.com/metyatech/demo/pull/1 and then https://github.com/metyatech/demo/pull/42";
     expect(parseLastPullRequestUrl(text)).toEqual({
       repo: { owner: "metyatech", repo: "demo" },
       number: 42,
@@ -16,4 +15,3 @@ describe("pull-request-url", () => {
     });
   });
 });
-

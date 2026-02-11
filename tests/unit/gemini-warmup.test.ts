@@ -126,4 +126,3 @@ describe("evaluateGeminiWarmup", () => {
     expect(decision.warmupFlash).toBe(false);
   });
 });
-

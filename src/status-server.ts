@@ -387,10 +387,7 @@ function renderHtml(): string {
 </html>`;
 }
 
-function sendJson(
-  res: http.ServerResponse,
-  payload: StatusSnapshot
-): void {
+function sendJson(res: http.ServerResponse, payload: StatusSnapshot): void {
   const body = JSON.stringify(payload, null, 2);
   res.statusCode = 200;
   res.setHeader("Content-Type", "application/json; charset=utf-8");

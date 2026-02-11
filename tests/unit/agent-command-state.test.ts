@@ -21,4 +21,3 @@ describe("agent-command-state", () => {
     expect(await hasProcessedAgentCommandComment(statePath, 123)).toBe(true);
   });
 });
-

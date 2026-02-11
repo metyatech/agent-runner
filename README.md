@@ -447,10 +447,12 @@ node dist/cli.js labels sync --yes
 - `needsUserReply`: execution paused because the agent explicitly needs user input
 
 Quota handling:
+
 - If Codex usage limit is hit, the runner marks the issue as `failed`, posts the next retry time, and automatically re-queues at or after that time.
 - Retry scheduling is persisted on disk, so it still resumes correctly after host restart/offline periods.
 
 User-reply handling:
+
 - When a run pauses for user input, the runner applies `needsUserReply`.
 - After the user replies, the runner re-queues and resumes from the previous Codex session when available.
 
@@ -534,7 +536,7 @@ The agent runner can use Amazon Q for command line as an idle engine via WSL2.
 
 ### Setup (Windows + WSL2)
 
-1) Install the CLI inside WSL (Ubuntu example):
+1. Install the CLI inside WSL (Ubuntu example):
 
 ```bash
 mkdir -p /tmp/amazon-q-install
@@ -545,7 +547,7 @@ chmod +x q/install.sh
 ./q/install.sh --no-confirm
 ```
 
-2) Login (free Builder ID):
+2. Login (free Builder ID):
 
 ```bash
 q login --license free --use-device-flow
@@ -566,7 +568,15 @@ Set `amazonQ` in the config (ships disabled by default):
   "amazonQ": {
     "enabled": true,
     "command": "wsl.exe",
-    "args": ["-d", "Ubuntu", "--", "bash", "-lc", "q chat --no-interactive --trust-all-tools --wrap never \"$1\"", "--"],
+    "args": [
+      "-d",
+      "Ubuntu",
+      "--",
+      "bash",
+      "-lc",
+      "q chat --no-interactive --trust-all-tools --wrap never \"$1\"",
+      "--"
+    ],
     "promptMode": "arg"
   }
 }
@@ -671,5 +681,3 @@ is running in the background.
 ## Release / deploy
 
 Not applicable. This repository is intended to run locally.
-
-

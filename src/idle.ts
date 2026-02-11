@@ -60,7 +60,7 @@ export function selectIdleRepos(
   const cooldownMs = cooldownMinutes * 60 * 1000;
   const nowMs = now.getTime();
 
-  const scored = repos.map((repo) => {
+  const scored = repos.map(repo => {
     const key = `${repo.owner}/${repo.repo}`;
     const entry = history.repos[key];
     const parsed = entry?.lastRunAt ? Date.parse(entry.lastRunAt) : Number.NaN;
@@ -70,10 +70,10 @@ export function selectIdleRepos(
   });
 
   return scored
-    .filter((item) => item.eligible)
+    .filter(item => item.eligible)
     .sort((a, b) => a.lastRunAt - b.lastRunAt)
     .slice(0, maxRuns)
-    .map((item) => item.repo);
+    .map(item => item.repo);
 }
 
 export function chooseIdleTask(tasks: string[], history: IdleHistory): { task: string; nextCursor: number } {
@@ -85,12 +85,7 @@ export function chooseIdleTask(tasks: string[], history: IdleHistory): { task: s
   return { task, nextCursor: history.taskCursor + 1 };
 }
 
-export function recordIdleRun(
-  history: IdleHistory,
-  repo: RepoInfo,
-  task: string,
-  startedAt: string
-): void {
+export function recordIdleRun(history: IdleHistory, repo: RepoInfo, task: string, startedAt: string): void {
   const key = `${repo.owner}/${repo.repo}`;
   history.repos[key] = { lastRunAt: startedAt, lastTask: task };
 }

@@ -2,12 +2,7 @@ import { describe, expect, it } from "vitest";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import {
-  clearStopRequest,
-  isStopRequested,
-  requestStop,
-  resolveStopFlagPath
-} from "../../src/stop-flag.js";
+import { clearStopRequest, isStopRequested, requestStop, resolveStopFlagPath } from "../../src/stop-flag.js";
 
 describe("stop-flag", () => {
   it("creates and clears stop requests", () => {

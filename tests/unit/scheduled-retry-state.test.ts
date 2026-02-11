@@ -23,12 +23,7 @@ describe("scheduled-retry-state", () => {
       repo: { owner: "metyatech", repo: "demo" }
     };
 
-    scheduleRetry(
-      statePath,
-      { ...baseIssue, id: 1, number: 1 },
-      "2026-02-06T00:00:00.000Z",
-      "session-a"
-    );
+    scheduleRetry(statePath, { ...baseIssue, id: 1, number: 1 }, "2026-02-06T00:00:00.000Z", "session-a");
     scheduleRetry(
       statePath,
       { ...baseIssue, id: 2, number: 2, url: "https://github.com/metyatech/demo/issues/2" },

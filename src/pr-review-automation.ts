@@ -81,9 +81,7 @@ export function summarizeLatestReviews(
   let actionableComments = 0;
   let okComments = 0;
   const required = new Set<string>(
-    requestedReviewers
-      .map((reviewer) => reviewer.trim().toLowerCase())
-      .filter((reviewer) => reviewer.length > 0)
+    requestedReviewers.map(reviewer => reviewer.trim().toLowerCase()).filter(reviewer => reviewer.length > 0)
   );
   for (const reviewer of byAuthor.keys()) {
     required.add(reviewer);
@@ -109,7 +107,7 @@ export function summarizeLatestReviews(
     okComments += 1;
   }
 
-  const pendingReviewers = Array.from(required.values()).filter((reviewer) => !byAuthor.has(reviewer)).length;
+  const pendingReviewers = Array.from(required.values()).filter(reviewer => !byAuthor.has(reviewer)).length;
   const reviewerCount = required.size;
   const hasPositiveSignal = approvals + okComments > 0;
 

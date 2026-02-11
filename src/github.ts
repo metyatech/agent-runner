@@ -196,7 +196,7 @@ export class GitHubClient {
           body: issue.body ?? null,
           author: issue.user?.login ?? null,
           repo,
-          labels: issue.labels.map((item) => (typeof item === "string" ? item : item.name ?? "")),
+          labels: issue.labels.map(item => (typeof item === "string" ? item : (item.name ?? ""))),
           url: issue.html_url,
           isPullRequest
         });
@@ -219,7 +219,9 @@ export class GitHubClient {
   }
 
   async addAssignees(repo: RepoInfo, issueNumber: number, assignees: string[]): Promise<void> {
-    const unique = Array.from(new Set(assignees.map((assignee) => assignee.trim()).filter((assignee) => assignee.length > 0)));
+    const unique = Array.from(
+      new Set(assignees.map(assignee => assignee.trim()).filter(assignee => assignee.length > 0))
+    );
     if (unique.length === 0) {
       return;
     }
@@ -264,9 +266,7 @@ export class GitHubClient {
       perPage: 10,
       page: 1
     });
-    const match = response.data.items.find(
-      (item: any) => !("pull_request" in item) && item.title === title
-    );
+    const match = response.data.items.find((item: any) => !("pull_request" in item) && item.title === title);
     if (!match) {
       return null;
     }
@@ -277,7 +277,7 @@ export class GitHubClient {
       body: match.body ?? null,
       author: match.user?.login ?? null,
       repo,
-      labels: match.labels.map((item: any) => (typeof item === "string" ? item : item.name ?? "")),
+      labels: match.labels.map((item: any) => (typeof item === "string" ? item : (item.name ?? ""))),
       url: match.html_url,
       isPullRequest: false
     };
@@ -296,8 +296,8 @@ export class GitHubClient {
     const encodedLabel = label.includes('"') ? label.replace(/"/g, '\\"') : label;
     const exclude = options?.excludeLabels ?? [];
     const excludeQuery = exclude
-      .filter((entry) => entry.length > 0)
-      .map((entry) => ` -label:"${entry.replace(/"/g, '\\"')}"`)
+      .filter(entry => entry.length > 0)
+      .map(entry => ` -label:"${entry.replace(/"/g, '\\"')}"`)
       .join("");
     const query = `user:${owner} is:issue state:open label:"${encodedLabel}"${excludeQuery}`;
     const pageSize = Math.min(100, Math.max(1, options?.perPage ?? 100));
@@ -333,7 +333,7 @@ export class GitHubClient {
           body: item.body ?? null,
           author: item.user?.login ?? null,
           repo,
-          labels: item.labels.map((label: any) => (typeof label === "string" ? label : label.name ?? "")),
+          labels: item.labels.map((label: any) => (typeof label === "string" ? label : (label.name ?? ""))),
           url: item.html_url,
           isPullRequest: false
         });
@@ -364,8 +364,8 @@ export class GitHubClient {
     const encodedLabel = label.includes('"') ? label.replace(/"/g, '\\"') : label;
     const exclude = options?.excludeLabels ?? [];
     const excludeQuery = exclude
-      .filter((entry) => entry.length > 0)
-      .map((entry) => ` -label:"${entry.replace(/"/g, '\\"')}"`)
+      .filter(entry => entry.length > 0)
+      .map(entry => ` -label:"${entry.replace(/"/g, '\\"')}"`)
       .join("");
     const baseQuery = `user:${owner} state:open label:"${encodedLabel}"${excludeQuery}`;
     const pageSize = Math.min(100, Math.max(1, options?.perPage ?? 100));
@@ -405,7 +405,7 @@ export class GitHubClient {
             body: item.body ?? null,
             author: item.user?.login ?? null,
             repo,
-            labels: item.labels.map((label: any) => (typeof label === "string" ? label : label.name ?? "")),
+            labels: item.labels.map((label: any) => (typeof label === "string" ? label : (label.name ?? ""))),
             url: item.html_url,
             isPullRequest: "pull_request" in item
           });
@@ -438,8 +438,8 @@ export class GitHubClient {
     const encodedPhrase = phrase.replace(/"/g, '\\"');
     const exclude = options?.excludeLabels ?? [];
     const excludeQuery = exclude
-      .filter((entry) => entry.length > 0)
-      .map((entry) => ` -label:"${entry.replace(/"/g, '\\"')}"`)
+      .filter(entry => entry.length > 0)
+      .map(entry => ` -label:"${entry.replace(/"/g, '\\"')}"`)
       .join("");
     const baseQuery = `user:${owner} state:open in:comments "${encodedPhrase}"${excludeQuery}`;
     const pageSize = Math.min(100, Math.max(1, options?.perPage ?? 100));
@@ -479,7 +479,7 @@ export class GitHubClient {
             body: item.body ?? null,
             author: item.user?.login ?? null,
             repo,
-            labels: item.labels.map((label: any) => (typeof label === "string" ? label : label.name ?? "")),
+            labels: item.labels.map((label: any) => (typeof label === "string" ? label : (label.name ?? ""))),
             url: item.html_url,
             isPullRequest: "pull_request" in item
           });
@@ -512,8 +512,8 @@ export class GitHubClient {
     const encodedAuthor = author.replace(/"/g, '\\"');
     const exclude = options?.excludeLabels ?? [];
     const excludeQuery = exclude
-      .filter((entry) => entry.length > 0)
-      .map((entry) => ` -label:"${entry.replace(/"/g, '\\"')}"`)
+      .filter(entry => entry.length > 0)
+      .map(entry => ` -label:"${entry.replace(/"/g, '\\"')}"`)
       .join("");
     const query = `user:${owner} is:pull-request state:open author:"${encodedAuthor}"${excludeQuery}`;
     const pageSize = Math.min(100, Math.max(1, options?.perPage ?? 100));
@@ -549,7 +549,7 @@ export class GitHubClient {
           body: item.body ?? null,
           author: item.user?.login ?? null,
           repo,
-          labels: item.labels.map((label: any) => (typeof label === "string" ? label : label.name ?? "")),
+          labels: item.labels.map((label: any) => (typeof label === "string" ? label : (label.name ?? ""))),
           url: item.html_url,
           isPullRequest: true
         });
@@ -581,7 +581,7 @@ export class GitHubClient {
       body: response.data.body ?? null,
       author: response.data.user?.login ?? null,
       repo,
-      labels: response.data.labels.map((item) => (typeof item === "string" ? item : item.name ?? "")),
+      labels: response.data.labels.map(item => (typeof item === "string" ? item : (item.name ?? ""))),
       url: response.data.html_url,
       isPullRequest: false
     };
@@ -663,7 +663,7 @@ export class GitHubClient {
         body: response.data.body ?? null,
         author: response.data.user?.login ?? null,
         repo,
-        labels: response.data.labels.map((item) => (typeof item === "string" ? item : item.name ?? "")),
+        labels: response.data.labels.map(item => (typeof item === "string" ? item : (item.name ?? ""))),
         url: response.data.html_url,
         isPullRequest: Boolean((response.data as unknown as { pull_request?: unknown }).pull_request)
       };
@@ -733,7 +733,10 @@ export class GitHubClient {
     return branch;
   }
 
-  async getPullRequestHead(repo: RepoInfo, pullNumber: number): Promise<{
+  async getPullRequestHead(
+    repo: RepoInfo,
+    pullNumber: number
+  ): Promise<{
     headRef: string;
     headSha: string;
     headRepoFullName: string | null;
@@ -803,7 +806,7 @@ export class GitHubClient {
         mergeable:
           typeof (response.data as { mergeable?: boolean | null }).mergeable === "boolean"
             ? (response.data as { mergeable?: boolean | null }).mergeable!
-            : (response.data as { mergeable?: boolean | null }).mergeable ?? null,
+            : ((response.data as { mergeable?: boolean | null }).mergeable ?? null),
         mergeableState,
         headRef,
         headSha,
@@ -815,7 +818,7 @@ export class GitHubClient {
               (response.data as { requested_reviewers?: Array<{ login?: string | null }> | null })
                 .requested_reviewers ?? []
             )
-              .map((reviewer) => reviewer?.login ?? "")
+              .map(reviewer => reviewer?.login ?? "")
               .filter((reviewer): reviewer is string => reviewer.length > 0)
           : []
       };
@@ -843,8 +846,10 @@ export class GitHubClient {
     if (!first) {
       return null;
     }
-    const number = typeof (first as { number?: unknown }).number === "number" ? (first as { number: number }).number : null;
-    const url = typeof (first as { html_url?: unknown }).html_url === "string" ? (first as { html_url: string }).html_url : "";
+    const number =
+      typeof (first as { number?: unknown }).number === "number" ? (first as { number: number }).number : null;
+    const url =
+      typeof (first as { html_url?: unknown }).html_url === "string" ? (first as { html_url: string }).html_url : "";
     if (!number || number <= 0 || url.length === 0) {
       return null;
     }
@@ -994,7 +999,7 @@ export class GitHubClient {
 
   async requestPullRequestReviewers(repo: RepoInfo, pullNumber: number, reviewers: string[]): Promise<void> {
     const unique = Array.from(
-      new Set(reviewers.map((reviewer) => reviewer.trim()).filter((reviewer) => reviewer.length > 0))
+      new Set(reviewers.map(reviewer => reviewer.trim()).filter(reviewer => reviewer.length > 0))
     );
     if (unique.length === 0) {
       return;
@@ -1012,7 +1017,7 @@ export class GitHubClient {
 
   async removeRequestedPullRequestReviewers(repo: RepoInfo, pullNumber: number, reviewers: string[]): Promise<void> {
     const unique = Array.from(
-      new Set(reviewers.map((reviewer) => reviewer.trim()).filter((reviewer) => reviewer.length > 0))
+      new Set(reviewers.map(reviewer => reviewer.trim()).filter(reviewer => reviewer.length > 0))
     );
     if (unique.length === 0) {
       return;

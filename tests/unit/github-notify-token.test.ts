@@ -51,4 +51,3 @@ describe("github-notify-token", () => {
     }
   });
 });
-

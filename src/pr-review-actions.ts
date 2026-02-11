@@ -14,7 +14,7 @@ export async function resolveAllUnresolvedReviewThreads(options: {
   pullNumber: number;
 }): Promise<ResolveThreadsResult> {
   const threads = await options.client.listPullRequestReviewThreads(options.repo, options.pullNumber);
-  const unresolved = threads.filter((thread) => !thread.isResolved);
+  const unresolved = threads.filter(thread => !thread.isResolved);
   let resolved = 0;
   for (const thread of unresolved) {
     await options.client.resolvePullRequestReviewThread(thread.id);
@@ -52,7 +52,7 @@ async function waitForMergeable(options: {
     if (pr.mergeable !== null) {
       return { mergeable: pr.mergeable, mergeableState: pr.mergeableState, headSha: pr.headSha };
     }
-    await new Promise((resolve) => setTimeout(resolve, options.delayMs));
+    await new Promise(resolve => setTimeout(resolve, options.delayMs));
   }
   const pr = await options.client.getPullRequest(options.repo, options.pullNumber);
   if (!pr) return null;
@@ -87,7 +87,7 @@ export async function attemptAutoMergeApprovedPullRequest(options: {
 
   try {
     const threads = await options.client.listPullRequestReviewThreads(options.repo, options.pullNumber);
-    const unresolved = threads.filter((thread) => !thread.isResolved);
+    const unresolved = threads.filter(thread => !thread.isResolved);
     if (unresolved.length > 0) {
       return { merged: false, retry: true, reason: "unresolved_review_threads" };
     }
@@ -97,7 +97,7 @@ export async function attemptAutoMergeApprovedPullRequest(options: {
 
   const reviews = await options.client.listPullRequestReviews(options.repo, options.pullNumber);
   const summary = summarizeLatestReviews(
-    reviews.map((review) => ({
+    reviews.map(review => ({
       author: review.author,
       state: review.state,
       submittedAt: review.submittedAt,
@@ -156,12 +156,7 @@ export async function attemptAutoMergeApprovedPullRequest(options: {
         commitMessage
       });
     } catch (error) {
-      const message =
-        error instanceof Error
-          ? error.message
-          : typeof error === "string"
-            ? error
-            : null;
+      const message = error instanceof Error ? error.message : typeof error === "string" ? error : null;
       return { merged: false, message };
     }
   };

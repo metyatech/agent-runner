@@ -26,4 +26,3 @@ export function resolveGitHubNotifyToken(workdirRoot: string): string | null {
     return null;
   }
 }
-

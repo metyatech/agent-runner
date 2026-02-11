@@ -1,6 +1,7 @@
 import eslint from "@eslint/js";
 import tseslint from "@typescript-eslint/eslint-plugin";
 import tsparser from "@typescript-eslint/parser";
+import eslintConfigPrettier from "eslint-config-prettier";
 
 export default [
   eslint.configs.recommended,
@@ -17,11 +18,21 @@ export default [
     },
     rules: {
       "@typescript-eslint/consistent-type-imports": "error",
-      "@typescript-eslint/no-unused-vars": ["error", { "argsIgnorePattern": "^_" }],
+      "@typescript-eslint/no-unused-vars": ["error", { argsIgnorePattern: "^_" }],
       "no-console": "off"
     }
   },
+  eslintConfigPrettier,
   {
-    ignores: ["dist/**", ".githooks/**", ".worktrees/**", "git-cache/**", "logs/**", "reports/**", "state/**", "work/**"]
+    ignores: [
+      "dist/**",
+      ".githooks/**",
+      ".worktrees/**",
+      "git-cache/**",
+      "logs/**",
+      "reports/**",
+      "state/**",
+      "work/**"
+    ]
   }
 ];

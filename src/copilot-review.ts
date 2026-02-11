@@ -13,7 +13,9 @@ export function isCopilotReviewerLogin(login: string | null): boolean {
   const normalized = login.trim().toLowerCase();
   if (!normalized) return false;
   if (COPILOT_REVIEWER_LOGINS.has(normalized)) return true;
-  return normalized.includes("copilot") && (normalized.endsWith("[bot]") || normalized.includes("pull-request-reviewer"));
+  return (
+    normalized.includes("copilot") && (normalized.endsWith("[bot]") || normalized.includes("pull-request-reviewer"))
+  );
 }
 
 export function copilotReviewIndicatesNoNewComments(body: string | null): boolean {
@@ -27,7 +29,7 @@ function parseSubmittedAt(value: string | null): number {
 }
 
 export function latestCopilotReview(reviews: PullRequestReview[]): PullRequestReview | null {
-  const candidates = reviews.filter((review) => isCopilotReviewerLogin(review.author ?? null));
+  const candidates = reviews.filter(review => isCopilotReviewerLogin(review.author ?? null));
   if (candidates.length === 0) return null;
   let latest = candidates[0]!;
   for (const review of candidates.slice(1)) {

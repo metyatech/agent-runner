@@ -18,8 +18,8 @@ export function scheduleReviewFollowups(options: {
   const selected = options.queue.slice(0, spare);
   if (options.allowedEngines.length === 0) {
     return selected
-      .filter((entry) => !entry.requiresEngine)
-      .map((entry) => ({
+      .filter(entry => !entry.requiresEngine)
+      .map(entry => ({
         ...entry,
         engine: "codex"
       }));

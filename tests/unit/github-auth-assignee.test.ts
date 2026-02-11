@@ -75,4 +75,3 @@ describe("GitHubClient.findOpenPullRequestByHead", () => {
     });
   });
 });
-

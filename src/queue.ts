@@ -1,13 +1,7 @@
 import type { AgentRunnerConfig } from "./config.js";
 import type { GitHubClient, IssueInfo, RepoInfo } from "./github.js";
 import { listLocalRepos } from "./local-repos.js";
-import {
-  isBlocked,
-  isCacheFresh,
-  loadRepoCache,
-  saveRepoCache,
-  type RepoCache
-} from "./repo-cache.js";
+import { isBlocked, isCacheFresh, loadRepoCache, saveRepoCache, type RepoCache } from "./repo-cache.js";
 
 const DEFAULT_REPO_CACHE_MINUTES = 60;
 
@@ -28,9 +22,7 @@ function parseRateLimit(error: unknown): RateLimitInfo {
   const headers = response?.headers ?? {};
   const remaining = headers["x-ratelimit-remaining"]?.toString();
   const reset = headers["x-ratelimit-reset"]?.toString();
-  const isRateLimit =
-    remaining === "0" ||
-    message.toLowerCase().includes("rate limit");
+  const isRateLimit = remaining === "0" || message.toLowerCase().includes("rate limit");
   if (!isRateLimit) {
     return { resetAt: null };
   }
@@ -61,14 +53,13 @@ export async function listTargetRepos(
 }> {
   if (config.repos !== "all" && config.repos) {
     return {
-      repos: config.repos.map((repo) => ({ owner: config.owner, repo })),
+      repos: config.repos.map(repo => ({ owner: config.owner, repo })),
       source: "config",
       blockedUntil: null
     };
   }
 
-  const listLocalReposForOwner = (): RepoInfo[] =>
-    listLocalRepos(workdirRoot, config.owner);
+  const listLocalReposForOwner = (): RepoInfo[] => listLocalRepos(workdirRoot, config.owner);
 
   let cache: RepoCache | null = null;
   try {
@@ -116,9 +107,7 @@ export async function listQueuedIssues(
 ): Promise<IssueInfo[]> {
   const queuedIssues = await client.listIssuesByLabel(repo, config.labels.queued);
   return queuedIssues.filter(
-    (issue) =>
-      !issue.labels.includes(config.labels.running) &&
-      !issue.labels.includes(config.labels.needsUserReply)
+    issue => !issue.labels.includes(config.labels.running) && !issue.labels.includes(config.labels.needsUserReply)
   );
 }
 
@@ -128,4 +117,3 @@ export function pickNextIssues(issues: IssueInfo[], limit: number): IssueInfo[] 
     .sort((a, b) => a.number - b.number)
     .slice(0, limit);
 }
-

@@ -8,12 +8,7 @@ describe("resolveTargetRepos", () => {
       id: 1,
       number: 1,
       title: "Test",
-      body: [
-        "### Repository list (if applicable)",
-        "",
-        "demo, demo, other",
-        ""
-      ].join("\n"),
+      body: ["### Repository list (if applicable)", "", "demo, demo, other", ""].join("\n"),
       author: "metyatech",
       repo: { owner: "metyatech", repo: "demo" },
       labels: [],
@@ -22,6 +17,6 @@ describe("resolveTargetRepos", () => {
     };
 
     const repos = resolveTargetRepos(issue, "metyatech");
-    expect(repos.map((r) => r.repo)).toEqual(["demo", "other"]);
+    expect(repos.map(r => r.repo)).toEqual(["demo", "other"]);
   });
 });

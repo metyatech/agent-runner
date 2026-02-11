@@ -42,7 +42,7 @@ export function startWebhookServer(options: WebhookServerOptions): Promise<http.
     let received = 0;
     const maxBytes = options.maxPayloadBytes ?? DEFAULT_MAX_PAYLOAD_BYTES;
 
-    req.on("data", (chunk) => {
+    req.on("data", chunk => {
       const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
       received += buffer.length;
       if (received > maxBytes) {
@@ -72,10 +72,10 @@ export function startWebhookServer(options: WebhookServerOptions): Promise<http.
 
       const event = Array.isArray(req.headers["x-github-event"])
         ? req.headers["x-github-event"][0]
-        : req.headers["x-github-event"] ?? "";
+        : (req.headers["x-github-event"] ?? "");
       const delivery = Array.isArray(req.headers["x-github-delivery"])
         ? req.headers["x-github-delivery"][0]
-        : req.headers["x-github-delivery"] ?? null;
+        : (req.headers["x-github-delivery"] ?? null);
 
       if (!event) {
         respond(res, 400, "Missing event header.");

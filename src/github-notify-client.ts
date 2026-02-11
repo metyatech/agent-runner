@@ -33,4 +33,3 @@ export function createGitHubNotifyClient(workdirRoot: string): GitHubNotifyClien
 
   return null;
 }
-

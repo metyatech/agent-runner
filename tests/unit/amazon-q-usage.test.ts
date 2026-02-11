@@ -132,4 +132,3 @@ describe("evaluateAmazonQUsageGate", () => {
     expect(decision.allow).toBe(true);
   });
 });
-

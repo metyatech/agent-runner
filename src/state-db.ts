@@ -63,10 +63,12 @@ function runMigrations(db: DatabaseSync): void {
     | { value: string }
     | undefined;
   if (!current || Number.parseInt(current.value, 10) !== SCHEMA_VERSION) {
-    db.prepare(`
+    db.prepare(
+      `
       INSERT INTO state_meta (key, value) VALUES ('schema_version', ?)
       ON CONFLICT(key) DO UPDATE SET value = excluded.value
-    `).run(String(SCHEMA_VERSION));
+    `
+    ).run(String(SCHEMA_VERSION));
   }
 }
 
@@ -89,13 +91,15 @@ export function withStateDb<T>(dbPath: string, action: (db: DatabaseSync) => T):
 }
 
 export function upsertRepo(db: DatabaseSync, repo: RepoInfo): number {
-  db.prepare(`
+  db.prepare(
+    `
     INSERT INTO repos (owner, repo) VALUES (?, ?)
     ON CONFLICT(owner, repo) DO NOTHING
-  `).run(repo.owner, repo.repo);
-  const row = db
-    .prepare("SELECT id FROM repos WHERE owner = ? AND repo = ?")
-    .get(repo.owner, repo.repo) as { id: number } | undefined;
+  `
+  ).run(repo.owner, repo.repo);
+  const row = db.prepare("SELECT id FROM repos WHERE owner = ? AND repo = ?").get(repo.owner, repo.repo) as
+    | { id: number }
+    | undefined;
   if (!row) {
     throw new Error(`Failed to resolve repo id for ${repo.owner}/${repo.repo}`);
   }
@@ -103,10 +107,12 @@ export function upsertRepo(db: DatabaseSync, repo: RepoInfo): number {
 }
 
 export function setStateMeta(db: DatabaseSync, key: string, value: string): void {
-  db.prepare(`
+  db.prepare(
+    `
     INSERT INTO state_meta (key, value) VALUES (?, ?)
     ON CONFLICT(key) DO UPDATE SET value = excluded.value
-  `).run(key, value);
+  `
+  ).run(key, value);
 }
 
 export function getStateMeta(db: DatabaseSync, key: string): string | null {

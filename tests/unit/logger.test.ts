@@ -21,7 +21,7 @@ describe("log", () => {
 
     expect(writes).toHaveLength(1);
     expect(writes[0]).toContain("[idle] runner message");
-    expect(writes[0]).not.toContain("\"idle\"");
+    expect(writes[0]).not.toContain('"idle"');
   });
 
   it("keeps explicit tag when data also includes tag in json mode", () => {

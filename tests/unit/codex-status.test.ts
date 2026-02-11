@@ -19,8 +19,8 @@ describe("parseCodexStatus", () => {
     expect(status?.credits).toBe(171);
     expect(status?.windows).toHaveLength(2);
 
-    const fiveHour = status?.windows.find((window) => window.key === "fiveHour");
-    const weekly = status?.windows.find((window) => window.key === "weekly");
+    const fiveHour = status?.windows.find(window => window.key === "fiveHour");
+    const weekly = status?.windows.find(window => window.key === "weekly");
 
     expect(fiveHour?.percentLeft).toBe(8);
     expect(fiveHour?.resetAt).toEqual(new Date(2026, 1, 2, 14, 59, 0));
@@ -40,20 +40,24 @@ describe("evaluateUsageGate", () => {
 
     expect(status).not.toBeNull();
 
-    const decision = evaluateUsageGate(status!, {
-      enabled: true,
-      command: "codex",
-      args: [],
-      timeoutSeconds: 20,
-      minRemainingPercent: {
-        fiveHour: 5
+    const decision = evaluateUsageGate(
+      status!,
+      {
+        enabled: true,
+        command: "codex",
+        args: [],
+        timeoutSeconds: 20,
+        minRemainingPercent: {
+          fiveHour: 5
+        },
+        weeklySchedule: {
+          startMinutes: 60,
+          minRemainingPercentAtStart: 20,
+          minRemainingPercentAtEnd: 0
+        }
       },
-      weeklySchedule: {
-        startMinutes: 60,
-        minRemainingPercentAtStart: 20,
-        minRemainingPercentAtEnd: 0
-      }
-    }, now);
+      now
+    );
 
     expect(decision.allow).toBe(true);
   });
@@ -68,20 +72,24 @@ describe("evaluateUsageGate", () => {
 
     expect(status).not.toBeNull();
 
-    const decision = evaluateUsageGate(status!, {
-      enabled: true,
-      command: "codex",
-      args: [],
-      timeoutSeconds: 20,
-      minRemainingPercent: {
-        fiveHour: 1
+    const decision = evaluateUsageGate(
+      status!,
+      {
+        enabled: true,
+        command: "codex",
+        args: [],
+        timeoutSeconds: 20,
+        minRemainingPercent: {
+          fiveHour: 1
+        },
+        weeklySchedule: {
+          startMinutes: 60,
+          minRemainingPercentAtStart: 20,
+          minRemainingPercentAtEnd: 0
+        }
       },
-      weeklySchedule: {
-        startMinutes: 60,
-        minRemainingPercentAtStart: 20,
-        minRemainingPercentAtEnd: 0
-      }
-    }, now);
+      now
+    );
 
     expect(decision.allow).toBe(false);
   });
@@ -105,8 +113,8 @@ describe("rateLimitSnapshotToStatus", () => {
 
     const status = rateLimitSnapshotToStatus(snapshot, now);
     expect(status).not.toBeNull();
-    const fiveHour = status?.windows.find((window) => window.key === "fiveHour");
-    const weekly = status?.windows.find((window) => window.key === "weekly");
+    const fiveHour = status?.windows.find(window => window.key === "fiveHour");
+    const weekly = status?.windows.find(window => window.key === "weekly");
 
     expect(fiveHour?.percentLeft).toBe(60);
     expect(weekly?.percentLeft).toBe(90);
