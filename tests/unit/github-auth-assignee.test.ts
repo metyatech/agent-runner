@@ -162,3 +162,29 @@ describe("GitHubClient.listOpenPullRequests", () => {
     });
   });
 });
+
+describe("GitHubClient.getOpenPullRequestCount", () => {
+  it("reads open PR total count from GraphQL", async () => {
+    const client = new GitHubClient("dummy");
+    let seen: any = null;
+    (client as any).octokit = {
+      request: async (route: string, params: any) => {
+        seen = { route, params };
+        return {
+          data: {
+            repository: {
+              pullRequests: {
+                totalCount: 123
+              }
+            }
+          }
+        };
+      }
+    };
+
+    await expect(client.getOpenPullRequestCount({ owner: "metyatech", repo: "demo" })).resolves.toBe(123);
+    expect(seen.route).toBe("POST /graphql");
+    expect(seen.params.owner).toBe("metyatech");
+    expect(seen.params.name).toBe("demo");
+  });
+});

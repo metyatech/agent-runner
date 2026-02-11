@@ -419,5 +419,27 @@ describe("renderIdlePrompt", () => {
     expect(prompt).toContain("count in this repository: unknown");
     expect(prompt).toContain("Open PR context could not be fetched");
   });
+
+  it("does not rewrite placeholder-like tokens embedded in open PR context", () => {
+    const prompt = renderIdlePrompt("Task {{task}}\n{{openPrContext}}", repo, "Improve retries", {
+      openPrCount: 1,
+      openPrContext: "- #101 Literal token {{task}} from PR body",
+      openPrContextAvailable: true
+    });
+
+    expect(prompt).toContain("- #101 Literal token {{task}} from PR body");
+    expect(prompt).not.toContain("- #101 Literal token Improve retries from PR body");
+  });
+
+  it("wraps open PR context with explicit untrusted-data markers", () => {
+    const prompt = renderIdlePrompt("{{openPrContext}}", repo, "Improve retries", {
+      openPrCount: 1,
+      openPrContext: "- #22 Another PR",
+      openPrContextAvailable: true
+    });
+
+    expect(prompt).toContain("AGENT_RUNNER_OPEN_PR_CONTEXT_START");
+    expect(prompt).toContain("AGENT_RUNNER_OPEN_PR_CONTEXT_END");
+  });
 });
 

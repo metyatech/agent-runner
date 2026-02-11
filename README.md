@@ -160,6 +160,8 @@ Config file: `agent-runner.config.json`
   - `idle.cooldownMinutes`: Per-repo cooldown between idle runs
   - `idle.tasks`: List of task prompts to rotate through
   - `idle.promptTemplate`: Prompt template for idle runs; supports `{{repo}}`, `{{task}}`, `{{openPrCount}}`, and `{{openPrContext}}`
+    - `{{openPrCount}}` is the repository's current open-PR total when available (`unknown` if count lookup fails).
+    - `{{openPrContext}}` is injected as an untrusted context block wrapped by `AGENT_RUNNER_OPEN_PR_CONTEXT_START/END`.
   - `idle.repoScope`: `"all"` (default) or `"local"` to restrict idle tasks to repos under the workspace root
   - `idle.usageGate`: Optional Codex usage guard (reads `account/rateLimits/read` via Codex app-server)
   - `idle.usageGate.enabled`: Turn usage gating on/off
@@ -292,6 +294,7 @@ follow up on PR review feedback and can auto-merge managed PRs when all reviewer
 are in an OK state.
 To avoid duplicate idle work, the runner injects the repository's open PR context into each idle prompt and instructs the implementation agent to avoid work that overlaps existing open PRs.
 The injected context is bounded (top recent entries + total character budget) so prompt size stays stable on active repositories.
+The injected context is explicitly marked as untrusted data and must not override prompt requirements or AGENTS.md rules.
 
 ### GitHub notifications (GitHub App / bot token)
 

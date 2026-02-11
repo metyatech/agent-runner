@@ -785,6 +785,37 @@ export class GitHubClient {
     return pulls;
   }
 
+  async getOpenPullRequestCount(repo: RepoInfo): Promise<number> {
+    const response = await this.octokit.request("POST /graphql", {
+      query: `
+        query($owner: String!, $name: String!) {
+          repository(owner: $owner, name: $name) {
+            pullRequests(states: OPEN) {
+              totalCount
+            }
+          }
+        }
+      `,
+      owner: repo.owner,
+      name: repo.repo
+    });
+
+    const data = response.data as {
+      repository?: {
+        pullRequests?: {
+          totalCount?: number | null;
+        } | null;
+      } | null;
+    };
+
+    const totalCount = data.repository?.pullRequests?.totalCount;
+    if (typeof totalCount !== "number" || !Number.isFinite(totalCount) || totalCount < 0) {
+      throw new Error(`Unable to load open pull request count for ${repo.owner}/${repo.repo}.`);
+    }
+
+    return Math.floor(totalCount);
+  }
+
   async getPullRequestHead(repo: RepoInfo, pullNumber: number): Promise<{
     headRef: string;
     headSha: string;

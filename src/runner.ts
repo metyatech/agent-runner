@@ -14,6 +14,7 @@ import { recordAmazonQUsage, resolveAmazonQUsageStatePath } from "./amazon-q-usa
 import {
   buildIdleDuplicateWorkGuard,
   buildIdleOpenPrContext,
+  formatIdleOpenPrContextBlock,
   formatIdleOpenPrCount
 } from "./idle-open-pr-context.js";
 import {
@@ -273,22 +274,23 @@ export function renderIdlePrompt(
 ): string {
   const repoSlug = `${repo.owner}/${repo.repo}`;
   const openPrCountLabel = formatIdleOpenPrCount(options.openPrCount);
-  let rendered = template
-    .split("{{repo}}")
-    .join(repoSlug)
-    .split("{{owner}}")
-    .join(repo.owner)
-    .split("{{repoName}}")
-    .join(repo.repo)
-    .split("{{openPrCount}}")
-    .join(openPrCountLabel)
-    .split("{{openPrContext}}")
-    .join(options.openPrContext)
-    .split("{{task}}")
-    .join(task);
+  const openPrContext = formatIdleOpenPrContextBlock(options.openPrContext);
+  const placeholders: Record<"repo" | "owner" | "repoName" | "openPrCount" | "openPrContext" | "task", string> = {
+    repo: repoSlug,
+    owner: repo.owner,
+    repoName: repo.repo,
+    openPrCount: openPrCountLabel,
+    openPrContext,
+    task
+  };
+  let rendered = template.replace(
+    /{{(repo|owner|repoName|openPrCount|openPrContext|task)}}/g,
+    (_match, key: "repo" | "owner" | "repoName" | "openPrCount" | "openPrContext" | "task") =>
+      placeholders[key] ?? ""
+  );
 
   if (!template.includes("{{openPrContext}}")) {
-    rendered = `${rendered}\n\nOpen PR context:\n${options.openPrContext}`;
+    rendered = `${rendered}\n\nOpen PR context:\n${openPrContext}`;
   }
   if (!template.includes("{{openPrCount}}")) {
     rendered = `${rendered}\nOpen PR count: ${openPrCountLabel}`;
@@ -989,13 +991,9 @@ export async function runIdleTask(
     let openPrContextAvailable = true;
     let openPrCount: number | null = null;
     let openPrContext = "";
+    let openPullRequests: Awaited<ReturnType<GitHubClient["listOpenPullRequests"]>> = [];
     try {
-      const openPullRequests = await client.listOpenPullRequests(repo, { limit: MAX_IDLE_OPEN_PULL_REQUESTS });
-      openPrCount = openPullRequests.length;
-      openPrContext = buildIdleOpenPrContext(openPullRequests, {
-        maxEntries: MAX_IDLE_OPEN_PR_CONTEXT_ENTRIES,
-        maxChars: MAX_IDLE_OPEN_PR_CONTEXT_CHARS
-      });
+      openPullRequests = await client.listOpenPullRequests(repo, { limit: MAX_IDLE_OPEN_PULL_REQUESTS });
     } catch (error) {
       openPrContextAvailable = false;
       const message = error instanceof Error ? error.message : String(error);
@@ -1003,6 +1001,23 @@ export async function runIdleTask(
         `[WARN] Failed to load open PR context for ${repo.owner}/${repo.repo}: ${message}\n`
       );
       openPrContext = "Open PR context unavailable due to GitHub API error.";
+    }
+
+    if (openPrContextAvailable) {
+      try {
+        openPrCount = await client.getOpenPullRequestCount(repo);
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        process.stderr.write(
+          `[WARN] Failed to load open PR count for ${repo.owner}/${repo.repo}: ${message}\n`
+        );
+        openPrCount = null;
+      }
+      openPrContext = buildIdleOpenPrContext(openPullRequests, {
+        maxEntries: MAX_IDLE_OPEN_PR_CONTEXT_ENTRIES,
+        maxChars: MAX_IDLE_OPEN_PR_CONTEXT_CHARS,
+        totalCount: openPrCount
+      });
     }
 
     const prompt = renderIdlePrompt(config.idle?.promptTemplate ?? "", repo, task, {
