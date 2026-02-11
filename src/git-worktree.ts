@@ -60,6 +60,14 @@ async function resolveBranchStartRef(cachePath: string, branch: string): Promise
   throw new Error(`Unable to resolve branch ${branch} in cache repo ${cachePath}`);
 }
 
+function buildRemoteBranchRef(branch: string): string {
+  return `refs/remotes/origin/${branch}`;
+}
+
+function buildBranchFetchRefspec(branch: string): string {
+  return `+refs/heads/${branch}:${buildRemoteBranchRef(branch)}`;
+}
+
 export async function ensureRepoCache(workdirRoot: string, repo: RepoInfo): Promise<string> {
   const cachePath = resolveRepoCachePath(workdirRoot, repo);
   if (fs.existsSync(cachePath)) {
@@ -145,6 +153,7 @@ export async function createWorktreeFromDefaultBranch(options: {
 }): Promise<void> {
   fs.mkdirSync(path.dirname(options.worktreePath), { recursive: true });
   await ensureDirAbsent(options.worktreePath);
+  fs.mkdirSync(options.worktreePath, { recursive: true });
 
   await withGitCacheLock(
     options.workdirRoot,
@@ -181,22 +190,20 @@ export async function createWorktreeForRemoteBranch(options: {
 }): Promise<void> {
   fs.mkdirSync(path.dirname(options.worktreePath), { recursive: true });
   await ensureDirAbsent(options.worktreePath);
+  fs.mkdirSync(options.worktreePath, { recursive: true });
 
   await withGitCacheLock(
     options.workdirRoot,
     options.repo,
     async () => {
       const env = buildAuthEnv();
-      await runCommand("git", ["-C", options.cachePath, "fetch", "--prune", "origin", options.branch], { env });
+      await runCommand(
+        "git",
+        ["-C", options.cachePath, "fetch", "--prune", "origin", buildBranchFetchRefspec(options.branch)],
+        { env }
+      );
       const startRef = await resolveBranchStartRef(options.cachePath, options.branch);
       await runCommand("git", ["-C", options.cachePath, "branch", "-f", options.branch, startRef], { env });
-      if (startRef.startsWith("refs/remotes/origin/")) {
-        await runCommand(
-          "git",
-          ["-C", options.cachePath, "branch", "--set-upstream-to", `origin/${options.branch}`, options.branch],
-          { env }
-        );
-      }
       await runCommand("git", ["-C", options.cachePath, "worktree", "add", options.worktreePath, options.branch], { env });
     },
     { timeoutMs: 15 * 60 * 1000 }
