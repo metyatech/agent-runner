@@ -355,24 +355,28 @@ function renderHtml(): string {
 
       const timeAgo = (isoStr) => {
         if (!isoStr) return "";
-        const diff = (Date.now() - new Date(isoStr).getTime()) / 1000;
+        const ts = new Date(isoStr).getTime();
+        if (!Number.isFinite(ts)) return "";
+        const diff = (Date.now() - ts) / 1000;
         if (diff < 0) return "just now";
         if (diff < 60) return Math.round(diff) + "s ago";
-        if (diff < 3600) return Math.round(diff / 60) + " min ago";
-        if (diff < 86400) {
-          const h = Math.floor(diff / 3600);
-          const m = Math.round((diff % 3600) / 60);
+        const totalMinutes = Math.round(diff / 60);
+        if (totalMinutes < 60) return totalMinutes + " min ago";
+        if (totalMinutes < 1440) {
+          const h = Math.floor(totalMinutes / 60);
+          const m = totalMinutes % 60;
           return h + "h " + m + "min ago";
         }
-        return Math.round(diff / 86400) + "d ago";
+        return Math.round(totalMinutes / 1440) + "d ago";
       };
 
       const humanAge = (minutes) => {
         if (minutes == null) return "-";
         if (minutes < 1) return "<1 min";
         if (minutes < 60) return Math.round(minutes) + " min";
-        const h = Math.floor(minutes / 60);
-        const m = Math.round(minutes % 60);
+        const total = Math.round(minutes);
+        const h = Math.floor(total / 60);
+        const m = total % 60;
         return h + "h " + m + "min";
       };
 
@@ -453,11 +457,14 @@ function renderHtml(): string {
 
       /* ── Render stale table rows ── */
       const renderStale = (rows) => {
+        const hadRows = !staleSection.hidden;
         staleSection.hidden = rows.length === 0;
         const label = rows.length + " stale record" + (rows.length === 1 ? "" : "s");
-        staleToggle.textContent = label;
         staleToggle.dataset.label = label;
-        staleDetails.hidden = true;
+        if (rows.length === 0 || !hadRows) {
+          staleDetails.hidden = true;
+        }
+        staleToggle.textContent = staleDetails.hidden ? label : label + " (click to collapse)";
 
         staleBody.textContent = "";
         rows.forEach((row) => {
@@ -586,6 +593,8 @@ function renderHtml(): string {
         } catch (error) {
           heroTitle.textContent = "Error";
           hero.className = "hero idle";
+          heroSub.textContent = "";
+          heroMeta.textContent = "";
         }
       }
 

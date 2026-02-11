@@ -1,0 +1,242 @@
+import { describe, expect, it } from "vitest";
+import fs from "node:fs";
+import http from "node:http";
+import os from "node:os";
+import path from "node:path";
+import { createContext, runInContext } from "node:vm";
+import { startStatusServer } from "../../src/status-server.js";
+
+type FetchScenario = {
+  ok?: boolean;
+  data?: unknown;
+  error?: Error;
+};
+
+type DashboardExports = {
+  timeAgo: (isoStr: string) => string;
+  humanAge: (minutes: number | null) => string;
+  renderStale: (rows: Array<Record<string, unknown>>) => void;
+  refresh: () => Promise<void>;
+};
+
+class FakeElement {
+  className = "";
+  hidden = false;
+  href = "";
+  dataset: Record<string, string> = {};
+  style: Record<string, string> = {};
+  children: FakeElement[] = [];
+  private listeners: Record<string, Array<(event: { preventDefault: () => void }) => void>> = {};
+  private value = "";
+
+  constructor(readonly id: string) {}
+
+  get textContent(): string {
+    return this.value;
+  }
+
+  set textContent(next: string) {
+    this.value = String(next ?? "");
+    this.children = [];
+  }
+
+  addEventListener(type: string, listener: (event: { preventDefault: () => void }) => void): void {
+    this.listeners[type] ??= [];
+    this.listeners[type].push(listener);
+  }
+
+  appendChild(child: FakeElement): FakeElement {
+    this.children.push(child);
+    return child;
+  }
+
+  dispatch(type: string): void {
+    for (const listener of this.listeners[type] ?? []) {
+      listener({ preventDefault: () => {} });
+    }
+  }
+}
+
+function fetchText(url: string): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const req = http.get(url, (res) => {
+      let body = "";
+      res.setEncoding("utf8");
+      res.on("data", (chunk) => {
+        body += chunk;
+      });
+      res.on("end", () => resolve(body));
+    });
+    req.on("error", reject);
+  });
+}
+
+async function loadDashboardScript(): Promise<string> {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "agent-runner-ui-"));
+  const server = await startStatusServer({
+    workdirRoot: root,
+    host: "127.0.0.1",
+    port: 0
+  });
+
+  try {
+    const address = server.address();
+    if (!address || typeof address === "string") {
+      throw new Error("Expected TCP address.");
+    }
+    const html = await fetchText(`http://127.0.0.1:${address.port}/`);
+    const match = html.match(/<script>([\s\S]*?)<\/script>/);
+    if (!match) {
+      throw new Error("Expected inline dashboard script.");
+    }
+    return match[1];
+  } finally {
+    await new Promise<void>((resolve, reject) => {
+      server.close((error) => (error ? reject(error) : resolve()));
+    });
+  }
+}
+
+async function createDashboardRuntime(scenarios: FetchScenario[] = []): Promise<{
+  api: DashboardExports;
+  elements: Record<string, FakeElement>;
+}> {
+  const script = await loadDashboardScript();
+  const instrumented = script.replace(
+    /refresh\(\);\s*[\r\n]+\s*setInterval\(refresh, 5000\);\s*/,
+    "globalThis.__testExports = { timeAgo, humanAge, renderStale, refresh };\n"
+  );
+  if (!instrumented.includes("__testExports")) {
+    throw new Error("Failed to instrument dashboard script for tests.");
+  }
+
+  const ids = [
+    "hero",
+    "heroTitle",
+    "heroSub",
+    "heroMeta",
+    "workdir",
+    "cardGrid",
+    "runningEmpty",
+    "staleSection",
+    "staleToggle",
+    "staleDetails",
+    "staleBody",
+    "logsList",
+    "reportsList"
+  ];
+  const elements = Object.fromEntries(ids.map((id) => [id, new FakeElement(id)])) as Record<string, FakeElement>;
+  elements.staleSection.hidden = true;
+  elements.staleDetails.hidden = true;
+  const queue = [...scenarios];
+
+  const context = createContext({
+    document: {
+      getElementById(id: string): FakeElement {
+        const element = elements[id];
+        if (!element) {
+          throw new Error(`Unknown element id: ${id}`);
+        }
+        return element;
+      },
+      createElement(tagName: string): FakeElement {
+        return new FakeElement(tagName);
+      }
+    },
+    fetch: async (): Promise<{ ok: boolean; json: () => Promise<unknown> }> => {
+      const next = queue.shift();
+      if (!next) {
+        throw new Error("No queued fetch response.");
+      }
+      if (next.error) {
+        throw next.error;
+      }
+      return {
+        ok: next.ok ?? true,
+        json: async () => next.data
+      };
+    },
+    setInterval: (): number => 1,
+    clearInterval: (): void => {},
+    Date,
+    Math,
+    console
+  });
+
+  runInContext(instrumented, context);
+  const api = (context as { __testExports?: DashboardExports }).__testExports;
+  if (!api) {
+    throw new Error("Test exports were not set.");
+  }
+  return { api, elements };
+}
+
+describe("status-server dashboard script regressions", () => {
+  it("humanAge normalizes rounding at hour boundaries", async () => {
+    const { api } = await createDashboardRuntime();
+    expect(api.humanAge(119.9)).toBe("2h 0min");
+  });
+
+  it("timeAgo returns empty string for invalid timestamps", async () => {
+    const { api } = await createDashboardRuntime();
+    expect(api.timeAgo("not-a-date")).toBe("");
+  });
+
+  it("timeAgo avoids 60-minute remainders after rounding", async () => {
+    const { api } = await createDashboardRuntime();
+    const almostTwoHoursAgo = new Date(Date.now() - 7199 * 1000).toISOString();
+    expect(api.timeAgo(almostTwoHoursAgo)).toBe("2h 0min ago");
+  });
+
+  it("preserves stale panel expansion across refresh renders", async () => {
+    const { api, elements } = await createDashboardRuntime();
+    const staleRows: Array<Record<string, unknown>> = [
+      {
+        repo: { owner: "metyatech", repo: "agent-runner" },
+        issueNumber: 10,
+        kind: "task",
+        engine: "codex",
+        ageMinutes: 125.2,
+        logPath: "C:/tmp/task.log"
+      }
+    ];
+
+    api.renderStale(staleRows);
+    expect(elements.staleDetails.hidden).toBe(true);
+
+    elements.staleDetails.hidden = false;
+    api.renderStale(staleRows);
+    expect(elements.staleDetails.hidden).toBe(false);
+  });
+
+  it("clears hero metadata when refresh fails after a successful render", async () => {
+    const now = new Date().toISOString();
+    const { api, elements } = await createDashboardRuntime([
+      {
+        data: {
+          stopRequested: false,
+          busy: false,
+          running: [],
+          stale: [],
+          latestTaskRun: null,
+          latestIdle: null,
+          logs: [],
+          reports: [],
+          activityUpdatedAt: now,
+          generatedAt: now,
+          workdirRoot: "D:/ghws/agent-runner"
+        }
+      },
+      { error: new Error("status fetch failed") }
+    ]);
+
+    await api.refresh();
+    expect(elements.heroSub.textContent).toContain("Last activity:");
+    expect(elements.heroMeta.textContent).toContain("Updated:");
+
+    await api.refresh();
+    expect(elements.heroTitle.textContent).toBe("Error");
+    expect(elements.heroSub.textContent).toBe("");
+    expect(elements.heroMeta.textContent).toBe("");
+  });
+});
