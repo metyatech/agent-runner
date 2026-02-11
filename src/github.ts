@@ -91,6 +91,8 @@ export type LabelInfo = {
   description: string | null;
 };
 
+const DEFAULT_OPEN_PULL_REQUEST_LIMIT = 100;
+
 export class GitHubClient {
   private octokit: Octokit;
   private authLogin: string | null | undefined;
@@ -754,7 +756,7 @@ export class GitHubClient {
       }
     }
     const limit =
-      requestedLimit === undefined ? Number.POSITIVE_INFINITY : Math.max(1, Math.floor(requestedLimit));
+      requestedLimit === undefined ? DEFAULT_OPEN_PULL_REQUEST_LIMIT : Math.max(1, Math.floor(requestedLimit));
     const perPage = Math.min(100, limit);
     let page = 1;
     while (pulls.length < limit) {

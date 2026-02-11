@@ -5,6 +5,7 @@ import {
   buildCodexResumeInvocation,
   buildGeminiInvocation,
   buildIssueTaskText,
+  loadIdleOpenPrData,
   renderIdlePrompt
 } from "../../src/runner.js";
 import fs from "node:fs";
@@ -440,6 +441,75 @@ describe("renderIdlePrompt", () => {
 
     expect(prompt).toContain("AGENT_RUNNER_OPEN_PR_CONTEXT_START");
     expect(prompt).toContain("AGENT_RUNNER_OPEN_PR_CONTEXT_END");
+  });
+});
+
+describe("loadIdleOpenPrData", () => {
+  const repo = { owner: "metyatech", repo: "demo" };
+
+  it("starts open PR list and count fetches in parallel", async () => {
+    let resolveList!: (value: any[]) => void;
+    let listSettled = false;
+    let countStartedBeforeListSettled = false;
+    const listPromise = new Promise<any[]>((resolve) => {
+      resolveList = (value) => {
+        listSettled = true;
+        resolve(value);
+      };
+    });
+    const client = {
+      listOpenPullRequests: () => listPromise,
+      getOpenPullRequestCount: async () => {
+        countStartedBeforeListSettled = !listSettled;
+        return 1;
+      }
+    } as any;
+
+    const pending = loadIdleOpenPrData(client, repo, {
+      maxOpenPullRequests: 50,
+      maxContextEntries: 50,
+      maxContextChars: 12_000,
+      warn: () => {}
+    });
+
+    resolveList([
+      {
+        number: 10,
+        title: "Existing work",
+        body: null,
+        url: "https://github.com/metyatech/demo/pull/10",
+        updatedAt: "2026-02-11T10:00:00Z",
+        author: "metyatech"
+      }
+    ]);
+
+    const loaded = await pending;
+    expect(countStartedBeforeListSettled).toBe(true);
+    expect(loaded.openPrCount).toBe(1);
+    expect(loaded.openPrContextAvailable).toBe(true);
+    expect(loaded.openPrContext).toContain("#10 Existing work");
+  });
+
+  it("keeps open PR count when list fetch fails", async () => {
+    const warnings: string[] = [];
+    const client = {
+      listOpenPullRequests: async () => {
+        throw new Error("list failed");
+      },
+      getOpenPullRequestCount: async () => 17
+    } as any;
+
+    const loaded = await loadIdleOpenPrData(client, repo, {
+      maxOpenPullRequests: 50,
+      maxContextEntries: 50,
+      maxContextChars: 12_000,
+      warn: (message) => warnings.push(message)
+    });
+
+    expect(loaded.openPrContextAvailable).toBe(false);
+    expect(loaded.openPrCount).toBe(17);
+    expect(loaded.openPrContext).toContain("Open PR context unavailable due to GitHub API error.");
+    expect(warnings.join("\n")).toContain("Failed to load open PR context");
   });
 });
 

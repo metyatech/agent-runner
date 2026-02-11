@@ -133,6 +133,14 @@ const MAX_IDLE_OPEN_PULL_REQUESTS = 50;
 const MAX_IDLE_OPEN_PR_CONTEXT_CHARS = 12_000;
 const MAX_IDLE_OPEN_PR_CONTEXT_ENTRIES = 50;
 
+type IdleOpenPrLoader = Pick<GitHubClient, "listOpenPullRequests" | "getOpenPullRequestCount">;
+
+export type IdleOpenPrData = {
+  openPrContextAvailable: boolean;
+  openPrCount: number | null;
+  openPrContext: string;
+};
+
 function truncateForPrompt(value: string, maxChars: number): string {
   if (value.length <= maxChars) {
     return value;
@@ -248,6 +256,63 @@ export function buildIssueTaskText(
     sections.push(`PR review comments:\n${reviewBlock}`);
   }
   return sections.join("\n\n");
+}
+
+export async function loadIdleOpenPrData(
+  client: IdleOpenPrLoader,
+  repo: RepoInfo,
+  options: {
+    maxOpenPullRequests: number;
+    maxContextEntries: number;
+    maxContextChars: number;
+    warn?: (message: string) => void;
+  }
+): Promise<IdleOpenPrData> {
+  const warn = options.warn ?? ((message: string) => process.stderr.write(`${message}\n`));
+  const [openPrListResult, openPrCountResult] = await Promise.allSettled([
+    client.listOpenPullRequests(repo, { limit: options.maxOpenPullRequests }),
+    client.getOpenPullRequestCount(repo)
+  ]);
+
+  let openPrContextAvailable = true;
+  let openPrContext = "";
+  let openPullRequests: Awaited<ReturnType<GitHubClient["listOpenPullRequests"]>> = [];
+  if (openPrListResult.status === "fulfilled") {
+    openPullRequests = openPrListResult.value;
+  } else {
+    openPrContextAvailable = false;
+    const message =
+      openPrListResult.reason instanceof Error
+        ? openPrListResult.reason.message
+        : String(openPrListResult.reason);
+    warn(`[WARN] Failed to load open PR context for ${repo.owner}/${repo.repo}: ${message}`);
+    openPrContext = "Open PR context unavailable due to GitHub API error.";
+  }
+
+  let openPrCount: number | null = null;
+  if (openPrCountResult.status === "fulfilled") {
+    openPrCount = openPrCountResult.value;
+  } else {
+    const message =
+      openPrCountResult.reason instanceof Error
+        ? openPrCountResult.reason.message
+        : String(openPrCountResult.reason);
+    warn(`[WARN] Failed to load open PR count for ${repo.owner}/${repo.repo}: ${message}`);
+  }
+
+  if (openPrContextAvailable) {
+    openPrContext = buildIdleOpenPrContext(openPullRequests, {
+      maxEntries: options.maxContextEntries,
+      maxChars: options.maxContextChars,
+      totalCount: openPrCount
+    });
+  }
+
+  return {
+    openPrContextAvailable,
+    openPrCount,
+    openPrContext
+  };
 }
 
 function renderPrompt(
@@ -988,37 +1053,12 @@ export async function runIdleTask(
     });
     created = true;
 
-    let openPrContextAvailable = true;
-    let openPrCount: number | null = null;
-    let openPrContext = "";
-    let openPullRequests: Awaited<ReturnType<GitHubClient["listOpenPullRequests"]>> = [];
-    try {
-      openPullRequests = await client.listOpenPullRequests(repo, { limit: MAX_IDLE_OPEN_PULL_REQUESTS });
-    } catch (error) {
-      openPrContextAvailable = false;
-      const message = error instanceof Error ? error.message : String(error);
-      process.stderr.write(
-        `[WARN] Failed to load open PR context for ${repo.owner}/${repo.repo}: ${message}\n`
-      );
-      openPrContext = "Open PR context unavailable due to GitHub API error.";
-    }
-
-    if (openPrContextAvailable) {
-      try {
-        openPrCount = await client.getOpenPullRequestCount(repo);
-      } catch (error) {
-        const message = error instanceof Error ? error.message : String(error);
-        process.stderr.write(
-          `[WARN] Failed to load open PR count for ${repo.owner}/${repo.repo}: ${message}\n`
-        );
-        openPrCount = null;
-      }
-      openPrContext = buildIdleOpenPrContext(openPullRequests, {
-        maxEntries: MAX_IDLE_OPEN_PR_CONTEXT_ENTRIES,
-        maxChars: MAX_IDLE_OPEN_PR_CONTEXT_CHARS,
-        totalCount: openPrCount
-      });
-    }
+    const { openPrContextAvailable, openPrCount, openPrContext } = await loadIdleOpenPrData(client, repo, {
+      maxOpenPullRequests: MAX_IDLE_OPEN_PULL_REQUESTS,
+      maxContextEntries: MAX_IDLE_OPEN_PR_CONTEXT_ENTRIES,
+      maxContextChars: MAX_IDLE_OPEN_PR_CONTEXT_CHARS,
+      warn: (message) => process.stderr.write(`${message}\n`)
+    });
 
     const prompt = renderIdlePrompt(config.idle?.promptTemplate ?? "", repo, task, {
       openPrCount,
