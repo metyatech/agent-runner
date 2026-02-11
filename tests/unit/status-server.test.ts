@@ -35,7 +35,10 @@ describe("status-server", () => {
       }
       const html = await fetchText(`http://127.0.0.1:${address.port}/`);
       expect(html).toContain("Agent Runner Status");
-      expect(html).toContain("Latest Logs");
+      expect(html).toContain("Running Tasks");
+      expect(html).toMatch(/@media\s*\(prefers-reduced-motion:\s*reduce\)[\s\S]*\.hero\s*\{\s*transition:\s*none;/);
+      expect(html).toMatch(/@media\s*\(prefers-reduced-motion:\s*reduce\)[\s\S]*\.pulse\s*\{\s*animation:\s*none;/);
+      expect(html).toMatch(/\.hero\.idle\s*\{\s*background:\s*#b45309;\s*color:\s*#fff;\s*\}/);
     } finally {
       await new Promise<void>((resolve, reject) => {
         server.close(error => (error ? reject(error) : resolve()));

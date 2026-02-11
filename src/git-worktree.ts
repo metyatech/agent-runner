@@ -56,6 +56,14 @@ async function resolveBranchStartRef(cachePath: string, branch: string): Promise
   throw new Error(`Unable to resolve branch ${branch} in cache repo ${cachePath}`);
 }
 
+function buildRemoteBranchRef(branch: string): string {
+  return `refs/remotes/origin/${branch}`;
+}
+
+function buildBranchFetchRefspec(branch: string): string {
+  return `+refs/heads/${branch}:${buildRemoteBranchRef(branch)}`;
+}
+
 export async function ensureRepoCache(workdirRoot: string, repo: RepoInfo): Promise<string> {
   const cachePath = resolveRepoCachePath(workdirRoot, repo);
   if (fs.existsSync(cachePath)) {
@@ -176,7 +184,11 @@ export async function createWorktreeForRemoteBranch(options: {
     options.repo,
     async () => {
       const env = buildAuthEnv();
-      await runCommand("git", ["-C", options.cachePath, "fetch", "--prune", "origin", options.branch], { env });
+      await runCommand(
+        "git",
+        ["-C", options.cachePath, "fetch", "--prune", "origin", buildBranchFetchRefspec(options.branch)],
+        { env }
+      );
       const startRef = await resolveBranchStartRef(options.cachePath, options.branch);
       await runCommand("git", ["-C", options.cachePath, "branch", "-f", options.branch, startRef], { env });
       if (startRef.startsWith("refs/remotes/origin/")) {
