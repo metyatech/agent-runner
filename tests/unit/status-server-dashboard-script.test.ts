@@ -71,18 +71,16 @@ class FakeElement {
   }
 
   getAttribute(name: string): string | null {
-    return Object.prototype.hasOwnProperty.call(this.attributes, name)
-      ? this.attributes[name]
-      : null;
+    return Object.prototype.hasOwnProperty.call(this.attributes, name) ? this.attributes[name] : null;
   }
 }
 
 function fetchText(url: string): Promise<string> {
   return new Promise((resolve, reject) => {
-    const req = http.get(url, (res) => {
+    const req = http.get(url, res => {
       let body = "";
       res.setEncoding("utf8");
-      res.on("data", (chunk) => {
+      res.on("data", chunk => {
         body += chunk;
       });
       res.on("end", () => resolve(body));
@@ -113,7 +111,7 @@ async function loadDashboardScript(): Promise<string> {
   } finally {
     try {
       await new Promise<void>((resolve, reject) => {
-        server.close((error) => (error ? reject(error) : resolve()));
+        server.close(error => (error ? reject(error) : resolve()));
       });
     } finally {
       fs.rmSync(root, { recursive: true, force: true });
@@ -153,7 +151,7 @@ async function createDashboardRuntime(scenarios: FetchScenario[] = []): Promise<
     "logsList",
     "reportsList"
   ];
-  const elements = Object.fromEntries(ids.map((id) => [id, new FakeElement(id)])) as Record<string, FakeElement>;
+  const elements = Object.fromEntries(ids.map(id => [id, new FakeElement(id)])) as Record<string, FakeElement>;
   elements.staleSection.hidden = true;
   elements.staleDetails.hidden = true;
   const queue = [...scenarios];
@@ -261,15 +259,15 @@ setInterval( refresh , 5_000 );
     const firstHeader = firstCard.children[0];
     const firstFooter = firstCard.children[firstCard.children.length - 1];
     const firstAge = firstFooter.children[0];
-    expect(
-      firstHeader.children.some((child) => child.className === "issue-badge" && child.textContent === "#10")
-    ).toBe(true);
-    expect(firstFooter.children.some((child) => child.textContent === "Open log")).toBe(true);
+    expect(firstHeader.children.some(child => child.className === "issue-badge" && child.textContent === "#10")).toBe(
+      true
+    );
+    expect(firstFooter.children.some(child => child.textContent === "Open log")).toBe(true);
     expect(firstAge.textContent).toMatch(/^Low\s/);
 
     const secondCard = elements.cardGrid.children[1];
     const secondHeader = secondCard.children[0];
-    expect(secondHeader.children.some((child) => child.className === "issue-badge")).toBe(false);
+    expect(secondHeader.children.some(child => child.className === "issue-badge")).toBe(false);
 
     api.renderCards([]);
     expect(elements.runningEmpty.hidden).toBe(false);
@@ -354,17 +352,17 @@ setInterval( refresh , 5_000 );
 
     expect(elements.logsList.children).toHaveLength(3);
     const linkTexts = elements.logsList.children
-      .map((li) => li.children.find((child) => child.href)?.textContent)
+      .map(li => li.children.find(child => child.href)?.textContent)
       .filter((value): value is string => typeof value === "string");
-    expect(linkTexts.filter((value) => value === "C:/tmp/task.log")).toHaveLength(1);
+    expect(linkTexts.filter(value => value === "C:/tmp/task.log")).toHaveLength(1);
     expect(
       elements.logsList.children[0].children.some(
-        (child) => child.className === "log-label" && child.textContent === "task-run"
+        child => child.className === "log-label" && child.textContent === "task-run"
       )
     ).toBe(true);
     expect(
       elements.logsList.children[0].children.some(
-        (child) => child.className === "log-time" && child.textContent.length > 0
+        child => child.className === "log-time" && child.textContent.length > 0
       )
     ).toBe(true);
   });
@@ -380,13 +378,11 @@ setInterval( refresh , 5_000 );
     api.renderReports(elements.reportsList, [{ path: "C:/tmp/report.json", updatedAt: now }]);
     expect(elements.reportsList.children).toHaveLength(1);
     expect(
-      elements.reportsList.children[0].children.some(
-        (child) => child.href === "/open?path=C%3A%2Ftmp%2Freport.json"
-      )
+      elements.reportsList.children[0].children.some(child => child.href === "/open?path=C%3A%2Ftmp%2Freport.json")
     ).toBe(true);
     expect(
       elements.reportsList.children[0].children.some(
-        (child) => child.className === "log-time" && child.textContent.length > 0
+        child => child.className === "log-time" && child.textContent.length > 0
       )
     ).toBe(true);
   });

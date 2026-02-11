@@ -43,9 +43,7 @@ describe("git-worktree", () => {
         branch: "compliance-fix"
       });
 
-      const fetchCall = runCommandMock.mock.calls.find(
-        (call) => call[1][2] === "fetch" && call[1][3] === "--prune"
-      );
+      const fetchCall = runCommandMock.mock.calls.find(call => call[1][2] === "fetch" && call[1][3] === "--prune");
       expect(fetchCall?.[1]).toEqual([
         "-C",
         cachePath,

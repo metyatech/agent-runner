@@ -272,6 +272,6 @@ describe("github flow", () => {
         }
       }
     },
-    { timeout: 240_000 }
+    240_000
   );
 });
