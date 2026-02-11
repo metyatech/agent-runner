@@ -290,6 +290,8 @@ Each idle run writes a report under `reports/` and streams the Codex output to `
 When changes are made, the idle prompt is expected to open a PR. The runner will
 follow up on PR review feedback and can auto-merge managed PRs when all reviewers
 are in an OK state.
+To avoid duplicate idle work, repositories with an open pull request whose head branch
+starts with `agent-runner/` are excluded from idle scheduling until that pull request is closed.
 
 ### GitHub notifications (GitHub App / bot token)
 
@@ -457,6 +459,46 @@ User-reply handling:
 The runner includes recent user replies in the next prompt (limited and truncated) so the issue body usually does not need edits.
 
 If a request is labeled `agent:running` but the tracked process exits, the runner marks it as `failed` and asks to re-run with `/agent run`.
+
+## State transitions (operator guide)
+
+Visible labels: `queued`, `running`, `done`, `failed`, `needsUserReply`
+
+### State diagram: issue/PR run
+
+```mermaid
+stateDiagram-v2
+  [*] --> queued: /agent run (collaborator)
+  queued --> running: worker picked
+  running --> done: success
+  running --> needsUserReply: agent asks user
+  running --> failed: execution error
+  running --> failed: quota reached
+  needsUserReply --> queued: user replies
+  failed --> queued: scheduled retry (quota)
+  failed --> queued: /agent run
+  done --> queued: /agent run
+```
+
+### State diagram: managed PR review follow-up
+
+```mermaid
+flowchart TD
+  A[Managed PR] -->|new review/review comment| B[review queue]
+  B --> C{requiresEngine?}
+  C -->|yes| D[run follow-up]
+  D --> E[done / failed / needsUserReply]
+  C -->|no| F[approval path]
+  F --> G{merge ready?}
+  G -->|yes| H[auto-merge and done]
+  G -->|no| B
+```
+
+### Stuck recovery quick rule
+
+- Most reliable: comment `/agent run` on the PR.
+- `agent:failed` removal alone is not immediate trigger timing.
+- Managed PR catch-up intentionally skips `failed` / `queued` / `running` / `needsUserReply`.
 
 ## Windows Task Scheduler
 
