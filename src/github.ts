@@ -50,6 +50,15 @@ export type PullRequestReview = {
   body: string | null;
 };
 
+export type OpenPullRequestInfo = {
+  number: number;
+  title: string;
+  body: string | null;
+  url: string;
+  updatedAt: string;
+  author: string | null;
+};
+
 export type PullRequestDetails = {
   number: number;
   url: string;
@@ -81,6 +90,8 @@ export type LabelInfo = {
   color: string;
   description: string | null;
 };
+
+const DEFAULT_OPEN_PULL_REQUEST_LIMIT = 100;
 
 export class GitHubClient {
   private octokit: Octokit;
@@ -731,6 +742,93 @@ export class GitHubClient {
       throw new Error(`Missing default branch for ${repo.owner}/${repo.repo}`);
     }
     return branch;
+  }
+
+  async listOpenPullRequests(repo: RepoInfo, options?: { limit?: number }): Promise<OpenPullRequestInfo[]> {
+    const pulls: OpenPullRequestInfo[] = [];
+    const requestedLimit = options?.limit;
+    if (requestedLimit !== undefined) {
+      if (!Number.isFinite(requestedLimit)) {
+        throw new Error(`Invalid limit for listOpenPullRequests: ${requestedLimit}`);
+      }
+      if (requestedLimit <= 0) {
+        return [];
+      }
+    }
+    const limit =
+      requestedLimit === undefined ? DEFAULT_OPEN_PULL_REQUEST_LIMIT : Math.max(1, Math.floor(requestedLimit));
+    const perPage = Math.min(100, limit);
+    let page = 1;
+    while (pulls.length < limit) {
+      const response = await this.octokit.pulls.list({
+        owner: repo.owner,
+        repo: repo.repo,
+        state: "open",
+        sort: "updated",
+        direction: "desc",
+        per_page: perPage,
+        page
+      });
+
+      for (const pull of response.data) {
+        if (pulls.length >= limit) {
+          break;
+        }
+        if (
+          typeof pull.number !== "number" ||
+          typeof pull.html_url !== "string" ||
+          pull.html_url.length === 0
+        ) {
+          continue;
+        }
+        pulls.push({
+          number: pull.number,
+          title: pull.title ?? "",
+          body: pull.body ?? null,
+          url: pull.html_url,
+          updatedAt: pull.updated_at ?? "",
+          author: pull.user?.login ?? null
+        });
+      }
+
+      if (response.data.length < perPage) {
+        break;
+      }
+      page += 1;
+    }
+
+    return pulls;
+  }
+
+  async getOpenPullRequestCount(repo: RepoInfo): Promise<number> {
+    const response = await this.octokit.request("POST /graphql", {
+      query: `
+        query($owner: String!, $name: String!) {
+          repository(owner: $owner, name: $name) {
+            pullRequests(states: OPEN) {
+              totalCount
+            }
+          }
+        }
+      `,
+      owner: repo.owner,
+      name: repo.repo
+    });
+
+    const data = response.data as {
+      repository?: {
+        pullRequests?: {
+          totalCount?: number | null;
+        } | null;
+      } | null;
+    };
+
+    const totalCount = data.repository?.pullRequests?.totalCount;
+    if (typeof totalCount !== "number" || !Number.isFinite(totalCount) || totalCount < 0) {
+      throw new Error(`Unable to load open pull request count for ${repo.owner}/${repo.repo}.`);
+    }
+
+    return Math.floor(totalCount);
   }
 
   async getPullRequestHead(repo: RepoInfo, pullNumber: number): Promise<{

@@ -4,7 +4,9 @@ import {
   buildCodexInvocation,
   buildCodexResumeInvocation,
   buildGeminiInvocation,
-  buildIssueTaskText
+  buildIssueTaskText,
+  loadIdleOpenPrData,
+  renderIdlePrompt
 } from "../../src/runner.js";
 import fs from "node:fs";
 import os from "node:os";
@@ -369,6 +371,147 @@ describe("buildIssueTaskText", () => {
 
     const text = buildIssueTaskText(baseIssue, comments);
     expect(text).toContain("…[truncated]");
+  });
+});
+
+describe("renderIdlePrompt", () => {
+  const repo = { owner: "metyatech", repo: "demo" };
+
+  it("replaces open PR placeholders and always adds duplicate-work guard", () => {
+    const prompt = renderIdlePrompt(
+      "Repo {{repo}}\nTask {{task}}\nOpen PRs ({{openPrCount}})\n{{openPrContext}}",
+      repo,
+      "Improve retries",
+      {
+        openPrCount: 2,
+        openPrContext: "- #10 Existing PR",
+        openPrContextAvailable: true
+      }
+    );
+
+    expect(prompt).toContain("Repo metyatech/demo");
+    expect(prompt).toContain("Task Improve retries");
+    expect(prompt).toContain("Open PRs (2)");
+    expect(prompt).toContain("- #10 Existing PR");
+    expect(prompt).toContain("Duplicate-work guard");
+  });
+
+  it("appends open PR count before context when placeholders are missing", () => {
+    const prompt = renderIdlePrompt("Repo {{repo}}\nTask {{task}}", repo, "Improve retries", {
+      openPrCount: 1,
+      openPrContext: "- #22 Another PR",
+      openPrContextAvailable: true
+    });
+
+    expect(prompt).toContain("Repo metyatech/demo");
+    expect(prompt).toContain("Task Improve retries");
+    expect(prompt).toContain("Open PR count: 1");
+    expect(prompt).toContain("Open PR context:");
+    expect(prompt).toContain("- #22 Another PR");
+    expect(prompt.indexOf("Open PR count: 1")).toBeLessThan(prompt.indexOf("Open PR context:"));
+  });
+
+  it("renders unknown open PR count when context lookup fails", () => {
+    const prompt = renderIdlePrompt("Repo {{repo}}\nOpen PRs {{openPrCount}}", repo, "Improve retries", {
+      openPrCount: null,
+      openPrContext: "Open PR context unavailable due to GitHub API error.",
+      openPrContextAvailable: false
+    });
+
+    expect(prompt).toContain("Open PRs unknown");
+    expect(prompt).toContain("count in this repository: unknown");
+    expect(prompt).toContain("Open PR context could not be fetched");
+  });
+
+  it("does not rewrite placeholder-like tokens embedded in open PR context", () => {
+    const prompt = renderIdlePrompt("Task {{task}}\n{{openPrContext}}", repo, "Improve retries", {
+      openPrCount: 1,
+      openPrContext: "- #101 Literal token {{task}} from PR body",
+      openPrContextAvailable: true
+    });
+
+    expect(prompt).toContain("- #101 Literal token {{task}} from PR body");
+    expect(prompt).not.toContain("- #101 Literal token Improve retries from PR body");
+  });
+
+  it("wraps open PR context with explicit untrusted-data markers", () => {
+    const prompt = renderIdlePrompt("{{openPrContext}}", repo, "Improve retries", {
+      openPrCount: 1,
+      openPrContext: "- #22 Another PR",
+      openPrContextAvailable: true
+    });
+
+    expect(prompt).toContain("AGENT_RUNNER_OPEN_PR_CONTEXT_START");
+    expect(prompt).toContain("AGENT_RUNNER_OPEN_PR_CONTEXT_END");
+  });
+});
+
+describe("loadIdleOpenPrData", () => {
+  const repo = { owner: "metyatech", repo: "demo" };
+
+  it("starts open PR list and count fetches in parallel", async () => {
+    let resolveList!: (value: any[]) => void;
+    let listSettled = false;
+    let countStartedBeforeListSettled = false;
+    const listPromise = new Promise<any[]>((resolve) => {
+      resolveList = (value) => {
+        listSettled = true;
+        resolve(value);
+      };
+    });
+    const client = {
+      listOpenPullRequests: () => listPromise,
+      getOpenPullRequestCount: async () => {
+        countStartedBeforeListSettled = !listSettled;
+        return 1;
+      }
+    } as any;
+
+    const pending = loadIdleOpenPrData(client, repo, {
+      maxOpenPullRequests: 50,
+      maxContextEntries: 50,
+      maxContextChars: 12_000,
+      warn: () => {}
+    });
+
+    resolveList([
+      {
+        number: 10,
+        title: "Existing work",
+        body: null,
+        url: "https://github.com/metyatech/demo/pull/10",
+        updatedAt: "2026-02-11T10:00:00Z",
+        author: "metyatech"
+      }
+    ]);
+
+    const loaded = await pending;
+    expect(countStartedBeforeListSettled).toBe(true);
+    expect(loaded.openPrCount).toBe(1);
+    expect(loaded.openPrContextAvailable).toBe(true);
+    expect(loaded.openPrContext).toContain("#10 Existing work");
+  });
+
+  it("keeps open PR count when list fetch fails", async () => {
+    const warnings: string[] = [];
+    const client = {
+      listOpenPullRequests: async () => {
+        throw new Error("list failed");
+      },
+      getOpenPullRequestCount: async () => 17
+    } as any;
+
+    const loaded = await loadIdleOpenPrData(client, repo, {
+      maxOpenPullRequests: 50,
+      maxContextEntries: 50,
+      maxContextChars: 12_000,
+      warn: (message) => warnings.push(message)
+    });
+
+    expect(loaded.openPrContextAvailable).toBe(false);
+    expect(loaded.openPrCount).toBe(17);
+    expect(loaded.openPrContext).toContain("Open PR context unavailable due to GitHub API error.");
+    expect(warnings.join("\n")).toContain("Failed to load open PR context");
   });
 });
 

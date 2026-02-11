@@ -2,9 +2,21 @@ import fs from "node:fs";
 import path from "node:path";
 import { spawn } from "node:child_process";
 import type { AgentRunnerConfig } from "./config.js";
-import { GitHubClient, type IssueComment, type IssueInfo, type PullRequestReviewComment, type RepoInfo } from "./github.js";
+import {
+  GitHubClient,
+  type IssueComment,
+  type IssueInfo,
+  type PullRequestReviewComment,
+  type RepoInfo
+} from "./github.js";
 import { resolveCodexCommand } from "./codex-command.js";
 import { recordAmazonQUsage, resolveAmazonQUsageStatePath } from "./amazon-q-usage.js";
+import {
+  buildIdleDuplicateWorkGuard,
+  buildIdleOpenPrContext,
+  formatIdleOpenPrContextBlock,
+  formatIdleOpenPrCount
+} from "./idle-open-pr-context.js";
 import {
   chooseIdleTask,
   loadIdleHistory,
@@ -117,6 +129,17 @@ const MAX_ISSUE_COMMENTS_COUNT = 8;
 const MAX_REVIEW_COMMENT_CHARS = 4_000;
 const MAX_REVIEW_COMMENTS_BLOCK_CHARS = 12_000;
 const MAX_REVIEW_COMMENTS_COUNT = 8;
+const MAX_IDLE_OPEN_PULL_REQUESTS = 50;
+const MAX_IDLE_OPEN_PR_CONTEXT_CHARS = 12_000;
+const MAX_IDLE_OPEN_PR_CONTEXT_ENTRIES = 50;
+
+type IdleOpenPrLoader = Pick<GitHubClient, "listOpenPullRequests" | "getOpenPullRequestCount">;
+
+export type IdleOpenPrData = {
+  openPrContextAvailable: boolean;
+  openPrCount: number | null;
+  openPrContext: string;
+};
 
 function truncateForPrompt(value: string, maxChars: number): string {
   if (value.length <= maxChars) {
@@ -235,6 +258,63 @@ export function buildIssueTaskText(
   return sections.join("\n\n");
 }
 
+export async function loadIdleOpenPrData(
+  client: IdleOpenPrLoader,
+  repo: RepoInfo,
+  options: {
+    maxOpenPullRequests: number;
+    maxContextEntries: number;
+    maxContextChars: number;
+    warn?: (message: string) => void;
+  }
+): Promise<IdleOpenPrData> {
+  const warn = options.warn ?? ((message: string) => process.stderr.write(`${message}\n`));
+  const [openPrListResult, openPrCountResult] = await Promise.allSettled([
+    client.listOpenPullRequests(repo, { limit: options.maxOpenPullRequests }),
+    client.getOpenPullRequestCount(repo)
+  ]);
+
+  let openPrContextAvailable = true;
+  let openPrContext = "";
+  let openPullRequests: Awaited<ReturnType<GitHubClient["listOpenPullRequests"]>> = [];
+  if (openPrListResult.status === "fulfilled") {
+    openPullRequests = openPrListResult.value;
+  } else {
+    openPrContextAvailable = false;
+    const message =
+      openPrListResult.reason instanceof Error
+        ? openPrListResult.reason.message
+        : String(openPrListResult.reason);
+    warn(`[WARN] Failed to load open PR context for ${repo.owner}/${repo.repo}: ${message}`);
+    openPrContext = "Open PR context unavailable due to GitHub API error.";
+  }
+
+  let openPrCount: number | null = null;
+  if (openPrCountResult.status === "fulfilled") {
+    openPrCount = openPrCountResult.value;
+  } else {
+    const message =
+      openPrCountResult.reason instanceof Error
+        ? openPrCountResult.reason.message
+        : String(openPrCountResult.reason);
+    warn(`[WARN] Failed to load open PR count for ${repo.owner}/${repo.repo}: ${message}`);
+  }
+
+  if (openPrContextAvailable) {
+    openPrContext = buildIdleOpenPrContext(openPullRequests, {
+      maxEntries: options.maxContextEntries,
+      maxChars: options.maxContextChars,
+      totalCount: openPrCount
+    });
+  }
+
+  return {
+    openPrContextAvailable,
+    openPrCount,
+    openPrContext
+  };
+}
+
 function renderPrompt(
   template: string,
   repos: RepoInfo[],
@@ -247,17 +327,42 @@ function renderPrompt(
   return template.replace("{{repos}}", repoList).replace("{{task}}", taskText);
 }
 
-function renderIdlePrompt(template: string, repo: RepoInfo, task: string): string {
+export function renderIdlePrompt(
+  template: string,
+  repo: RepoInfo,
+  task: string,
+  options: {
+    openPrCount: number | null;
+    openPrContext: string;
+    openPrContextAvailable: boolean;
+  }
+): string {
   const repoSlug = `${repo.owner}/${repo.repo}`;
-  return template
-    .split("{{repo}}")
-    .join(repoSlug)
-    .split("{{owner}}")
-    .join(repo.owner)
-    .split("{{repoName}}")
-    .join(repo.repo)
-    .split("{{task}}")
-    .join(task);
+  const openPrCountLabel = formatIdleOpenPrCount(options.openPrCount);
+  const openPrContext = formatIdleOpenPrContextBlock(options.openPrContext);
+  const placeholders: Record<"repo" | "owner" | "repoName" | "openPrCount" | "openPrContext" | "task", string> = {
+    repo: repoSlug,
+    owner: repo.owner,
+    repoName: repo.repo,
+    openPrCount: openPrCountLabel,
+    openPrContext,
+    task
+  };
+  let rendered = template.replace(
+    /{{(repo|owner|repoName|openPrCount|openPrContext|task)}}/g,
+    (_match, key: "repo" | "owner" | "repoName" | "openPrCount" | "openPrContext" | "task") =>
+      placeholders[key] ?? ""
+  );
+
+  if (!template.includes("{{openPrCount}}")) {
+    rendered = `${rendered}\nOpen PR count: ${openPrCountLabel}`;
+  }
+  if (!template.includes("{{openPrContext}}")) {
+    rendered = `${rendered}\n\nOpen PR context:\n${openPrContext}`;
+  }
+
+  const guard = buildIdleDuplicateWorkGuard(options.openPrCount, options.openPrContextAvailable);
+  return `${rendered}\n\n${guard}\n`;
 }
 
 function ensureGeminiSystemDefaultsPath(workdirRoot: string): string {
@@ -948,7 +1053,18 @@ export async function runIdleTask(
     });
     created = true;
 
-    const prompt = renderIdlePrompt(config.idle?.promptTemplate ?? "", repo, task);
+    const { openPrContextAvailable, openPrCount, openPrContext } = await loadIdleOpenPrData(client, repo, {
+      maxOpenPullRequests: MAX_IDLE_OPEN_PULL_REQUESTS,
+      maxContextEntries: MAX_IDLE_OPEN_PR_CONTEXT_ENTRIES,
+      maxContextChars: MAX_IDLE_OPEN_PR_CONTEXT_CHARS,
+      warn: (message) => process.stderr.write(`${message}\n`)
+    });
+
+    const prompt = renderIdlePrompt(config.idle?.promptTemplate ?? "", repo, task, {
+      openPrCount,
+      openPrContext,
+      openPrContextAvailable
+    });
 
   const logDir = path.resolve(config.workdirRoot, "agent-runner", "logs");
   fs.mkdirSync(logDir, { recursive: true });
@@ -968,6 +1084,7 @@ export async function runIdleTask(
     AGENT_RUNNER_REPO: `${repo.owner}/${repo.repo}`,
     AGENT_RUNNER_REPO_PATH: repoPath,
     AGENT_RUNNER_TASK: task,
+    AGENT_RUNNER_OPEN_PR_COUNT: formatIdleOpenPrCount(openPrCount),
     AGENT_RUNNER_PROMPT: prompt,
     AGENT_RUNNER_WORKROOT: workRoot,
     ...notifyEnv
