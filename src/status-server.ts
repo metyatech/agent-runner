@@ -302,7 +302,7 @@ function renderHtml(): string {
 
       <!-- Stale Records (collapsed) -->
       <section class="panel" id="staleSection" hidden>
-        <button id="staleToggle" class="stale-toggle"></button>
+        <button id="staleToggle" class="stale-toggle" type="button"></button>
         <div id="staleDetails" class="stale-details" hidden>
           <table>
             <thead>
@@ -394,7 +394,8 @@ function renderHtml(): string {
 
       const makeLink = (pathValue, label) => {
         const a = document.createElement("a");
-        a.href = "#";
+        const targetHref = "/open?path=" + encodeURIComponent(pathValue || "");
+        a.href = targetHref;
         a.textContent = label || pathValue;
         a.addEventListener("click", (e) => { e.preventDefault(); openPath(pathValue); });
         return a;

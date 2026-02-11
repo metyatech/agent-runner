@@ -17,6 +17,7 @@ type DashboardExports = {
   humanAge: (minutes: number | null) => string;
   renderCards: (rows: Array<Record<string, unknown>>) => void;
   renderStale: (rows: Array<Record<string, unknown>>) => void;
+  makeLink: (pathValue: string, label?: string) => FakeElement;
   refresh: () => Promise<void>;
 };
 
@@ -105,7 +106,7 @@ async function loadDashboardScript(): Promise<string> {
 function instrumentDashboardScript(script: string): string {
   return script.replace(
     /refresh\(\);\s*setInterval\(\s*refresh\s*,\s*[\d_]+\s*\);\s*/,
-    "globalThis.__testExports = { timeAgo, humanAge, renderCards, renderStale, refresh };\n"
+    "globalThis.__testExports = { timeAgo, humanAge, renderCards, renderStale, makeLink, refresh };\n"
   );
 }
 
@@ -253,6 +254,13 @@ setInterval( refresh , 5_000 );
     api.renderCards([]);
     expect(elements.runningEmpty.hidden).toBe(false);
     expect(elements.cardGrid.children).toHaveLength(0);
+  });
+
+  it("makeLink keeps a functional href for graceful fallback", async () => {
+    const { api } = await createDashboardRuntime();
+    const link = api.makeLink("C:/tmp/task.log", "Open log");
+    expect(link.href).toBe("/open?path=C%3A%2Ftmp%2Ftask.log");
+    expect(link.textContent).toBe("Open log");
   });
 
   it("humanAge normalizes rounding at hour boundaries", async () => {
