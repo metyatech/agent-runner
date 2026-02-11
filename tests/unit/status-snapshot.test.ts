@@ -3,11 +3,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { spawn } from "node:child_process";
-import {
-  loadActivityState,
-  recordActivity,
-  resolveActivityStatePath
-} from "../../src/activity-state.js";
+import { loadActivityState, recordActivity, resolveActivityStatePath } from "../../src/activity-state.js";
 import { recordRunningIssue, resolveRunnerStatePath } from "../../src/runner-state.js";
 import { buildStatusSnapshot } from "../../src/status-snapshot.js";
 

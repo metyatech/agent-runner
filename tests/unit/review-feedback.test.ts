@@ -15,4 +15,3 @@ describe("review-feedback", () => {
     expect(reviewFeedbackIndicatesOk("Please fix null checks in converter.py")).toBe(false);
   });
 });
-

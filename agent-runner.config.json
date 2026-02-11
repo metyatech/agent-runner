@@ -92,12 +92,7 @@
   },
   "codex": {
     "command": "codex",
-    "args": [
-      "exec",
-      "--dangerously-bypass-approvals-and-sandbox",
-      "--model",
-      "gpt-5.2"
-    ],
+    "args": ["exec", "--dangerously-bypass-approvals-and-sandbox", "--model", "gpt-5.2"],
     "promptTemplate": "You are running an autonomous task. Follow AGENTS.md rules. Use repo(s): {{repos}}. Task:\n{{task}}\n\nRequirements:\n- GitHub operations (issues, PRs, commits, pushes) are allowed and are NOT considered external sending.\n- Do not send or post anything outside GitHub (email, LMS, Slack, web forms, etc.) unless the user explicitly approves in the issue. If external communication is required, prepare a draft message + attachments list + checklist and ask the user for explicit approval before any send/post.\n- Commit and push any code changes.\n- Reference the issue number in commit messages (e.g., 'Refs #<issue-number>').\n- At the end, output a summary block delimited by:\nAGENT_RUNNER_SUMMARY_START\n<summary>\nAGENT_RUNNER_SUMMARY_END\nInclude: changes made, tests run (or 'Not run'), and commit hashes."
   },
   "webhooks": {
@@ -114,12 +109,7 @@
   },
   "copilot": {
     "command": "copilot",
-    "args": [
-      "--allow-all",
-      "--model",
-      "gemini-3-pro-preview",
-      "-p"
-    ]
+    "args": ["--allow-all", "--model", "gemini-3-pro-preview", "-p"]
   },
   "gemini": {
     "command": "gemini",
@@ -132,4 +122,3 @@
     ]
   }
 }
-

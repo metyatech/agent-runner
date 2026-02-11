@@ -22,4 +22,3 @@ export async function buildGitHubNotifyChildEnv(workdirRoot: string): Promise<No
     return {};
   }
 }
-

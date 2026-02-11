@@ -28,4 +28,3 @@ describe("agent-command", () => {
     expect(isAllowedAuthorAssociation(null)).toBe(false);
   });
 });
-

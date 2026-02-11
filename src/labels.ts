@@ -35,4 +35,3 @@ export function buildAgentLabels(config: AgentRunnerConfig): LabelDefinition[] {
     }
   ];
 }
-

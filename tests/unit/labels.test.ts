@@ -23,7 +23,7 @@ describe("buildAgentLabels", () => {
       }
     });
 
-    expect(labels.map((label) => label.name)).toEqual([
+    expect(labels.map(label => label.name)).toEqual([
       "agent:queued",
       "agent:running",
       "agent:done",
@@ -32,4 +32,3 @@ describe("buildAgentLabels", () => {
     ]);
   });
 });
-

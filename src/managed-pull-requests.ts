@@ -112,7 +112,7 @@ async function withLock<T>(statePath: string, action: () => T | Promise<T>): Pro
       if (Date.now() - start >= DEFAULT_LOCK_TIMEOUT_MS) {
         throw new Error("Timed out waiting for managed pull request state lock.");
       }
-      await new Promise((resolve) => setTimeout(resolve, DEFAULT_LOCK_RETRY_MS));
+      await new Promise(resolve => setTimeout(resolve, DEFAULT_LOCK_RETRY_MS));
     }
   }
 
@@ -162,7 +162,7 @@ export async function listManagedPullRequests(
   return withLock(statePath, () => {
     const state = readState(statePath);
     const parsed = state.managedPullRequests
-      .map((value) => parseKey(value))
+      .map(value => parseKey(value))
       .filter((value): value is { repo: RepoInfo; prNumber: number; key: string } => Boolean(value));
     if (!limit || limit <= 0 || parsed.length <= limit) {
       return parsed;

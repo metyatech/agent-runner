@@ -60,4 +60,3 @@ describe("pruneLogs", () => {
     fs.rmSync(dir, { recursive: true, force: true });
   });
 });
-

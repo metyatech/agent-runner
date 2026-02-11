@@ -47,9 +47,7 @@ export function resolveLogMaintenance(config: AgentRunnerConfig): LogMaintenance
       : 2000;
 
   const taskRunKeepLatest =
-    typeof raw?.taskRunKeepLatest === "number" &&
-    Number.isFinite(raw.taskRunKeepLatest) &&
-    raw.taskRunKeepLatest >= 0
+    typeof raw?.taskRunKeepLatest === "number" && Number.isFinite(raw.taskRunKeepLatest) && raw.taskRunKeepLatest >= 0
       ? Math.floor(raw.taskRunKeepLatest)
       : 200;
 
@@ -178,7 +176,7 @@ function selectByTotalSize(
 
 function selectTaskRunOverflow(sortedNewestFirst: LogFileInfo[], keepLatest: number): Set<string> {
   const selected = new Set<string>();
-  const taskRun = sortedNewestFirst.filter((file) => file.name.startsWith("task-run-"));
+  const taskRun = sortedNewestFirst.filter(file => file.name.startsWith("task-run-"));
   if (keepLatest <= 0) {
     for (const file of taskRun) selected.add(file.fullPath);
     return selected;
@@ -228,10 +226,10 @@ export function pruneLogs(options: {
     selectByTotalSize(sorted, options.decision.keepLatest, options.decision.maxTotalBytes, selected);
   }
 
-  const toDelete = sorted.filter((file) => selected.has(file.fullPath));
+  const toDelete = sorted.filter(file => selected.has(file.fullPath));
   const deletedResult = deleteFiles(toDelete, options.dryRun);
-  const deletedPaths = new Set(toDelete.map((file) => file.fullPath));
-  const kept = sorted.filter((file) => !deletedPaths.has(file.fullPath)).length;
+  const deletedPaths = new Set(toDelete.map(file => file.fullPath));
+  const kept = sorted.filter(file => !deletedPaths.has(file.fullPath)).length;
 
   return {
     dir: options.dir,
@@ -252,4 +250,3 @@ export function writeLatestPointer(logDir: string, name: string, logPath: string
     // best-effort
   }
 }
-

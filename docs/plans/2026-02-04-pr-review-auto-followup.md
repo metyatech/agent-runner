@@ -26,6 +26,7 @@
 ## Task 1: Add review queue state (RED)
 
 **Files:**
+
 - Create: `src/review-queue.ts`
 - Test: `tests/unit/review-queue.test.ts`
 
@@ -77,6 +78,7 @@ Expected: FAIL (module missing).
 **Step 3: Write minimal implementation**
 
 Create `src/review-queue.ts` mirroring the style of `src/webhook-queue.ts`:
+
 - lock-file based concurrency (same pattern)
 - `ReviewQueueEntry` includes: `issueId`, `repo`, `prNumber`, `url`, `reason`, `requiresEngine`, `enqueuedAt`
 - Deduplicate by `issueId`
@@ -90,6 +92,7 @@ Expected: PASS.
 **Step 5: Commit**
 
 Run:
+
 - `git add src/review-queue.ts tests/unit/review-queue.test.ts`
 - `git commit -m "feat: add review queue state"`
 
@@ -98,12 +101,14 @@ Run:
 ## Task 2: Enqueue managed PRs on review feedback (RED)
 
 **Files:**
+
 - Modify: `src/webhook-handler.ts`
 - Test: `tests/unit/webhook-handler-review-followup.test.ts`
 
 **Step 1: Write failing test**
 
 Create a test that:
+
 - Sends a `pull_request_review_comment` webhook payload (not containing `/agent run`)
 - Mocks `client.getIssue()` to return an IssueInfo for a PR with `author: "agent-runner-bot[bot]"` (managed)
 - Asserts the PR is enqueued into review-queue and labels are refreshed for re-run (e.g. clears terminal/busy labels and re-queues)
@@ -116,6 +121,7 @@ Expected: FAIL (handler not implemented).
 **Step 3: Minimal implementation**
 
 In `src/webhook-handler.ts`:
+
 - Extend payload typing for `pull_request_review` and `pull_request_review_comment`
 - Add a path for non-`/agent run` review comments:
   - Resolve PR issue via `client.getIssue(repo, prNumber)`
@@ -133,6 +139,7 @@ Run: `npm test -- tests/unit/webhook-handler-review-followup.test.ts`
 **Step 5: Commit**
 
 Run:
+
 - `git add src/webhook-handler.ts tests/unit/webhook-handler-review-followup.test.ts`
 - `git commit -m "feat: enqueue managed PRs on review feedback"`
 
@@ -141,6 +148,7 @@ Run:
 ## Task 3: Include PR review comments in the agent prompt (RED)
 
 **Files:**
+
 - Modify: `src/github.ts`
 - Modify: `src/runner.ts`
 - Test: `tests/unit/runner-prompt-review-comments.test.ts`
@@ -167,6 +175,7 @@ Run: `npm test -- tests/unit/runner-prompt-review-comments.test.ts`
 **Step 5: Commit**
 
 Run:
+
 - `git add src/github.ts src/runner.ts tests/unit/runner-prompt-review-comments.test.ts`
 - `git commit -m "feat: include PR review comments in prompts"`
 
@@ -175,6 +184,7 @@ Run:
 ## Task 4: Consume review queue with idle gating + spare concurrency (RED)
 
 **Files:**
+
 - Modify: `src/cli.ts`
 - Modify: `src/runner.ts` (if needed for a review-specific entrypoint)
 - Test: `tests/unit/cli-review-scheduler.test.ts` (logic-level, mocked)
@@ -182,6 +192,7 @@ Run:
 **Step 1: Write failing test**
 
 Add a unit test that:
+
 - Simulates: normal request queue has fewer items than `concurrency`
 - Simulates: review-queue has entries
 - Simulates: idle engines allow-list contains at least one engine
@@ -196,6 +207,7 @@ Run: `npm test -- tests/unit/cli-review-scheduler.test.ts`
 **Step 3: Minimal implementation**
 
 In `src/cli.ts` runner loop:
+
 - Load review queue from `workdirRoot/agent-runner/state/review-queue.json`
 - If review queue non-empty and spare capacity exists:
   - Compute allowed engines using the same gating as idle (refactor the engine gating logic into a helper to avoid duplication).
@@ -213,6 +225,7 @@ Run: `npm test -- tests/unit/cli-review-scheduler.test.ts`
 **Step 5: Commit**
 
 Run:
+
 - `git add src/cli.ts tests/unit/cli-review-scheduler.test.ts src/review-queue.ts`
 - `git commit -m "feat: run review followups with idle gating"`
 
@@ -221,6 +234,7 @@ Run:
 ## Task 5: Resolve review threads + auto-merge on approval (RED)
 
 **Files:**
+
 - Modify: `src/github.ts`
 - Create: `src/pr-review-automation.ts`
 - Test: `tests/unit/pr-review-automation.test.ts`
@@ -228,6 +242,7 @@ Run:
 **Step 1: Write failing tests**
 
 Unit-test pure logic that:
+
 - When `approved` and no conflicts -> calls merge + delete ref
 - When not approved -> does not merge
 - When resolving threads -> calls `resolveReviewThread` for each unresolved thread id
@@ -260,6 +275,7 @@ Run: `npm test -- tests/unit/pr-review-automation.test.ts`
 **Step 5: Commit**
 
 Run:
+
 - `git add src/github.ts src/pr-review-automation.ts tests/unit/pr-review-automation.test.ts`
 - `git commit -m "feat: auto-resolve review threads and merge managed PRs"`
 
@@ -268,6 +284,7 @@ Run:
 ## Final Verification
 
 Run:
+
 - `npm run lint`
 - `npm test`
 - `npm run build`

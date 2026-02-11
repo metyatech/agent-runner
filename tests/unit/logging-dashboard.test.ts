@@ -23,7 +23,7 @@ function loadLogsPanel(): DashboardPanel {
   );
   const raw = fs.readFileSync(dashboardPath, "utf8");
   const dashboard = JSON.parse(raw) as { panels?: DashboardPanel[] };
-  const panel = dashboard.panels?.find((item) => item.type === "logs" && item.title === "Logs");
+  const panel = dashboard.panels?.find(item => item.type === "logs" && item.title === "Logs");
   if (!panel) {
     throw new Error("Logs panel not found in agent-runner-logs dashboard");
   }
@@ -36,12 +36,10 @@ describe("agent-runner logs dashboard query", () => {
     const targets = panel.targets ?? [];
 
     expect(targets.length).toBe(2);
-    expect(targets.every((target) => (target.expr ?? "").includes(" or "))).toBe(false);
+    expect(targets.every(target => (target.expr ?? "").includes(" or "))).toBe(false);
 
-    const runnerOutTarget = targets.find((target) => (target.expr ?? "").includes('kind="runner-out"'));
-    const nonRunnerOutTarget = targets.find((target) =>
-      (target.expr ?? "").includes('kind!="runner-out"')
-    );
+    const runnerOutTarget = targets.find(target => (target.expr ?? "").includes('kind="runner-out"'));
+    const nonRunnerOutTarget = targets.find(target => (target.expr ?? "").includes('kind!="runner-out"'));
 
     expect(runnerOutTarget?.expr).toContain('tag=~"$tag"');
     expect(nonRunnerOutTarget?.expr ?? "").not.toContain('tag=~"$tag"');

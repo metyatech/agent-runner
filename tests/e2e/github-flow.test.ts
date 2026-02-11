@@ -10,19 +10,14 @@ const cliPath = path.resolve("src", "cli.ts");
 const dummyCodexPath = path.resolve("tests", "e2e", "fixtures", "dummy-codex.js");
 const titlePrefix = "E2E agent-runner";
 
-const token =
-  process.env.AGENT_GITHUB_TOKEN ||
-  process.env.GITHUB_TOKEN ||
-  process.env.GH_TOKEN;
+const token = process.env.AGENT_GITHUB_TOKEN || process.env.GITHUB_TOKEN || process.env.GH_TOKEN;
 const owner = process.env.E2E_GH_OWNER;
 const repo = process.env.E2E_GH_REPO;
 const workdirRoot = process.env.E2E_WORKDIR_ROOT ?? path.resolve("..");
 
 function requireEnv(): { token: string; owner: string; repo: string } {
   if (!token || !owner || !repo) {
-    throw new Error(
-      "Missing required env vars: AGENT_GITHUB_TOKEN/GITHUB_TOKEN/GH_TOKEN, E2E_GH_OWNER, E2E_GH_REPO."
-    );
+    throw new Error("Missing required env vars: AGENT_GITHUB_TOKEN/GITHUB_TOKEN/GH_TOKEN, E2E_GH_OWNER, E2E_GH_REPO.");
   }
   return { token, owner, repo };
 }
@@ -40,9 +35,7 @@ async function fetchLabelNames(octokit: Octokit, issueNumber: number): Promise<s
     repo: requireEnv().repo,
     issue_number: issueNumber
   });
-  return response.data.labels.map((label) =>
-    typeof label === "string" ? label : label.name ?? ""
-  );
+  return response.data.labels.map(label => (typeof label === "string" ? label : (label.name ?? "")));
 }
 
 async function waitForLabels(
@@ -58,7 +51,7 @@ async function waitForLabels(
     if (predicate(last)) {
       return last;
     }
-    await new Promise((resolve) => setTimeout(resolve, 2000));
+    await new Promise(resolve => setTimeout(resolve, 2000));
   }
   return last;
 }
@@ -81,11 +74,7 @@ async function runUntilLabels(
   return last;
 }
 
-async function closeOpenE2EIssues(
-  octokit: Octokit,
-  labels: string[],
-  prefix: string
-): Promise<void> {
+async function closeOpenE2EIssues(octokit: Octokit, labels: string[], prefix: string): Promise<void> {
   const env = requireEnv();
   const seen = new Set<number>();
 
@@ -115,10 +104,7 @@ async function closeOpenE2EIssues(
   }
 }
 
-async function hasSufficientRateLimit(
-  octokit: Octokit,
-  minimumRemaining = 20
-): Promise<boolean> {
+async function hasSufficientRateLimit(octokit: Octokit, minimumRemaining = 20): Promise<boolean> {
   try {
     const response = await octokit.rateLimit.get();
     return response.data.resources.core.remaining >= minimumRemaining;
@@ -148,155 +134,140 @@ async function waitForIssueLabel(
       per_page: 100,
       state: "open"
     });
-    if (response.data.some((issue) => issue.number === issueNumber)) {
+    if (response.data.some(issue => issue.number === issueNumber)) {
       return;
     }
-    await new Promise((resolve) => setTimeout(resolve, 2000));
+    await new Promise(resolve => setTimeout(resolve, 2000));
   }
   throw new Error(`Issue ${issueNumber} not visible under label ${label}.`);
 }
 
 describe("github flow", () => {
-  it(
-    "marks needs-user on failure and re-queues after reply",
-    async () => {
-      const env = requireEnv();
-      const octokit = new Octokit({ auth: env.token });
+  it("marks needs-user on failure and re-queues after reply", async () => {
+    const env = requireEnv();
+    const octokit = new Octokit({ auth: env.token });
 
-      const hasRate = await hasSufficientRateLimit(octokit);
-      if (!hasRate) {
-        console.warn("Skipping E2E GitHub flow test due to API rate limit.");
-        return;
+    const hasRate = await hasSufficientRateLimit(octokit);
+    if (!hasRate) {
+      console.warn("Skipping E2E GitHub flow test due to API rate limit.");
+      return;
+    }
+
+    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "agent-runner-e2e-"));
+    const configPath = path.join(tempDir, "agent-runner.e2e.json");
+
+    const config = {
+      owner: env.owner,
+      repos: [env.repo],
+      workdirRoot,
+      pollIntervalSeconds: 60,
+      concurrency: 1,
+      labels: {
+        queued: "agent:e2e-queued",
+        running: "agent:e2e-running",
+        done: "agent:e2e-done",
+        failed: "agent:e2e-failed",
+        needsUserReply: "agent:e2e-needs-user"
+      },
+      codex: {
+        command: "node",
+        args: [dummyCodexPath],
+        promptTemplate: "Template {{repos}} {{task}}"
       }
+    };
 
-      const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "agent-runner-e2e-"));
-      const configPath = path.join(tempDir, "agent-runner.e2e.json");
+    fs.writeFileSync(configPath, JSON.stringify(config, null, 2), "utf8");
 
-      const config = {
-        owner: env.owner,
-        repos: [env.repo],
-        workdirRoot,
-        pollIntervalSeconds: 60,
-        concurrency: 1,
-        labels: {
-          queued: "agent:e2e-queued",
-          running: "agent:e2e-running",
-          done: "agent:e2e-done",
-          failed: "agent:e2e-failed",
-          needsUserReply: "agent:e2e-needs-user"
-        },
-        codex: {
-          command: "node",
-          args: [dummyCodexPath],
-          promptTemplate: "Template {{repos}} {{task}}"
-        }
-      };
+    const labelResult = runCli(["labels", "sync", "--yes", "--config", configPath]);
+    expect(labelResult.status).toBe(0);
 
-      fs.writeFileSync(configPath, JSON.stringify(config, null, 2), "utf8");
+    await closeOpenE2EIssues(octokit, Object.values(config.labels), titlePrefix);
 
-      const labelResult = runCli(["labels", "sync", "--yes", "--config", configPath]);
-      expect(labelResult.status).toBe(0);
+    const issue = await octokit.issues.create({
+      owner: env.owner,
+      repo: env.repo,
+      title: `${titlePrefix} ${Date.now()}`,
+      body: `### Goal\nValidate needs-user flow\n\n### Scope\nThis repository only\n\n### Repository list (if applicable)\n_No response_\n\n### Constraints\nNone\n\n### Autonomy\n- [x] Yes, proceed autonomously\n\n### Acceptance criteria\nNone`,
+      labels: []
+    });
 
-      await closeOpenE2EIssues(octokit, Object.values(config.labels), titlePrefix);
+    const issueNumber = issue.data.number;
 
-      const issue = await octokit.issues.create({
+    try {
+      await octokit.issues.createComment({
         owner: env.owner,
         repo: env.repo,
-        title: `${titlePrefix} ${Date.now()}`,
-        body: `### Goal\nValidate needs-user flow\n\n### Scope\nThis repository only\n\n### Repository list (if applicable)\n_No response_\n\n### Constraints\nNone\n\n### Autonomy\n- [x] Yes, proceed autonomously\n\n### Acceptance criteria\nNone`,
-        labels: []
+        issue_number: issueNumber,
+        body: "/agent run"
       });
 
-      const issueNumber = issue.data.number;
+      const failedLabels = await runUntilLabels(
+        octokit,
+        issueNumber,
+        labels => labels.includes(config.labels.needsUserReply) && labels.includes(config.labels.failed),
+        () => {
+          const failRun = runCli(["run", "--once", "--yes", "--config", configPath], { E2E_CODEX_EXIT: "1" });
+          expect(failRun.status).toBe(0);
+        },
+        3
+      );
+      expect(failedLabels).toContain(config.labels.needsUserReply);
+      expect(failedLabels).toContain(config.labels.failed);
 
-      try {
-        await octokit.issues.createComment({
-          owner: env.owner,
-          repo: env.repo,
-          issue_number: issueNumber,
-          body: "/agent run"
-        });
+      const comments = await octokit.issues.listComments({
+        owner: env.owner,
+        repo: env.repo,
+        issue_number: issueNumber,
+        per_page: 100
+      });
+      expect(comments.data.some(comment => comment.body?.includes(NEEDS_USER_MARKER))).toBe(true);
 
-        const failedLabels = await runUntilLabels(
-          octokit,
-          issueNumber,
-          (labels) =>
-            labels.includes(config.labels.needsUserReply) && labels.includes(config.labels.failed),
-          () => {
-            const failRun = runCli(
-              ["run", "--once", "--yes", "--config", configPath],
-              { E2E_CODEX_EXIT: "1" }
-            );
-            expect(failRun.status).toBe(0);
-          },
-          3
-        );
-        expect(failedLabels).toContain(config.labels.needsUserReply);
-        expect(failedLabels).toContain(config.labels.failed);
+      await octokit.issues.createComment({
+        owner: env.owner,
+        repo: env.repo,
+        issue_number: issueNumber,
+        body: "Acknowledged. Please retry."
+      });
 
-        const comments = await octokit.issues.listComments({
-          owner: env.owner,
-          repo: env.repo,
-          issue_number: issueNumber,
-          per_page: 100
-        });
-        expect(comments.data.some((comment) => comment.body?.includes(NEEDS_USER_MARKER))).toBe(
-          true
-        );
+      const doneLabels = await runUntilLabels(
+        octokit,
+        issueNumber,
+        labels => labels.includes(config.labels.done) && !labels.includes(config.labels.needsUserReply),
+        () => {
+          const successRun = runCli(["run", "--once", "--yes", "--config", configPath], { E2E_CODEX_EXIT: "0" });
+          expect(successRun.status).toBe(0);
+        },
+        3
+      );
+      expect(doneLabels).toContain(config.labels.done);
+      expect(doneLabels).not.toContain(config.labels.needsUserReply);
+    } finally {
+      await octokit.issues.update({
+        owner: env.owner,
+        repo: env.repo,
+        issue_number: issueNumber,
+        state: "closed"
+      });
 
-        await octokit.issues.createComment({
-          owner: env.owner,
-          repo: env.repo,
-          issue_number: issueNumber,
-          body: "Acknowledged. Please retry."
-        });
-
-        const doneLabels = await runUntilLabels(
-          octokit,
-          issueNumber,
-          (labels) =>
-            labels.includes(config.labels.done) && !labels.includes(config.labels.needsUserReply),
-          () => {
-            const successRun = runCli(
-              ["run", "--once", "--yes", "--config", configPath],
-              { E2E_CODEX_EXIT: "0" }
-            );
-            expect(successRun.status).toBe(0);
-          },
-          3
-        );
-        expect(doneLabels).toContain(config.labels.done);
-        expect(doneLabels).not.toContain(config.labels.needsUserReply);
-      } finally {
-        await octokit.issues.update({
-          owner: env.owner,
-          repo: env.repo,
-          issue_number: issueNumber,
-          state: "closed"
-        });
-
-        for (const label of Object.values(config.labels)) {
-          try {
-            await octokit.issues.deleteLabel({
-              owner: env.owner,
-              repo: env.repo,
-              name: label
-            });
-          } catch (error) {
-            if (
-              typeof error === "object" &&
-              error &&
-              "status" in error &&
-              (error as { status?: number }).status === 404
-            ) {
-              continue;
-            }
-            throw error;
+      for (const label of Object.values(config.labels)) {
+        try {
+          await octokit.issues.deleteLabel({
+            owner: env.owner,
+            repo: env.repo,
+            name: label
+          });
+        } catch (error) {
+          if (
+            typeof error === "object" &&
+            error &&
+            "status" in error &&
+            (error as { status?: number }).status === 404
+          ) {
+            continue;
           }
+          throw error;
         }
       }
-    },
-    { timeout: 240_000 }
-  );
+    }
+  }, 240_000);
 });
-

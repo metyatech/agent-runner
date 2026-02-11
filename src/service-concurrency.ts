@@ -54,9 +54,7 @@ export function idleEngineToService(engine: IdleEngine): ServiceName {
   }
 }
 
-export function createServiceLimiters(
-  config: AgentRunnerConfig
-): Record<ServiceName, ReturnType<typeof pLimit>> {
+export function createServiceLimiters(config: AgentRunnerConfig): Record<ServiceName, ReturnType<typeof pLimit>> {
   const concurrency = resolveServiceConcurrency(config);
   return {
     codex: pLimit(concurrency.codex),
@@ -65,4 +63,3 @@ export function createServiceLimiters(
     "amazon-q": pLimit(concurrency["amazon-q"])
   };
 }
-

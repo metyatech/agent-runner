@@ -11,7 +11,10 @@
     "build": "tsup",
     "lint": "eslint . && tsc -p tsconfig.json --noEmit && tsc -p tsconfig.test.json --noEmit",
     "lint:ps": "powershell -NoProfile -NonInteractive -ExecutionPolicy Bypass -File scripts\\\\lint-ps.ps1",
-    "verify": "npm run lint && npm run lint:ps && npm test && npm run build",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "verify:deps": "npm audit",
+    "verify": "npm run format:check && npm run lint && npm run lint:ps && npm test && npm run build && npm run verify:deps",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run ./tests/unit ./tests/e2e/cli.test.ts",
     "test:unit": "vitest run ./tests/unit",
@@ -34,11 +37,13 @@
     "@typescript-eslint/eslint-plugin": "^8.17.0",
     "@typescript-eslint/parser": "^8.17.0",
     "eslint": "^9.13.0",
+    "eslint-config-prettier": "^10.1.8",
+    "prettier": "^3.8.1",
     "simple-git-hooks": "^2.11.1",
     "tsup": "^8.3.0",
     "tsx": "^4.19.2",
     "typescript": "^5.7.0",
-    "vitest": "^1.6.0"
+    "vitest": "^4.0.18"
   },
   "simple-git-hooks": {
     "pre-commit": "npm run verify"

@@ -31,9 +31,10 @@ export function loadActivityState(statePath: string): ActivityState {
   if (!fs.existsSync(statePath)) {
     return { running: [], updatedAt: new Date(0).toISOString() };
   }
-  return withStateDb(statePath, (db) => {
+  return withStateDb(statePath, db => {
     const rows = db
-      .prepare(`
+      .prepare(
+        `
         SELECT
           a.id,
           a.kind,
@@ -48,7 +49,8 @@ export function loadActivityState(statePath: string): ActivityState {
           a.task
         FROM activities a
         JOIN repos r ON r.id = a.repo_id
-      `)
+      `
+      )
       .all() as Array<{
       id: string;
       kind: ActivityKind;
@@ -63,7 +65,7 @@ export function loadActivityState(statePath: string): ActivityState {
       task: string | null;
     }>;
 
-    const running: ActivityRecord[] = rows.map((row) => ({
+    const running: ActivityRecord[] = rows.map(row => ({
       id: row.id,
       kind: row.kind,
       engine: row.engine ?? undefined,
@@ -82,7 +84,7 @@ export function loadActivityState(statePath: string): ActivityState {
 }
 
 export function saveActivityState(statePath: string, state: ActivityState): void {
-  withStateDb(statePath, (db) => {
+  withStateDb(statePath, db => {
     db.exec("DELETE FROM activities");
     const insert = db.prepare(`
       INSERT INTO activities (
@@ -114,12 +116,13 @@ export function saveActivityState(statePath: string, state: ActivityState): void
 }
 
 export function recordActivity(statePath: string, record: ActivityRecord): void {
-  withStateDb(statePath, (db) => {
+  withStateDb(statePath, db => {
     const repoId = upsertRepo(db, record.repo);
     if (record.issueId !== undefined) {
       db.prepare("DELETE FROM activities WHERE issue_id = ? AND id <> ?").run(record.issueId, record.id);
     }
-    db.prepare(`
+    db.prepare(
+      `
       INSERT INTO activities (
         id, kind, engine, repo_id, started_at, pid, log_path, issue_id, issue_number, task
       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
@@ -133,7 +136,8 @@ export function recordActivity(statePath: string, record: ActivityRecord): void 
         issue_id = excluded.issue_id,
         issue_number = excluded.issue_number,
         task = excluded.task
-    `).run(
+    `
+    ).run(
       record.id,
       record.kind,
       record.engine ?? null,
@@ -150,7 +154,7 @@ export function recordActivity(statePath: string, record: ActivityRecord): void 
 }
 
 export function removeActivity(statePath: string, id: string): void {
-  withStateDb(statePath, (db) => {
+  withStateDb(statePath, db => {
     db.prepare("DELETE FROM activities WHERE id = ?").run(id);
     setStateMeta(db, "activities_updated_at", new Date().toISOString());
   });
@@ -164,11 +168,13 @@ export function pruneDeadActivityRecords(
   if (!fs.existsSync(statePath)) {
     return 0;
   }
-  return withStateDb(statePath, (db) => {
-    const rows = db
-      .prepare("SELECT id, kind, pid FROM activities")
-      .all() as Array<{ id: string; kind: ActivityKind; pid: number }>;
-    const removable = rows.filter((row) => kinds.includes(row.kind) && !aliveCheck(row.pid));
+  return withStateDb(statePath, db => {
+    const rows = db.prepare("SELECT id, kind, pid FROM activities").all() as Array<{
+      id: string;
+      kind: ActivityKind;
+      pid: number;
+    }>;
+    const removable = rows.filter(row => kinds.includes(row.kind) && !aliveCheck(row.pid));
     if (removable.length === 0) {
       return 0;
     }

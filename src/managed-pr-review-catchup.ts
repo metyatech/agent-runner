@@ -54,7 +54,7 @@ export async function enqueueManagedPullRequestReviewFollowups(options: {
 
   const allowedRepos =
     Array.isArray(options.config.repos) && options.config.repos.length > 0
-      ? new Set(options.config.repos.map((repo) => `${options.config.owner.toLowerCase()}/${repo.toLowerCase()}`))
+      ? new Set(options.config.repos.map(repo => `${options.config.owner.toLowerCase()}/${repo.toLowerCase()}`))
       : null;
 
   const targetCandidates = Math.max(1, Math.min(50, limit * 10));
@@ -163,7 +163,7 @@ export async function enqueueManagedPullRequestReviewFollowups(options: {
 
     try {
       const threads = await options.client.listPullRequestReviewThreads(entry.repo, entry.prNumber);
-      const unresolved = threads.filter((thread) => !thread.isResolved);
+      const unresolved = threads.filter(thread => !thread.isResolved);
       if (unresolved.length > 0) {
         if (options.dryRun) {
           enqueued += 1;
@@ -202,7 +202,7 @@ export async function enqueueManagedPullRequestReviewFollowups(options: {
     }
 
     const summary = summarizeLatestReviews(
-      reviews.map((review) => ({
+      reviews.map(review => ({
         state: review.state,
         author: review.author,
         submittedAt: review.submittedAt,

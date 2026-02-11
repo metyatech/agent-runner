@@ -196,10 +196,10 @@ export function pruneReports(options: {
     selectByTotalSize(sorted, options.decision.keepLatest, options.decision.maxTotalBytes, selected);
   }
 
-  const toDelete = sorted.filter((file) => selected.has(file.fullPath));
+  const toDelete = sorted.filter(file => selected.has(file.fullPath));
   const deletedResult = deleteFiles(toDelete, options.dryRun);
-  const deletedPaths = new Set(toDelete.map((file) => file.fullPath));
-  const kept = sorted.filter((file) => !deletedPaths.has(file.fullPath)).length;
+  const deletedPaths = new Set(toDelete.map(file => file.fullPath));
+  const kept = sorted.filter(file => !deletedPaths.has(file.fullPath)).length;
 
   return {
     dir: options.dir,
@@ -211,4 +211,3 @@ export function pruneReports(options: {
     dryRun: options.dryRun
   };
 }
-

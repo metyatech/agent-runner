@@ -89,13 +89,13 @@ describe("buildCodexInvocation", () => {
       const invocation = buildCodexInvocation(
         {
           workdirRoot: "D:\\ghws",
-        labels: {
-          queued: "agent:queued",
-          running: "agent:running",
-          done: "agent:done",
-          failed: "agent:failed",
-          needsUserReply: "agent:needs-user"
-        },
+          labels: {
+            queued: "agent:queued",
+            running: "agent:running",
+            done: "agent:done",
+            failed: "agent:failed",
+            needsUserReply: "agent:needs-user"
+          },
           owner: "metyatech",
           repos: "all",
           pollIntervalSeconds: 60,
@@ -371,4 +371,3 @@ describe("buildIssueTaskText", () => {
     expect(text).toContain("…[truncated]");
   });
 });
-

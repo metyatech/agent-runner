@@ -58,7 +58,7 @@ describe("activity-state", () => {
       task: "dead"
     });
 
-    const removed = pruneDeadActivityRecords(statePath, (pid) => pid === 100);
+    const removed = pruneDeadActivityRecords(statePath, pid => pid === 100);
     expect(removed).toBe(1);
 
     const state = loadActivityState(statePath);

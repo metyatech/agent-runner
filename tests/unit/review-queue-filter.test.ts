@@ -35,13 +35,12 @@ describe("review-queue (filter)", () => {
       requiresEngine: false
     });
 
-    const taken = await takeReviewTasksWhere(queuePath, 2, (entry) => !entry.requiresEngine);
-    expect(taken.map((entry) => entry.issueId)).toEqual([1, 3]);
+    const taken = await takeReviewTasksWhere(queuePath, 2, entry => !entry.requiresEngine);
+    expect(taken.map(entry => entry.issueId)).toEqual([1, 3]);
 
     const remaining = loadReviewQueue(queuePath);
-    expect(remaining.map((entry) => entry.issueId)).toEqual([2]);
+    expect(remaining.map(entry => entry.issueId)).toEqual([2]);
 
     fs.rmSync(root, { recursive: true, force: true });
   });
 });
-

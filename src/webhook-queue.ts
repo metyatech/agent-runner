@@ -38,10 +38,7 @@ function resolveQueueDir(workdirRoot: string): string {
   return path.resolve(workdirRoot, "agent-runner", "state");
 }
 
-export function resolveWebhookQueuePath(
-  workdirRoot: string,
-  config?: AgentRunnerConfig["webhooks"]
-): string {
+export function resolveWebhookQueuePath(workdirRoot: string, config?: AgentRunnerConfig["webhooks"]): string {
   const configured = config?.queueFile;
   if (configured) {
     return path.resolve(configured);
@@ -49,9 +46,7 @@ export function resolveWebhookQueuePath(
   return path.join(resolveQueueDir(workdirRoot), DEFAULT_QUEUE_FILENAME);
 }
 
-function resolveWebhookQueueLockPath(
-  queuePath: string
-): string {
+function resolveWebhookQueueLockPath(queuePath: string): string {
   return path.join(path.dirname(queuePath), DEFAULT_LOCK_FILENAME);
 }
 
@@ -116,7 +111,7 @@ async function withQueueLock<T>(queuePath: string, action: () => T | Promise<T>)
       if (Date.now() - start >= DEFAULT_LOCK_TIMEOUT_MS) {
         throw new Error("Timed out waiting for webhook queue lock.");
       }
-      await new Promise((resolve) => setTimeout(resolve, DEFAULT_LOCK_RETRY_MS));
+      await new Promise(resolve => setTimeout(resolve, DEFAULT_LOCK_RETRY_MS));
     }
   }
 
@@ -135,13 +130,10 @@ export function loadWebhookQueue(queuePath: string): WebhookQueueEntry[] {
   return readQueueState(queuePath).queued;
 }
 
-export async function enqueueWebhookIssue(
-  queuePath: string,
-  issue: IssueInfo
-): Promise<boolean> {
+export async function enqueueWebhookIssue(queuePath: string, issue: IssueInfo): Promise<boolean> {
   return withQueueLock(queuePath, () => {
     const state = readQueueState(queuePath);
-    if (state.queued.some((entry) => entry.issueId === issue.id)) {
+    if (state.queued.some(entry => entry.issueId === issue.id)) {
       return false;
     }
     state.queued.push({
@@ -157,25 +149,19 @@ export async function enqueueWebhookIssue(
   });
 }
 
-export async function removeWebhookIssues(
-  queuePath: string,
-  issueIds: number[]
-): Promise<void> {
+export async function removeWebhookIssues(queuePath: string, issueIds: number[]): Promise<void> {
   if (issueIds.length === 0) {
     return;
   }
   const uniqueIds = new Set(issueIds);
   await withQueueLock(queuePath, () => {
     const state = readQueueState(queuePath);
-    const next = state.queued.filter((entry) => !uniqueIds.has(entry.issueId));
+    const next = state.queued.filter(entry => !uniqueIds.has(entry.issueId));
     writeQueueState(queuePath, next);
   });
 }
 
-export async function replaceWebhookQueue(
-  queuePath: string,
-  queued: WebhookQueueEntry[]
-): Promise<void> {
+export async function replaceWebhookQueue(queuePath: string, queued: WebhookQueueEntry[]): Promise<void> {
   await withQueueLock(queuePath, () => {
     writeQueueState(queuePath, queued);
   });

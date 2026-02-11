@@ -31,11 +31,7 @@ function repoHttpsUrl(repo: RepoInfo): string {
 }
 
 function buildAuthEnv(): NodeJS.ProcessEnv {
-  const token =
-    process.env.AGENT_GITHUB_TOKEN ||
-    process.env.GITHUB_TOKEN ||
-    process.env.GH_TOKEN ||
-    "";
+  const token = process.env.AGENT_GITHUB_TOKEN || process.env.GITHUB_TOKEN || process.env.GH_TOKEN || "";
   return buildGitAuthEnv(process.env, token);
 }
 
@@ -97,7 +93,9 @@ export async function ensureRepoCache(workdirRoot: string, repo: RepoInfo): Prom
         fs.mkdirSync(path.dirname(localPath), { recursive: true });
         const useGh = await commandExists("gh");
         if (useGh) {
-          await runCommand("gh", ["repo", "clone", `${repo.owner}/${repo.repo}`, localPath, "--", "--recursive"], { env });
+          await runCommand("gh", ["repo", "clone", `${repo.owner}/${repo.repo}`, localPath, "--", "--recursive"], {
+            env
+          });
         } else {
           await runCommand("git", ["clone", "--recursive", repoHttpsUrl(repo), localPath], { env });
         }
@@ -162,16 +160,7 @@ export async function createWorktreeFromDefaultBranch(options: {
       const startRef = await resolveBranchStartRef(options.cachePath, options.defaultBranch);
       await runCommand(
         "git",
-        [
-          "-C",
-          options.cachePath,
-          "worktree",
-          "add",
-          options.worktreePath,
-          "-b",
-          options.newBranch,
-          startRef
-        ],
+        ["-C", options.cachePath, "worktree", "add", options.worktreePath, "-b", options.newBranch, startRef],
         { env }
       );
     },
@@ -202,7 +191,16 @@ export async function createWorktreeForRemoteBranch(options: {
       );
       const startRef = await resolveBranchStartRef(options.cachePath, options.branch);
       await runCommand("git", ["-C", options.cachePath, "branch", "-f", options.branch, startRef], { env });
-      await runCommand("git", ["-C", options.cachePath, "worktree", "add", options.worktreePath, options.branch], { env });
+      if (startRef.startsWith("refs/remotes/origin/")) {
+        await runCommand(
+          "git",
+          ["-C", options.cachePath, "branch", "--set-upstream-to", `origin/${options.branch}`, options.branch],
+          { env }
+        );
+      }
+      await runCommand("git", ["-C", options.cachePath, "worktree", "add", options.worktreePath, options.branch], {
+        env
+      });
     },
     { timeoutMs: 15 * 60 * 1000 }
   );
@@ -221,7 +219,9 @@ export async function removeWorktree(options: {
       options.repo,
       async () => {
         const env = buildAuthEnv();
-        await runCommand("git", ["-C", options.cachePath, "worktree", "remove", "--force", options.worktreePath], { env });
+        await runCommand("git", ["-C", options.cachePath, "worktree", "remove", "--force", options.worktreePath], {
+          env
+        });
       },
       { timeoutMs: 15 * 60 * 1000 }
     );

@@ -17,7 +17,7 @@ describe("git-cache-lock", () => {
     const first = await acquireGitCacheLock(root, repo, { timeoutMs: 2000, retryMs: 10 });
     try {
       const pending = acquireGitCacheLock(root, repo, { timeoutMs: 2000, retryMs: 10 });
-      await new Promise((resolve) => setTimeout(resolve, 50));
+      await new Promise(resolve => setTimeout(resolve, 50));
       releaseGitCacheLock(first);
       const second = await pending;
       releaseGitCacheLock(second);
@@ -30,4 +30,3 @@ describe("git-cache-lock", () => {
     }
   });
 });
-

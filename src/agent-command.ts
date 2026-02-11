@@ -1,8 +1,7 @@
-export type AgentCommand =
-  | {
-      kind: "run";
-      raw: string;
-    };
+export type AgentCommand = {
+  kind: "run";
+  raw: string;
+};
 
 const RUN_PATTERN = /^\s*\/agent\s+run\b/i;
 
@@ -26,4 +25,3 @@ export function isAllowedAuthorAssociation(value: string | null | undefined): bo
   }
   return ALLOWED_ASSOCIATIONS.has(value.toUpperCase());
 }
-

@@ -17,17 +17,18 @@ describe("logging config", () => {
 
     const runnerOutBlock = promtail.slice(runnerOutStart, runnerErrStart);
     expect(runnerOutBlock).toContain("- match:");
-    expect(runnerOutBlock).toContain("selector: '{job=\"agent-runner\", kind=\"runner-out\"} |~ ");
+    expect(runnerOutBlock).toContain('selector: \'{job="agent-runner", kind="runner-out"} |~ ');
     expect(runnerOutBlock).toContain("stages:");
     expect(runnerOutBlock).toContain("source: msg");
   });
 
   it("uses a selector that keeps optional BOM-prefixed bracketed lines eligible for parsing", () => {
     const promtail = readRepoFile("ops", "logging", "promtail-config.yml");
-    const selectorPattern = "selector: '{job=\"agent-runner\", kind=\"runner-out\"} |~ \"\\\\[[^\\\\]]+\\\\]\\\\s+\\\\[[A-Z]+\\\\]\\\\s+\"'";
+    const selectorPattern =
+      'selector: \'{job="agent-runner", kind="runner-out"} |~ "\\\\[[^\\\\]]+\\\\]\\\\s+\\\\[[A-Z]+\\\\]\\\\s+"\'';
 
     expect(promtail).toContain(selectorPattern);
-    expect(promtail).not.toContain("selector: '{job=\"agent-runner\", kind=\"runner-out\"} |~ \"^(?:\\\\uFEFF)?");
+    expect(promtail).not.toContain('selector: \'{job="agent-runner", kind="runner-out"} |~ "^(?:\\\\uFEFF)?');
   });
 
   it("assigns a default tag label to runner-out logs that bypass parsing", () => {
@@ -52,14 +53,14 @@ describe("logging config", () => {
       panels?: Array<{ id?: number; targets?: Array<{ refId?: string; expr?: string }> }>;
     };
 
-    const logsPanel = dashboard.panels?.find((panel) => panel.id === 1);
-    const runnerOutExpr = logsPanel?.targets?.find((target) => target.refId === "A")?.expr ?? "";
-    const nonRunnerOutExpr = logsPanel?.targets?.find((target) => target.refId === "B")?.expr ?? "";
+    const logsPanel = dashboard.panels?.find(panel => panel.id === 1);
+    const runnerOutExpr = logsPanel?.targets?.find(target => target.refId === "A")?.expr ?? "";
+    const nonRunnerOutExpr = logsPanel?.targets?.find(target => target.refId === "B")?.expr ?? "";
 
-    expect(runnerOutExpr).toContain("kind=\"runner-out\"");
-    expect(runnerOutExpr).toContain("tag=~\"$tag\"");
-    expect(nonRunnerOutExpr).toContain("kind!=\"runner-out\"");
-    expect(nonRunnerOutExpr).not.toContain("tag=~\"$tag\"");
+    expect(runnerOutExpr).toContain('kind="runner-out"');
+    expect(runnerOutExpr).toContain('tag=~"$tag"');
+    expect(nonRunnerOutExpr).toContain('kind!="runner-out"');
+    expect(nonRunnerOutExpr).not.toContain('tag=~"$tag"');
   });
 
   it("includes untagged in the dashboard Tag variable values", () => {
@@ -74,7 +75,7 @@ describe("logging config", () => {
     const dashboard = JSON.parse(dashboardText) as {
       templating?: { list?: Array<{ name?: string; query?: string }> };
     };
-    const tagVariable = dashboard.templating?.list?.find((entry) => entry.name === "tag");
+    const tagVariable = dashboard.templating?.list?.find(entry => entry.name === "tag");
     const query = tagVariable?.query ?? "";
 
     expect(query.split(",")).toContain("untagged");

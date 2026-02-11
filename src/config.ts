@@ -126,9 +126,7 @@ export type AgentRunnerConfig = {
   };
 };
 
-const schemaPath = fileURLToPath(
-  new URL("../schema/agent-runner.schema.json", import.meta.url)
-);
+const schemaPath = fileURLToPath(new URL("../schema/agent-runner.schema.json", import.meta.url));
 
 export function loadConfig(configPath: string): AgentRunnerConfig {
   const raw = fs.readFileSync(configPath, "utf8");
@@ -142,14 +140,9 @@ export function loadConfig(configPath: string): AgentRunnerConfig {
   const valid = validate(json);
 
   if (!valid) {
-    const errors = validate.errors
-      ?.map((error) => `${error.instancePath || "<root>"} ${error.message}`)
-      .join("; ");
+    const errors = validate.errors?.map(error => `${error.instancePath || "<root>"} ${error.message}`).join("; ");
     throw new Error(`Invalid config: ${errors}`);
   }
 
   return json as AgentRunnerConfig;
 }
-
-
-

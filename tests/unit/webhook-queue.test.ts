@@ -2,11 +2,7 @@ import { describe, expect, it } from "vitest";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import {
-  enqueueWebhookIssue,
-  loadWebhookQueue,
-  removeWebhookIssues
-} from "../../src/webhook-queue.js";
+import { enqueueWebhookIssue, loadWebhookQueue, removeWebhookIssues } from "../../src/webhook-queue.js";
 import type { IssueInfo } from "../../src/github.js";
 
 describe("webhook-queue", () => {

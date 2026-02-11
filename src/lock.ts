@@ -57,7 +57,7 @@ export function acquireLock(lockPath: string): LockHandle {
 }
 
 function sleep(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
+  return new Promise(resolve => setTimeout(resolve, ms));
 }
 
 export function tryAcquireLock(lockPath: string): LockHandle | null {
@@ -106,7 +106,10 @@ export function tryAcquireLock(lockPath: string): LockHandle | null {
   }
 }
 
-export async function acquireLockWithRetry(lockPath: string, options: AcquireLockRetryOptions = {}): Promise<LockHandle> {
+export async function acquireLockWithRetry(
+  lockPath: string,
+  options: AcquireLockRetryOptions = {}
+): Promise<LockHandle> {
   const timeoutMs = options.timeoutMs ?? DEFAULT_RETRY_TIMEOUT_MS;
   const retryMs = options.retryMs ?? DEFAULT_RETRY_MS;
   const start = Date.now();

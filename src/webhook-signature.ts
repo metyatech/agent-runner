@@ -6,11 +6,7 @@ export function computeGitHubSignature(secret: string, payload: Buffer): string 
   return `sha256=${hmac.digest("hex")}`;
 }
 
-export function verifyGitHubSignature(
-  secret: string,
-  payload: Buffer,
-  signatureHeader: string | undefined
-): boolean {
+export function verifyGitHubSignature(secret: string, payload: Buffer, signatureHeader: string | undefined): boolean {
   if (!signatureHeader || !signatureHeader.startsWith("sha256=")) {
     return false;
   }

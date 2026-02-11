@@ -61,10 +61,7 @@ function normalizeApiBaseUrl(value: string | undefined): string {
   return base.endsWith("/") ? base.slice(0, -1) : base;
 }
 
-export function parseCopilotUserInfo(
-  data: unknown,
-  now: Date = new Date()
-): CopilotUsage | null {
+export function parseCopilotUserInfo(data: unknown, now: Date = new Date()): CopilotUsage | null {
   if (!isRecord(data)) {
     return null;
   }
@@ -106,10 +103,7 @@ export function parseCopilotUserInfo(
   };
 }
 
-export function parseCopilotQuotaHeader(
-  headerValue: string,
-  now: Date = new Date()
-): CopilotUsage | null {
+export function parseCopilotQuotaHeader(headerValue: string, now: Date = new Date()): CopilotUsage | null {
   const trimmed = headerValue.trim();
   if (!trimmed) {
     return null;
@@ -176,9 +170,7 @@ export async function fetchCopilotUsage(
 
     const bodyText = await response.text();
     if (!response.ok) {
-      throw new Error(
-        `Copilot user info request failed (${response.status} ${response.statusText}).`
-      );
+      throw new Error(`Copilot user info request failed (${response.status} ${response.statusText}).`);
     }
 
     let parsed: unknown = null;
@@ -207,12 +199,7 @@ export function evaluateCopilotUsageGate(
   gate: CopilotUsageGateConfig,
   now: Date = new Date()
 ): CopilotUsageGateDecision {
-  const decision = evaluateUsageRamp(
-    usage.percentRemaining,
-    usage.resetAt,
-    gate.monthlySchedule,
-    now
-  );
+  const decision = evaluateUsageRamp(usage.percentRemaining, usage.resetAt, gate.monthlySchedule, now);
 
   return {
     allow: decision.allow,

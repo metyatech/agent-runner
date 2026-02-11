@@ -1,9 +1,5 @@
 import { describe, expect, it } from "vitest";
-import {
-  evaluateCopilotUsageGate,
-  parseCopilotQuotaHeader,
-  parseCopilotUserInfo
-} from "../../src/copilot-usage.js";
+import { evaluateCopilotUsageGate, parseCopilotQuotaHeader, parseCopilotUserInfo } from "../../src/copilot-usage.js";
 
 describe("parseCopilotUserInfo", () => {
   it("parses premium interactions snapshot", () => {
@@ -29,9 +25,7 @@ describe("parseCopilotUserInfo", () => {
 
 describe("parseCopilotQuotaHeader", () => {
   it("parses quota header snapshot", () => {
-    const usage = parseCopilotQuotaHeader(
-      "ent=3000&rem=64&rst=2026-02-15T00:00:00Z&ov=0&ovPerm=false"
-    );
+    const usage = parseCopilotQuotaHeader("ent=3000&rem=64&rst=2026-02-15T00:00:00Z&ov=0&ovPerm=false");
 
     expect(usage).not.toBeNull();
     expect(usage?.percentRemaining).toBe(64);

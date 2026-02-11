@@ -60,7 +60,8 @@ describe("github-notify-app", () => {
     } finally {
       if (typeof prior.appId === "string") process.env.AGENT_GITHUB_NOTIFY_APP_ID = prior.appId;
       else delete process.env.AGENT_GITHUB_NOTIFY_APP_ID;
-      if (typeof prior.installationId === "string") process.env.AGENT_GITHUB_NOTIFY_APP_INSTALLATION_ID = prior.installationId;
+      if (typeof prior.installationId === "string")
+        process.env.AGENT_GITHUB_NOTIFY_APP_INSTALLATION_ID = prior.installationId;
       else delete process.env.AGENT_GITHUB_NOTIFY_APP_INSTALLATION_ID;
       if (typeof prior.privateKey === "string") process.env.AGENT_GITHUB_NOTIFY_APP_PRIVATE_KEY = prior.privateKey;
       else delete process.env.AGENT_GITHUB_NOTIFY_APP_PRIVATE_KEY;
@@ -69,4 +70,3 @@ describe("github-notify-app", () => {
     }
   });
 });
-

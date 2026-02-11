@@ -92,7 +92,7 @@ async function withLock<T>(statePath: string, action: () => T | Promise<T>): Pro
       if (Date.now() - start >= DEFAULT_LOCK_TIMEOUT_MS) {
         throw new Error("Timed out waiting for agent command state lock.");
       }
-      await new Promise((resolve) => setTimeout(resolve, DEFAULT_LOCK_RETRY_MS));
+      await new Promise(resolve => setTimeout(resolve, DEFAULT_LOCK_RETRY_MS));
     }
   }
 
@@ -131,4 +131,3 @@ export async function markAgentCommandCommentProcessed(statePath: string, commen
     writeState(statePath, trimmed);
   });
 }
-

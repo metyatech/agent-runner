@@ -67,8 +67,7 @@ type JsonRpcResponse = {
   };
 };
 
-const windowRegex =
-  /^\s*(5h|Weekly)\s+limit:\s*\[[^\]]*]\s*([0-9]+(?:\.[0-9]+)?)%\s*left\s*\(resets\s*(.+)\)\s*$/i;
+const windowRegex = /^\s*(5h|Weekly)\s+limit:\s*\[[^\]]*]\s*([0-9]+(?:\.[0-9]+)?)%\s*left\s*\(resets\s*(.+)\)\s*$/i;
 const creditsRegex = /^\s*Credits:\s*([0-9]+)\s*credits?\s*$/i;
 
 const monthMap: Record<string, number> = {
@@ -98,22 +97,17 @@ function parseResetText(text: string, now: Date): Date | null {
 
   const onIndex = text.toLowerCase().indexOf(" on ");
   if (onIndex === -1) {
-    const candidate = new Date(
-      now.getFullYear(),
-      now.getMonth(),
-      now.getDate(),
-      hour,
-      minute,
-      0,
-      0
-    );
+    const candidate = new Date(now.getFullYear(), now.getMonth(), now.getDate(), hour, minute, 0, 0);
     if (candidate.getTime() <= now.getTime()) {
       candidate.setDate(candidate.getDate() + 1);
     }
     return candidate;
   }
 
-  const datePart = text.slice(onIndex + 4).replace(/[,]/g, "").trim();
+  const datePart = text
+    .slice(onIndex + 4)
+    .replace(/[,]/g, "")
+    .trim();
   if (!datePart) {
     return null;
   }
@@ -130,7 +124,7 @@ function parseResetText(text: string, now: Date): Date | null {
     }
   }
 
-  const normalizedTokens = tokens.filter((token) => !/^\d{4}$/.test(token));
+  const normalizedTokens = tokens.filter(token => !/^\d{4}$/.test(token));
   if (normalizedTokens.length >= 2) {
     const first = normalizedTokens[0].toLowerCase();
     const second = normalizedTokens[1].toLowerCase();
@@ -169,11 +163,7 @@ function normalizeWindowKey(label: string): UsageWindowKey | null {
 }
 
 function resolveWindowMinutes(window: RateLimitWindow): number | null {
-  const candidates = [
-    window.windowDurationMins,
-    window.windowMinutes,
-    window.window_minutes
-  ];
+  const candidates = [window.windowDurationMins, window.windowMinutes, window.window_minutes];
   for (const value of candidates) {
     if (typeof value === "number" && Number.isFinite(value)) {
       return value;
@@ -226,23 +216,25 @@ function clampPercent(value: number): number {
   return Math.min(Math.max(value, 0), 100);
 }
 
-export function rateLimitSnapshotToStatus(
-  snapshot: RateLimitSnapshot,
-  now: Date = new Date()
-): CodexStatus | null {
+export function rateLimitSnapshotToStatus(snapshot: RateLimitSnapshot, now: Date = new Date()): CodexStatus | null {
   const candidates = [
     snapshot.primary ? { source: "primary", data: normalizeRateLimitWindow(snapshot.primary, now) } : null,
     snapshot.secondary ? { source: "secondary", data: normalizeRateLimitWindow(snapshot.secondary, now) } : null
-  ].filter((item): item is { source: "primary" | "secondary"; data: { usedPercent: number; windowMinutes: number | null; resetAt: Date | null } } =>
-    Boolean(item?.data)
+  ].filter(
+    (
+      item
+    ): item is {
+      source: "primary" | "secondary";
+      data: { usedPercent: number; windowMinutes: number | null; resetAt: Date | null };
+    } => Boolean(item?.data)
   );
 
   if (candidates.length === 0) {
     return null;
   }
 
-  let fiveHourCandidate: typeof candidates[0] | null = null;
-  let weeklyCandidate: typeof candidates[0] | null = null;
+  let fiveHourCandidate: (typeof candidates)[0] | null = null;
+  let weeklyCandidate: (typeof candidates)[0] | null = null;
 
   if (candidates.length === 2) {
     const [first, second] = candidates;
@@ -349,10 +341,7 @@ export async function fetchCodexRateLimits(
   const resolved = resolveCodexCommand(command, process.env.PATH);
   const baseArgs = args ?? [];
   const needsAppServer = !baseArgs.includes("app-server");
-  const finalArgs = [
-    ...resolved.prefixArgs,
-    ...(needsAppServer ? ["app-server", ...baseArgs] : baseArgs)
-  ];
+  const finalArgs = [...resolved.prefixArgs, ...(needsAppServer ? ["app-server", ...baseArgs] : baseArgs)];
 
   return new Promise((resolve, reject) => {
     const child = spawn(resolved.command, finalArgs, {
@@ -410,7 +399,7 @@ export async function fetchCodexRateLimits(
       }
     };
 
-    rl.on("line", (line) => {
+    rl.on("line", line => {
       const trimmed = line.trim();
       if (!trimmed) {
         return;
@@ -462,9 +451,9 @@ export async function fetchCodexRateLimits(
         }
         const rateLimits =
           typeof result === "object" && result
-            ? (result as { rateLimits?: RateLimitSnapshot; rate_limits?: RateLimitSnapshot }).rateLimits ??
+            ? ((result as { rateLimits?: RateLimitSnapshot; rate_limits?: RateLimitSnapshot }).rateLimits ??
               (result as { rateLimits?: RateLimitSnapshot; rate_limits?: RateLimitSnapshot }).rate_limits ??
-              null
+              null)
             : null;
         finish(undefined, rateLimits);
       } catch (error) {
@@ -473,11 +462,11 @@ export async function fetchCodexRateLimits(
       }
     })();
 
-    child.stderr.on("data", (chunk) => {
+    child.stderr.on("data", chunk => {
       stderr += chunk.toString();
     });
 
-    child.on("error", (error) => {
+    child.on("error", error => {
       finish(error);
     });
 
@@ -511,14 +500,14 @@ export async function fetchCodexStatusOutput(
       reject(new Error("Codex status timeout."));
     }, timeoutSeconds * 1000);
 
-    child.stdout.on("data", (chunk) => {
+    child.stdout.on("data", chunk => {
       output += chunk.toString();
     });
-    child.stderr.on("data", (chunk) => {
+    child.stderr.on("data", chunk => {
       output += chunk.toString();
     });
 
-    child.on("error", (error) => {
+    child.on("error", error => {
       clearTimeout(timer);
       reject(error);
     });
@@ -542,8 +531,8 @@ export function evaluateUsageGate(
   gate: UsageGateConfig,
   now: Date = new Date()
 ): UsageGateDecision {
-  const weekly = status.windows.find((window) => window.key === "weekly");
-  const fiveHour = status.windows.find((window) => window.key === "fiveHour");
+  const weekly = status.windows.find(window => window.key === "weekly");
+  const fiveHour = status.windows.find(window => window.key === "fiveHour");
 
   if (!weekly) {
     return { allow: false, reason: "Weekly window not found in /status output." };
@@ -552,12 +541,7 @@ export function evaluateUsageGate(
     return { allow: false, reason: "5h window not found in /status output." };
   }
 
-  const weeklyDecision = evaluateUsageRamp(
-    weekly.percentLeft,
-    weekly.resetAt,
-    gate.weeklySchedule,
-    now
-  );
+  const weeklyDecision = evaluateUsageRamp(weekly.percentLeft, weekly.resetAt, gate.weeklySchedule, now);
 
   if (!weeklyDecision.allow) {
     return {

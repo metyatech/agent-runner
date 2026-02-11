@@ -129,4 +129,3 @@ describe("fetchGeminiUsage (OAuth client discovery)", () => {
     fs.rmSync(appData, { recursive: true, force: true });
   });
 });
-

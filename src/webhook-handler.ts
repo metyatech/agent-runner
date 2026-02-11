@@ -7,10 +7,7 @@ import {
   markAgentCommandCommentProcessed,
   resolveAgentCommandStatePath
 } from "./agent-command-state.js";
-import {
-  markManagedPullRequest,
-  resolveManagedPullRequestsStatePath
-} from "./managed-pull-requests.js";
+import { markManagedPullRequest, resolveManagedPullRequestsStatePath } from "./managed-pull-requests.js";
 import { ensureManagedPullRequestRecorded, isManagedPullRequestIssue } from "./managed-pr.js";
 import { enqueueWebhookIssue } from "./webhook-queue.js";
 import { enqueueReviewTask, resolveReviewQueuePath } from "./review-queue.js";
@@ -69,9 +66,7 @@ function parseLabels(labels: IssuePayload["labels"]): string[] {
   if (!Array.isArray(labels)) {
     return [];
   }
-  return labels
-    .map((label) => (typeof label === "string" ? label : label?.name ?? ""))
-    .filter((label) => Boolean(label));
+  return labels.map(label => (typeof label === "string" ? label : (label?.name ?? ""))).filter(label => Boolean(label));
 }
 
 function parseRepo(payload: WebhookPayload): RepoInfo | null {
@@ -183,18 +178,12 @@ async function handleAgentRunCommand(options: {
   const status = isBusyOrTerminal(issue, config);
   if (status === "running") {
     await markAgentCommandCommentProcessed(statePath, commentId);
-    await client.comment(
-      issue,
-      buildAgentComment("Ignored `/agent run`: already running.")
-    );
+    await client.comment(issue, buildAgentComment("Ignored `/agent run`: already running."));
     return;
   }
   if (status === "queued") {
     await markAgentCommandCommentProcessed(statePath, commentId);
-    await client.comment(
-      issue,
-      buildAgentComment("Ignored `/agent run`: already queued.")
-    );
+    await client.comment(issue, buildAgentComment("Ignored `/agent run`: already queued."));
     return;
   }
 
@@ -335,13 +324,7 @@ export async function handleWebhookEvent(options: {
     await safeRemoveLabel(client, issue, config.labels.failed, onLog);
     await safeRemoveLabel(client, issue, config.labels.running, onLog);
     await safeRemoveLabel(client, issue, config.labels.queued, onLog);
-    await client.comment(
-      issue,
-      buildAgentComment(
-        `Reply received. Re-queued for execution.`,
-        []
-      )
-    );
+    await client.comment(issue, buildAgentComment(`Reply received. Re-queued for execution.`, []));
     await ensureQueued(client, config, queuePath, issue);
     onLog?.("info", "Webhook re-queued issue after comment.", {
       issue: issue.url
@@ -366,7 +349,9 @@ export async function handleWebhookEvent(options: {
     if (command?.kind === "run") {
       const commentId = comment.id ?? 0;
       if (!commentId || commentId <= 0) {
-        onLog?.("warn", "Ignoring /agent run review comment due to missing id.", { repo: `${repo.owner}/${repo.repo}` });
+        onLog?.("warn", "Ignoring /agent run review comment due to missing id.", {
+          repo: `${repo.owner}/${repo.repo}`
+        });
         return;
       }
 
@@ -463,4 +448,3 @@ export async function handleWebhookEvent(options: {
     }
   }
 }
-

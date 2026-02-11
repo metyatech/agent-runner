@@ -159,7 +159,7 @@ async function refreshAccessToken(options: {
     throw new Error(`Failed to refresh Google access token: ${res.status} ${await res.text()}`);
   }
 
-  const data = await res.json() as any;
+  const data = (await res.json()) as any;
   if (typeof data?.access_token !== "string" || data.access_token.length === 0) {
     throw new Error("Google token refresh response missing access_token.");
   }
@@ -241,7 +241,7 @@ export async function fetchGeminiUsage(
     const loadRes = await fetch("https://cloudcode-pa.googleapis.com/v1internal:loadCodeAssist", {
       method: "POST",
       headers: {
-        "Authorization": `Bearer ${accessToken}`,
+        Authorization: `Bearer ${accessToken}`,
         "Content-Type": "application/json",
         "User-Agent": "agent-runner"
       },
@@ -257,7 +257,7 @@ export async function fetchGeminiUsage(
       throw new Error(`loadCodeAssist failed: ${loadRes.status} ${await loadRes.text()}`);
     }
 
-    const loadData = await loadRes.json() as any;
+    const loadData = (await loadRes.json()) as any;
     const projectId = loadData.cloudaicompanionProject;
 
     if (!projectId) {
@@ -268,7 +268,7 @@ export async function fetchGeminiUsage(
     const quotaRes = await fetch("https://cloudcode-pa.googleapis.com/v1internal:retrieveUserQuota", {
       method: "POST",
       headers: {
-        "Authorization": `Bearer ${accessToken}`,
+        Authorization: `Bearer ${accessToken}`,
         "Content-Type": "application/json",
         "User-Agent": "agent-runner"
       },
@@ -279,7 +279,7 @@ export async function fetchGeminiUsage(
       throw new Error(`retrieveUserQuota failed: ${quotaRes.status} ${await quotaRes.text()}`);
     }
 
-    const quotaData = await quotaRes.json() as any;
+    const quotaData = (await quotaRes.json()) as any;
     const usage: GeminiUsage = {};
 
     if (Array.isArray(quotaData.buckets)) {
@@ -316,34 +316,34 @@ export function evaluateGeminiUsageGate(
   gate: GeminiUsageGateConfig,
   now: Date = new Date()
 ): GeminiUsageGateDecision {
-    if (!gate.enabled) {
-        return { allowPro: false, allowFlash: false, reason: "Gate disabled." };
-    }
+  if (!gate.enabled) {
+    return { allowPro: false, allowFlash: false, reason: "Gate disabled." };
+  }
 
-    const checkModel = (modelUsage?: GeminiModelUsage): { allowed: boolean; reason?: string } => {
-        if (!modelUsage) return { allowed: false, reason: "No usage data" };
-        
-        const percentRemaining = (1.0 - (modelUsage.usage / modelUsage.limit)) * 100;
-        const decision = evaluateUsageRamp(percentRemaining, modelUsage.resetAt, gate, now);
-        
-        return { allowed: decision.allow, reason: decision.reason };
-    };
+  const checkModel = (modelUsage?: GeminiModelUsage): { allowed: boolean; reason?: string } => {
+    if (!modelUsage) return { allowed: false, reason: "No usage data" };
 
-    const pro = checkModel(usage["gemini-3-pro-preview"]);
-    const flash = checkModel(usage["gemini-3-flash-preview"]);
+    const percentRemaining = (1.0 - modelUsage.usage / modelUsage.limit) * 100;
+    const decision = evaluateUsageRamp(percentRemaining, modelUsage.resetAt, gate, now);
 
-    const reasons: string[] = [];
-    if (pro.allowed) reasons.push("Pro allowed");
-    else reasons.push(`Pro blocked (${pro.reason})`);
-    
-    if (flash.allowed) reasons.push("Flash allowed");
-    else reasons.push(`Flash blocked (${flash.reason})`);
+    return { allowed: decision.allow, reason: decision.reason };
+  };
 
-    return {
-        allowPro: pro.allowed,
-        allowFlash: flash.allowed,
-        reason: reasons.join(", "),
-        proUsage: usage["gemini-3-pro-preview"],
-        flashUsage: usage["gemini-3-flash-preview"]
-    };
+  const pro = checkModel(usage["gemini-3-pro-preview"]);
+  const flash = checkModel(usage["gemini-3-flash-preview"]);
+
+  const reasons: string[] = [];
+  if (pro.allowed) reasons.push("Pro allowed");
+  else reasons.push(`Pro blocked (${pro.reason})`);
+
+  if (flash.allowed) reasons.push("Flash allowed");
+  else reasons.push(`Flash blocked (${flash.reason})`);
+
+  return {
+    allowPro: pro.allowed,
+    allowFlash: flash.allowed,
+    reason: reasons.join(", "),
+    proUsage: usage["gemini-3-pro-preview"],
+    flashUsage: usage["gemini-3-flash-preview"]
+  };
 }

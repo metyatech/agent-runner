@@ -63,27 +63,13 @@ export function resolveCodexCommand(
   if (process.platform === "win32") {
     const base = path.basename(resolved).toLowerCase();
     if (base === "codex.cmd" || base === "codex.ps1") {
-      const codexJs = path.join(
-        path.dirname(resolved),
-        "node_modules",
-        "@openai",
-        "codex",
-        "bin",
-        "codex.js"
-      );
+      const codexJs = path.join(path.dirname(resolved), "node_modules", "@openai", "codex", "bin", "codex.js");
       if (fs.existsSync(codexJs)) {
         return { command: process.execPath, prefixArgs: [codexJs] };
       }
     }
     if (base === "gemini.cmd" || base === "gemini.ps1" || base === "gemini") {
-      const geminiJs = path.join(
-        path.dirname(resolved),
-        "node_modules",
-        "@google",
-        "gemini-cli",
-        "dist",
-        "index.js"
-      );
+      const geminiJs = path.join(path.dirname(resolved), "node_modules", "@google", "gemini-cli", "dist", "index.js");
       if (fs.existsSync(geminiJs)) {
         return { command: process.execPath, prefixArgs: [geminiJs] };
       }

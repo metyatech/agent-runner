@@ -159,4 +159,3 @@ describe("pr-review-actions", () => {
     expect(result).toEqual({ merged: false, retry: false, reason: "actionable_review_feedback" });
   });
 });
-

@@ -94,11 +94,7 @@ export function saveAmazonQUsageState(statePath: string, state: AmazonQUsageStat
   fs.writeFileSync(statePath, JSON.stringify(state, null, 2));
 }
 
-export function recordAmazonQUsage(
-  statePath: string,
-  count: number = 1,
-  now: Date = new Date()
-): AmazonQUsageState {
+export function recordAmazonQUsage(statePath: string, count: number = 1, now: Date = new Date()): AmazonQUsageState {
   const normalizedCount = Math.max(0, Math.floor(count));
   const state = loadAmazonQUsageState(statePath, now);
   const updated: AmazonQUsageState = {
@@ -118,8 +114,7 @@ export function getAmazonQUsageSnapshot(
   const state = loadAmazonQUsageState(statePath, now);
   const limit = gate.monthlyLimit;
   const used = Math.max(0, state.used);
-  const percentRemaining =
-    limit <= 0 ? 0 : Math.min(100, Math.max(0, ((limit - used) / limit) * 100));
+  const percentRemaining = limit <= 0 ? 0 : Math.min(100, Math.max(0, ((limit - used) / limit) * 100));
 
   return {
     used,
@@ -135,12 +130,7 @@ export function evaluateAmazonQUsageGate(
   gate: AmazonQUsageGateConfig,
   now: Date = new Date()
 ): AmazonQUsageGateDecision {
-  const decision = evaluateUsageRamp(
-    usage.percentRemaining,
-    usage.resetAt,
-    gate.monthlySchedule,
-    now
-  );
+  const decision = evaluateUsageRamp(usage.percentRemaining, usage.resetAt, gate.monthlySchedule, now);
 
   return {
     allow: decision.allow,
@@ -152,4 +142,3 @@ export function evaluateAmazonQUsageGate(
     limit: usage.limit
   };
 }
-

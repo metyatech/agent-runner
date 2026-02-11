@@ -2,7 +2,13 @@ import fs from "node:fs";
 import path from "node:path";
 import { spawn } from "node:child_process";
 import type { AgentRunnerConfig } from "./config.js";
-import { GitHubClient, type IssueComment, type IssueInfo, type PullRequestReviewComment, type RepoInfo } from "./github.js";
+import {
+  GitHubClient,
+  type IssueComment,
+  type IssueInfo,
+  type PullRequestReviewComment,
+  type RepoInfo
+} from "./github.js";
 import { resolveCodexCommand } from "./codex-command.js";
 import { recordAmazonQUsage, resolveAmazonQUsageStatePath } from "./amazon-q-usage.js";
 import {
@@ -15,11 +21,7 @@ import {
   type IdlePlanOptions
 } from "./idle.js";
 import { recordRunningIssue, removeRunningIssue, resolveRunnerStatePath } from "./runner-state.js";
-import {
-  recordActivity,
-  removeActivity,
-  resolveActivityStatePath
-} from "./activity-state.js";
+import { recordActivity, removeActivity, resolveActivityStatePath } from "./activity-state.js";
 import { AGENT_RUNNER_MARKER, findLastMarkerComment, NEEDS_USER_MARKER } from "./notifications.js";
 import { normalizeLogChunk } from "./log-normalize.js";
 import { resolveLogMaintenance, writeLatestPointer } from "./log-maintenance.js";
@@ -130,13 +132,13 @@ function isAgentRunnerComment(comment: IssueComment): boolean {
 }
 
 function selectRelevantUserComments(comments: IssueComment[]): IssueComment[] {
-  const userComments = comments.filter((comment) => !isAgentRunnerComment(comment));
+  const userComments = comments.filter(comment => !isAgentRunnerComment(comment));
   const anchor = findLastMarkerComment(comments, NEEDS_USER_MARKER);
 
   const filtered =
     anchor === null
       ? userComments
-      : userComments.filter((comment) => Date.parse(comment.createdAt) > Date.parse(anchor.createdAt));
+      : userComments.filter(comment => Date.parse(comment.createdAt) > Date.parse(anchor.createdAt));
 
   return filtered.slice(-MAX_ISSUE_COMMENTS_COUNT);
 }
@@ -169,10 +171,8 @@ function formatCommentsForPrompt(comments: IssueComment[]): string {
     return "";
   }
 
-  const hasNeedsUserMarker = comments.some((comment) => comment.body.includes(NEEDS_USER_MARKER));
-  const note = hasNeedsUserMarker
-    ? "Note: only user comments after the last needs-user marker are included.\n"
-    : "";
+  const hasNeedsUserMarker = comments.some(comment => comment.body.includes(NEEDS_USER_MARKER));
+  const note = hasNeedsUserMarker ? "Note: only user comments after the last needs-user marker are included.\n" : "";
 
   return `${note}${chunks.join("\n")}`.trim();
 }
@@ -242,7 +242,7 @@ function renderPrompt(
   comments: IssueComment[],
   reviewComments: PullRequestReviewComment[]
 ): string {
-  const repoList = repos.map((repo) => `${repo.owner}/${repo.repo}`).join(", ");
+  const repoList = repos.map(repo => `${repo.owner}/${repo.repo}`).join(", ");
   const taskText = buildIssueTaskText(issue, comments, reviewComments);
   return template.replace("{{repos}}", repoList).replace("{{task}}", taskText);
 }
@@ -290,7 +290,7 @@ export function buildGeminiInvocation(
     throw new Error("Gemini command not configured.");
   }
   const resolved = resolveCodexCommand(config.gemini.command, process.env.PATH);
-  
+
   const modelArg = engine === "gemini-pro" ? "gemini-3-pro-preview" : "gemini-3-flash-preview";
   const args = [...resolved.prefixArgs, "-m", modelArg, ...config.gemini.args, prompt];
 
@@ -318,15 +318,7 @@ export function buildCodexInvocation(
   const resolved = resolveCodexCommand(config.codex.command, process.env.PATH);
   const envOverrides = options.envOverrides ?? {};
   const addDir = options.addDir ?? config.workdirRoot;
-  const args = [
-    ...resolved.prefixArgs,
-    ...config.codex.args,
-    "-C",
-    primaryPath,
-    "--add-dir",
-    addDir,
-    prompt
-  ];
+  const args = [...resolved.prefixArgs, ...config.codex.args, "-C", primaryPath, "--add-dir", addDir, prompt];
 
   return {
     command: resolved.command,
@@ -356,15 +348,7 @@ export function buildCodexResumeInvocation(
   const resolved = resolveCodexCommand(config.codex.command, process.env.PATH);
   const execArgs = resolveCodexExecArgs(config);
   const envOverrides = options.envOverrides ?? {};
-  const args = [
-    ...resolved.prefixArgs,
-    "exec",
-    "resume",
-    ...execArgs,
-    "--skip-git-repo-check",
-    sessionId,
-    prompt
-  ];
+  const args = [...resolved.prefixArgs, "exec", "resume", ...execArgs, "--skip-git-repo-check", sessionId, prompt];
 
   return {
     command: resolved.command,
@@ -451,19 +435,19 @@ function detectSessionId(value: string): string | null {
 
 function hasPattern(value: string, patterns: RegExp[]): boolean {
   const cleaned = stripAnsi(value);
-  return patterns.some((pattern) => pattern.test(cleaned));
+  return patterns.some(pattern => pattern.test(cleaned));
 }
 
 function extractFailureDetail(value: string): string | null {
   const lines = stripAnsi(value)
     .split(/\r?\n/)
-    .map((line) => line.trim())
-    .filter((line) => line.length > 0);
+    .map(line => line.trim())
+    .filter(line => line.length > 0);
   if (lines.length === 0) {
     return null;
   }
   const candidates = lines.filter(
-    (line) =>
+    line =>
       /error|failed|limit|quota|denied|timeout|exception/i.test(line) &&
       !/^exec$/i.test(line) &&
       !/^thinking$/i.test(line)
@@ -480,8 +464,8 @@ function resolveQuotaRunAfter(statusRaw: ReturnType<typeof rateLimitSnapshotToSt
   if (!statusRaw || statusRaw.windows.length === 0) {
     return null;
   }
-  const weekly = statusRaw.windows.find((window) => window.key === "weekly");
-  const fiveHour = statusRaw.windows.find((window) => window.key === "fiveHour");
+  const weekly = statusRaw.windows.find(window => window.key === "weekly");
+  const fiveHour = statusRaw.windows.find(window => window.key === "fiveHour");
 
   if (weekly && weekly.percentLeft <= 0) {
     return weekly.resetAt;
@@ -491,8 +475,8 @@ function resolveQuotaRunAfter(statusRaw: ReturnType<typeof rateLimitSnapshotToSt
   }
 
   const sorted = statusRaw.windows
-    .map((window) => window.resetAt)
-    .filter((date) => Number.isFinite(date.getTime()))
+    .map(window => window.resetAt)
+    .filter(date => Number.isFinite(date.getTime()))
     .sort((a, b) => a.getTime() - b.getTime());
   return sorted[0] ?? null;
 }
@@ -527,21 +511,23 @@ async function runCodexAttempt(options: {
     options.engine === "copilot"
       ? buildCopilotInvocation(options.config, options.primaryPath, options.prompt, options.envOverrides)
       : options.engine === "amazon-q"
-      ? buildAmazonQInvocation(options.config, options.primaryPath, options.prompt, options.envOverrides)
-      : options.engine === "gemini-pro" || options.engine === "gemini-flash"
-      ? buildGeminiInvocation(options.config, options.primaryPath, options.prompt, options.engine, options.envOverrides)
-      : options.mode === "resume" && options.resumeSessionId
-      ? buildCodexResumeInvocation(
-          options.config,
-          options.primaryPath,
-          options.resumeSessionId,
-          options.prompt,
-          { envOverrides: options.envOverrides }
-        )
-      : buildCodexInvocation(options.config, options.primaryPath, options.prompt, {
-          envOverrides: options.envOverrides,
-          addDir: options.workRoot
-        });
+        ? buildAmazonQInvocation(options.config, options.primaryPath, options.prompt, options.envOverrides)
+        : options.engine === "gemini-pro" || options.engine === "gemini-flash"
+          ? buildGeminiInvocation(
+              options.config,
+              options.primaryPath,
+              options.prompt,
+              options.engine,
+              options.envOverrides
+            )
+          : options.mode === "resume" && options.resumeSessionId
+            ? buildCodexResumeInvocation(options.config, options.primaryPath, options.resumeSessionId, options.prompt, {
+                envOverrides: options.envOverrides
+              })
+            : buildCodexInvocation(options.config, options.primaryPath, options.prompt, {
+                envOverrides: options.envOverrides,
+                addDir: options.workRoot
+              });
 
   const appendLog = (value: string): void => {
     fs.appendFileSync(options.logPath, value);
@@ -604,16 +590,16 @@ async function runCodexAttempt(options: {
       process.stderr.write(handleChunk(chunk));
     });
 
-    child.on("error", (error) => {
+    child.on("error", error => {
       removeRunningIssue(options.statePath, options.issue.id);
       reject(error);
     });
-    child.on("close", (code) => {
+    child.on("close", code => {
       removeRunningIssue(options.statePath, options.issue.id);
       resolve({
         exitCode: code ?? 1,
         outputTail,
-        sessionId: options.engine === "codex" ? sessionId ?? detectSessionId(outputTail) : null
+        sessionId: options.engine === "codex" ? (sessionId ?? detectSessionId(outputTail)) : null
       });
     });
   });
@@ -648,7 +634,8 @@ export async function runIssue(
 
       const worktreePath = path.join(workRoot, resolveWorktreeDirName(repo));
       const isPrimary =
-        repo.owner.toLowerCase() === primaryRepo.owner.toLowerCase() && repo.repo.toLowerCase() === primaryRepo.repo.toLowerCase();
+        repo.owner.toLowerCase() === primaryRepo.owner.toLowerCase() &&
+        repo.repo.toLowerCase() === primaryRepo.repo.toLowerCase();
 
       if (isPrimary && prHead) {
         const expected = `${repo.owner}/${repo.repo}`.toLowerCase();
@@ -659,7 +646,13 @@ export async function runIssue(
               "PRs from forks are not supported for /agent run because the runner cannot push to the head branch."
           );
         }
-        await createWorktreeForRemoteBranch({ workdirRoot: config.workdirRoot, repo, cachePath, worktreePath, branch: prHead.headRef });
+        await createWorktreeForRemoteBranch({
+          workdirRoot: config.workdirRoot,
+          repo,
+          cachePath,
+          worktreePath,
+          branch: prHead.headRef
+        });
       } else {
         const defaultBranch = await client.getRepoDefaultBranch(repo);
         const branchSuffix = `${Date.now()}`;
@@ -691,10 +684,7 @@ export async function runIssue(
 
     const logDir = path.resolve(config.workdirRoot, "agent-runner", "logs");
     fs.mkdirSync(logDir, { recursive: true });
-    const logPath = path.join(
-      logDir,
-      `${issue.repo.repo}-issue-${issue.number}-${Date.now()}.log`
-    );
+    const logPath = path.join(logDir, `${issue.repo.repo}-issue-${issue.number}-${Date.now()}.log`);
     if (resolveLogMaintenance(config).writeLatestPointers) {
       writeLatestPointer(logDir, "issue", logPath);
     }
@@ -712,7 +702,7 @@ export async function runIssue(
     };
 
     let mode: IssueRunMode = engine === "codex" && options.resumeSessionId ? "resume" : "new";
-    let latestSessionId: string | null = engine === "codex" ? options.resumeSessionId ?? null : null;
+    let latestSessionId: string | null = engine === "codex" ? (options.resumeSessionId ?? null) : null;
     let currentPrompt = mode === "resume" ? resumePrompt : prompt;
     let attempt = 0;
 
@@ -793,7 +783,12 @@ export async function runIssue(
           };
         }
 
-        if (engine === "codex" && mode === "resume" && isLikelyMissingSessionError(result.outputTail) && attempt < MAX_RESUME_ATTEMPTS) {
+        if (
+          engine === "codex" &&
+          mode === "resume" &&
+          isLikelyMissingSessionError(result.outputTail) &&
+          attempt < MAX_RESUME_ATTEMPTS
+        ) {
           mode = "new";
           latestSessionId = null;
           currentPrompt = prompt;
@@ -886,13 +881,7 @@ export async function planIdleTasks(
   const now = options.now ?? new Date();
   const historyPath = resolveIdleHistoryPath(config.workdirRoot);
   const history = loadIdleHistory(historyPath);
-  const targets = selectIdleRepos(
-    repos,
-    history,
-    maxRuns,
-    config.idle.cooldownMinutes,
-    now
-  );
+  const targets = selectIdleRepos(repos, history, maxRuns, config.idle.cooldownMinutes, now);
 
   if (targets.length === 0) {
     return [];
@@ -927,10 +916,7 @@ export async function runIdleTask(
   let created = false;
 
   try {
-    const token =
-      process.env.AGENT_GITHUB_TOKEN ||
-      process.env.GITHUB_TOKEN ||
-      process.env.GH_TOKEN;
+    const token = process.env.AGENT_GITHUB_TOKEN || process.env.GITHUB_TOKEN || process.env.GH_TOKEN;
 
     if (!token) {
       throw new Error("Missing GitHub token. Set AGENT_GITHUB_TOKEN or GITHUB_TOKEN.");
@@ -950,113 +936,113 @@ export async function runIdleTask(
 
     const prompt = renderIdlePrompt(config.idle?.promptTemplate ?? "", repo, task);
 
-  const logDir = path.resolve(config.workdirRoot, "agent-runner", "logs");
-  fs.mkdirSync(logDir, { recursive: true });
-  const logPath = path.join(logDir, `${repo.repo}-idle-${Date.now()}.log`);
-  if (resolveLogMaintenance(config).writeLatestPointers) {
-    writeLatestPointer(logDir, "idle", logPath);
-  }
+    const logDir = path.resolve(config.workdirRoot, "agent-runner", "logs");
+    fs.mkdirSync(logDir, { recursive: true });
+    const logPath = path.join(logDir, `${repo.repo}-idle-${Date.now()}.log`);
+    if (resolveLogMaintenance(config).writeLatestPointers) {
+      writeLatestPointer(logDir, "idle", logPath);
+    }
 
-  const appendLog = (value: string): void => {
-    fs.appendFileSync(logPath, value);
-  };
+    const appendLog = (value: string): void => {
+      fs.appendFileSync(logPath, value);
+    };
 
-  const notifyEnv = await buildGitHubNotifyChildEnv(config.workdirRoot);
+    const notifyEnv = await buildGitHubNotifyChildEnv(config.workdirRoot);
 
-  const envOverrides: NodeJS.ProcessEnv = {
-    AGENT_RUNNER_ENGINE: engine,
-    AGENT_RUNNER_REPO: `${repo.owner}/${repo.repo}`,
-    AGENT_RUNNER_REPO_PATH: repoPath,
-    AGENT_RUNNER_TASK: task,
-    AGENT_RUNNER_PROMPT: prompt,
-    AGENT_RUNNER_WORKROOT: workRoot,
-    ...notifyEnv
-  };
-  const invocation =
-    engine === "copilot"
-      ? buildCopilotInvocation(config, repoPath, prompt, envOverrides)
-      : engine === "amazon-q"
-      ? buildAmazonQInvocation(config, repoPath, prompt, envOverrides)
-      : engine === "gemini-pro" || engine === "gemini-flash"
-      ? buildGeminiInvocation(config, repoPath, prompt, engine, envOverrides)
-      : buildCodexInvocation(config, repoPath, prompt, { envOverrides, addDir: workRoot });
-  const activityPath = resolveActivityStatePath(config.workdirRoot);
-  const startedAt = new Date().toISOString();
-  const activityId = `idle:${engine}:${repo.owner}/${repo.repo}:${Date.now()}`;
-  let activityRecorded = false;
-  let exitCode: number;
-  try {
-    exitCode = await new Promise<number>((resolve, reject) => {
-      const child = spawn(invocation.command, invocation.args, invocation.options);
-      if (invocation.stdin && child.stdin) {
+    const envOverrides: NodeJS.ProcessEnv = {
+      AGENT_RUNNER_ENGINE: engine,
+      AGENT_RUNNER_REPO: `${repo.owner}/${repo.repo}`,
+      AGENT_RUNNER_REPO_PATH: repoPath,
+      AGENT_RUNNER_TASK: task,
+      AGENT_RUNNER_PROMPT: prompt,
+      AGENT_RUNNER_WORKROOT: workRoot,
+      ...notifyEnv
+    };
+    const invocation =
+      engine === "copilot"
+        ? buildCopilotInvocation(config, repoPath, prompt, envOverrides)
+        : engine === "amazon-q"
+          ? buildAmazonQInvocation(config, repoPath, prompt, envOverrides)
+          : engine === "gemini-pro" || engine === "gemini-flash"
+            ? buildGeminiInvocation(config, repoPath, prompt, engine, envOverrides)
+            : buildCodexInvocation(config, repoPath, prompt, { envOverrides, addDir: workRoot });
+    const activityPath = resolveActivityStatePath(config.workdirRoot);
+    const startedAt = new Date().toISOString();
+    const activityId = `idle:${engine}:${repo.owner}/${repo.repo}:${Date.now()}`;
+    let activityRecorded = false;
+    let exitCode: number;
+    try {
+      exitCode = await new Promise<number>((resolve, reject) => {
+        const child = spawn(invocation.command, invocation.args, invocation.options);
+        if (invocation.stdin && child.stdin) {
+          try {
+            child.stdin.write(invocation.stdin);
+            child.stdin.end();
+          } catch {
+            // best-effort: proceed without stdin if writing fails
+          }
+        }
+        if (typeof child.pid === "number") {
+          recordActivity(activityPath, {
+            id: activityId,
+            kind: "idle",
+            engine,
+            repo,
+            startedAt,
+            pid: child.pid,
+            logPath,
+            task
+          });
+          activityRecorded = true;
+        }
+        child.stdout.on("data", chunk => {
+          const normalized = normalizeLogChunk(chunk);
+          appendLog(normalized);
+          process.stdout.write(normalized);
+        });
+        child.stderr.on("data", chunk => {
+          const normalized = normalizeLogChunk(chunk);
+          appendLog(normalized);
+          process.stderr.write(normalized);
+        });
+        child.on("error", error => reject(error));
+        child.on("close", code => resolve(code ?? 1));
+      });
+    } catch (error) {
+      if (activityRecorded) {
+        removeActivity(activityPath, activityId);
+      }
+      throw error;
+    }
+
+    const summary = extractSummaryFromLog(logPath);
+    if (engine === "amazon-q") {
+      const shouldRecordUsage = exitCode === 0 || summary !== null;
+      if (shouldRecordUsage) {
         try {
-          child.stdin.write(invocation.stdin);
-          child.stdin.end();
-        } catch {
-          // best-effort: proceed without stdin if writing fails
+          recordAmazonQUsage(resolveAmazonQUsageStatePath(config.workdirRoot), 1, new Date());
+        } catch (error) {
+          const message = error instanceof Error ? error.message : String(error);
+          process.stderr.write(`[WARN] Failed to record Amazon Q usage: ${message}\n`);
         }
       }
-      if (typeof child.pid === "number") {
-        recordActivity(activityPath, {
-          id: activityId,
-          kind: "idle",
-          engine,
-          repo,
-          startedAt,
-          pid: child.pid,
-          logPath,
-          task
-        });
-        activityRecorded = true;
-      }
-      child.stdout.on("data", (chunk) => {
-        const normalized = normalizeLogChunk(chunk);
-        appendLog(normalized);
-        process.stdout.write(normalized);
-      });
-      child.stderr.on("data", (chunk) => {
-        const normalized = normalizeLogChunk(chunk);
-        appendLog(normalized);
-        process.stderr.write(normalized);
-      });
-      child.on("error", (error) => reject(error));
-      child.on("close", (code) => resolve(code ?? 1));
-    });
-  } catch (error) {
+    }
+    const reportPath = resolveIdleReportPath(config.workdirRoot, repo);
+    writeIdleReport(reportPath, repo, task, engine, exitCode === 0, summary, logPath);
     if (activityRecorded) {
       removeActivity(activityPath, activityId);
     }
-    throw error;
-  }
 
-  const summary = extractSummaryFromLog(logPath);
-  if (engine === "amazon-q") {
-    const shouldRecordUsage = exitCode === 0 || summary !== null;
-    if (shouldRecordUsage) {
-      try {
-        recordAmazonQUsage(resolveAmazonQUsageStatePath(config.workdirRoot), 1, new Date());
-      } catch (error) {
-        const message = error instanceof Error ? error.message : String(error);
-        process.stderr.write(`[WARN] Failed to record Amazon Q usage: ${message}\n`);
-      }
-    }
-  }
-  const reportPath = resolveIdleReportPath(config.workdirRoot, repo);
-  writeIdleReport(reportPath, repo, task, engine, exitCode === 0, summary, logPath);
-  if (activityRecorded) {
-    removeActivity(activityPath, activityId);
-  }
-
-  return {
-    success: exitCode === 0,
-    logPath,
-    repo,
-    task,
-    engine,
-    summary,
-    reportPath,
-    headBranch: newBranch
-  };
+    return {
+      success: exitCode === 0,
+      logPath,
+      repo,
+      task,
+      engine,
+      summary,
+      reportPath,
+      headBranch: newBranch
+    };
   } finally {
     if (created) {
       await removeWorktree({ workdirRoot: config.workdirRoot, repo, cachePath, worktreePath: repoPath });
@@ -1087,9 +1073,7 @@ export function extractSummaryFromLog(logPath: string): string | null {
     return null;
   }
 
-  const summary = raw
-    .slice(startIndex + summaryStart.length, endIndex)
-    .trim();
+  const summary = raw.slice(startIndex + summaryStart.length, endIndex).trim();
 
   return summary.length > 0 ? summary : null;
 }

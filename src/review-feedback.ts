@@ -24,6 +24,5 @@ export function reviewFeedbackIndicatesOk(body: string | null): boolean {
   if (!text) {
     return true;
   }
-  return OK_REVIEW_PATTERNS.some((pattern) => pattern.test(text));
+  return OK_REVIEW_PATTERNS.some(pattern => pattern.test(text));
 }
-

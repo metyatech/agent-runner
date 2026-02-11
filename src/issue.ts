@@ -72,21 +72,14 @@ export function parseRepoList(value: string): string[] {
 
   const normalized = value
     .split(/[,\n]/)
-    .map((entry) => entry.trim())
-    .filter((entry) => entry.length > 0)
-    .filter((entry) => !isPlaceholderRepoEntry(entry));
+    .map(entry => entry.trim())
+    .filter(entry => entry.length > 0)
+    .filter(entry => !isPlaceholderRepoEntry(entry));
 
   return Array.from(new Set(normalized));
 }
 
-const placeholderRepoEntries = new Set([
-  "no response",
-  "_no response_",
-  "n/a",
-  "na",
-  "none",
-  "-"
-]);
+const placeholderRepoEntries = new Set(["no response", "_no response_", "n/a", "na", "none", "-"]);
 
 function isPlaceholderRepoEntry(entry: string): boolean {
   const normalized = entry.toLowerCase();

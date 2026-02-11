@@ -47,4 +47,3 @@ export function buildGitAuthEnv(base: NodeJS.ProcessEnv, token: string): NodeJS.
     GIT_ASKPASS: askpass
   };
 }
-

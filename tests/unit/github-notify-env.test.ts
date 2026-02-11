@@ -10,4 +10,3 @@ describe("github-notify-env", () => {
     expect(await buildGitHubNotifyChildEnv(root)).toEqual({});
   });
 });
-

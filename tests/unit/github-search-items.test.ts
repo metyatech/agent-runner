@@ -27,20 +27,20 @@ describe("GitHubClient.searchOpenItemsByLabelAcrossOwner", () => {
                     }
                   ]
                 : qualifier === "pr"
-                ? [
-                    {
-                      id: 2,
-                      number: 456,
-                      title: "PR",
-                      body: "Body",
-                      html_url: "https://github.com/metyatech/demo/pull/456",
-                      repository_url: "https://api.github.com/repos/metyatech/demo",
-                      user: { login: "metyatech" },
-                      labels: [{ name: "agent:queued" }],
-                      pull_request: { url: "https://api.github.com/repos/metyatech/demo/pulls/456" }
-                    }
-                  ]
-                : []
+                  ? [
+                      {
+                        id: 2,
+                        number: 456,
+                        title: "PR",
+                        body: "Body",
+                        html_url: "https://github.com/metyatech/demo/pull/456",
+                        repository_url: "https://api.github.com/repos/metyatech/demo",
+                        user: { login: "metyatech" },
+                        labels: [{ name: "agent:queued" }],
+                        pull_request: { url: "https://api.github.com/repos/metyatech/demo/pulls/456" }
+                      }
+                    ]
+                  : []
           }
         };
       }
@@ -58,9 +58,9 @@ describe("GitHubClient.searchOpenItemsByLabelAcrossOwner", () => {
     expect(seenQueries.join("\n")).toContain("is:issue");
     expect(seenQueries.join("\n")).toContain("is:pull-request");
     expect(items).toHaveLength(2);
-    expect(items.map((item) => item.number).sort()).toEqual([123, 456]);
-    expect(items.find((item) => item.number === 123)?.isPullRequest).toBe(false);
-    expect(items.find((item) => item.number === 456)?.isPullRequest).toBe(true);
+    expect(items.map(item => item.number).sort()).toEqual([123, 456]);
+    expect(items.find(item => item.number === 123)?.isPullRequest).toBe(false);
+    expect(items.find(item => item.number === 456)?.isPullRequest).toBe(true);
   });
 });
 
@@ -90,20 +90,20 @@ describe("GitHubClient.searchOpenItemsByCommentPhraseAcrossOwner", () => {
                     }
                   ]
                 : qualifier === "pr"
-                ? [
-                    {
-                      id: 3,
-                      number: 789,
-                      title: "PR 3",
-                      body: "Body",
-                      html_url: "https://github.com/metyatech/demo/pull/789",
-                      repository_url: "https://api.github.com/repos/metyatech/demo",
-                      user: { login: "metyatech" },
-                      labels: [],
-                      pull_request: { url: "https://api.github.com/repos/metyatech/demo/pulls/789" }
-                    }
-                  ]
-                : []
+                  ? [
+                      {
+                        id: 3,
+                        number: 789,
+                        title: "PR 3",
+                        body: "Body",
+                        html_url: "https://github.com/metyatech/demo/pull/789",
+                        repository_url: "https://api.github.com/repos/metyatech/demo",
+                        user: { login: "metyatech" },
+                        labels: [],
+                        pull_request: { url: "https://api.github.com/repos/metyatech/demo/pulls/789" }
+                      }
+                    ]
+                  : []
           }
         };
       }
@@ -121,9 +121,9 @@ describe("GitHubClient.searchOpenItemsByCommentPhraseAcrossOwner", () => {
     expect(seenQueries.join("\n")).toContain("is:issue");
     expect(seenQueries.join("\n")).toContain("is:pull-request");
     expect(items).toHaveLength(2);
-    expect(items.map((item) => item.number).sort()).toEqual([456, 789]);
-    expect(items.find((item) => item.number === 456)?.isPullRequest).toBe(false);
-    expect(items.find((item) => item.number === 789)?.isPullRequest).toBe(true);
+    expect(items.map(item => item.number).sort()).toEqual([456, 789]);
+    expect(items.find(item => item.number === 456)?.isPullRequest).toBe(false);
+    expect(items.find(item => item.number === 789)?.isPullRequest).toBe(true);
   });
 });
 

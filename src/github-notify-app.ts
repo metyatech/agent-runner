@@ -28,7 +28,9 @@ function readTrimmedFile(filePath: string): string | null {
   }
 }
 
-function readStateAppJson(workdirRoot: string): { appId?: string; installationId?: number; apiBaseUrl?: string } | null {
+function readStateAppJson(
+  workdirRoot: string
+): { appId?: string; installationId?: number; apiBaseUrl?: string } | null {
   const filePath = resolveStateFile(workdirRoot, "github-notify-app.json");
   if (!fs.existsSync(filePath)) return null;
   try {
@@ -42,7 +44,9 @@ function readStateAppJson(workdirRoot: string): { appId?: string; installationId
         ? parsed.installationId
         : undefined;
     const apiBaseUrl =
-      typeof parsed.apiBaseUrl === "string" && parsed.apiBaseUrl.trim().length > 0 ? parsed.apiBaseUrl.trim() : undefined;
+      typeof parsed.apiBaseUrl === "string" && parsed.apiBaseUrl.trim().length > 0
+        ? parsed.apiBaseUrl.trim()
+        : undefined;
     return { appId, installationId, apiBaseUrl };
   } catch {
     return null;
@@ -68,7 +72,8 @@ export function resolveGitHubNotifyAppConfig(workdirRoot: string): GitHubNotifyA
         appId: envAppId.trim(),
         installationId: envInstallationId,
         privateKey: envPrivateKey,
-        apiBaseUrl: typeof envApiBaseUrl === "string" && envApiBaseUrl.trim().length > 0 ? envApiBaseUrl.trim() : undefined
+        apiBaseUrl:
+          typeof envApiBaseUrl === "string" && envApiBaseUrl.trim().length > 0 ? envApiBaseUrl.trim() : undefined
       };
     }
     const keyPath = resolveStateFile(workdirRoot, "github-notify-app-private-key.pem");
@@ -78,7 +83,8 @@ export function resolveGitHubNotifyAppConfig(workdirRoot: string): GitHubNotifyA
         appId: envAppId.trim(),
         installationId: envInstallationId,
         privateKey: keyFromFile,
-        apiBaseUrl: typeof envApiBaseUrl === "string" && envApiBaseUrl.trim().length > 0 ? envApiBaseUrl.trim() : undefined
+        apiBaseUrl:
+          typeof envApiBaseUrl === "string" && envApiBaseUrl.trim().length > 0 ? envApiBaseUrl.trim() : undefined
       };
     }
   }
@@ -100,4 +106,3 @@ export function resolveGitHubNotifyAppConfig(workdirRoot: string): GitHubNotifyA
     apiBaseUrl: state.apiBaseUrl
   };
 }
-
