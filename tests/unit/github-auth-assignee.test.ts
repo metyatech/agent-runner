@@ -76,3 +76,48 @@ describe("GitHubClient.findOpenPullRequestByHead", () => {
   });
 });
 
+describe("GitHubClient.listOpenPullRequests", () => {
+  it("lists open pull requests with updated-desc order", async () => {
+    const client = new GitHubClient("dummy");
+    let seen: any = null;
+    (client as any).octokit = {
+      pulls: {
+        list: async (params: any) => {
+          seen = params;
+          return {
+            data: [
+              {
+                number: 10,
+                title: "Improve scheduler",
+                body: "Refine idle selection.",
+                html_url: "https://github.com/metyatech/demo/pull/10",
+                updated_at: "2026-02-11T10:00:00Z",
+                user: { login: "metyatech" }
+              }
+            ]
+          };
+        }
+      }
+    };
+
+    const listed = await client.listOpenPullRequests({ owner: "metyatech", repo: "demo" });
+    expect(listed).toEqual([
+      {
+        number: 10,
+        title: "Improve scheduler",
+        body: "Refine idle selection.",
+        url: "https://github.com/metyatech/demo/pull/10",
+        updatedAt: "2026-02-11T10:00:00Z",
+        author: "metyatech"
+      }
+    ]);
+
+    expect(seen).toMatchObject({
+      owner: "metyatech",
+      repo: "demo",
+      state: "open",
+      sort: "updated",
+      direction: "desc"
+    });
+  });
+});

@@ -2,9 +2,17 @@ import fs from "node:fs";
 import path from "node:path";
 import { spawn } from "node:child_process";
 import type { AgentRunnerConfig } from "./config.js";
-import { GitHubClient, type IssueComment, type IssueInfo, type PullRequestReviewComment, type RepoInfo } from "./github.js";
+import {
+  GitHubClient,
+  type IssueComment,
+  type IssueInfo,
+  type OpenPullRequestInfo,
+  type PullRequestReviewComment,
+  type RepoInfo
+} from "./github.js";
 import { resolveCodexCommand } from "./codex-command.js";
 import { recordAmazonQUsage, resolveAmazonQUsageStatePath } from "./amazon-q-usage.js";
+import { buildIdleDuplicateWorkGuard, buildIdleOpenPrContext } from "./idle-open-pr-context.js";
 import {
   chooseIdleTask,
   loadIdleHistory,
@@ -247,17 +255,40 @@ function renderPrompt(
   return template.replace("{{repos}}", repoList).replace("{{task}}", taskText);
 }
 
-function renderIdlePrompt(template: string, repo: RepoInfo, task: string): string {
+export function renderIdlePrompt(
+  template: string,
+  repo: RepoInfo,
+  task: string,
+  options: {
+    openPrCount: number;
+    openPrContext: string;
+    openPrContextAvailable: boolean;
+  }
+): string {
   const repoSlug = `${repo.owner}/${repo.repo}`;
-  return template
+  let rendered = template
     .split("{{repo}}")
     .join(repoSlug)
     .split("{{owner}}")
     .join(repo.owner)
     .split("{{repoName}}")
     .join(repo.repo)
+    .split("{{openPrCount}}")
+    .join(String(options.openPrCount))
+    .split("{{openPrContext}}")
+    .join(options.openPrContext)
     .split("{{task}}")
     .join(task);
+
+  if (!template.includes("{{openPrContext}}")) {
+    rendered = `${rendered}\n\nOpen PR context:\n${options.openPrContext}`;
+  }
+  if (!template.includes("{{openPrCount}}")) {
+    rendered = `${rendered}\nOpen PR count: ${options.openPrCount}`;
+  }
+
+  const guard = buildIdleDuplicateWorkGuard(options.openPrCount, options.openPrContextAvailable);
+  return `${rendered}\n\n${guard}\n`;
 }
 
 function ensureGeminiSystemDefaultsPath(workdirRoot: string): string {
@@ -948,7 +979,26 @@ export async function runIdleTask(
     });
     created = true;
 
-    const prompt = renderIdlePrompt(config.idle?.promptTemplate ?? "", repo, task);
+    let openPrContextAvailable = true;
+    let openPullRequests: OpenPullRequestInfo[] = [];
+    let openPrContext = "";
+    try {
+      openPullRequests = await client.listOpenPullRequests(repo);
+      openPrContext = buildIdleOpenPrContext(openPullRequests);
+    } catch (error) {
+      openPrContextAvailable = false;
+      const message = error instanceof Error ? error.message : String(error);
+      process.stderr.write(
+        `[WARN] Failed to load open PR context for ${repo.owner}/${repo.repo}: ${message}\n`
+      );
+      openPrContext = "Open PR context unavailable due to GitHub API error.";
+    }
+
+    const prompt = renderIdlePrompt(config.idle?.promptTemplate ?? "", repo, task, {
+      openPrCount: openPullRequests.length,
+      openPrContext,
+      openPrContextAvailable
+    });
 
   const logDir = path.resolve(config.workdirRoot, "agent-runner", "logs");
   fs.mkdirSync(logDir, { recursive: true });
@@ -968,6 +1018,7 @@ export async function runIdleTask(
     AGENT_RUNNER_REPO: `${repo.owner}/${repo.repo}`,
     AGENT_RUNNER_REPO_PATH: repoPath,
     AGENT_RUNNER_TASK: task,
+    AGENT_RUNNER_OPEN_PR_COUNT: String(openPullRequests.length),
     AGENT_RUNNER_PROMPT: prompt,
     AGENT_RUNNER_WORKROOT: workRoot,
     ...notifyEnv

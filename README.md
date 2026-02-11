@@ -159,7 +159,7 @@ Config file: `agent-runner.config.json`
   - `idle.maxRunsPerCycle`: Max idle tasks per cycle
   - `idle.cooldownMinutes`: Per-repo cooldown between idle runs
   - `idle.tasks`: List of task prompts to rotate through
-  - `idle.promptTemplate`: Prompt template for idle runs; supports `{{repo}}` and `{{task}}`
+  - `idle.promptTemplate`: Prompt template for idle runs; supports `{{repo}}`, `{{task}}`, `{{openPrCount}}`, and `{{openPrContext}}`
   - `idle.repoScope`: `"all"` (default) or `"local"` to restrict idle tasks to repos under the workspace root
   - `idle.usageGate`: Optional Codex usage guard (reads `account/rateLimits/read` via Codex app-server)
   - `idle.usageGate.enabled`: Turn usage gating on/off
@@ -290,8 +290,7 @@ Each idle run writes a report under `reports/` and streams the Codex output to `
 When changes are made, the idle prompt is expected to open a PR. The runner will
 follow up on PR review feedback and can auto-merge managed PRs when all reviewers
 are in an OK state.
-To avoid duplicate idle work, repositories with an open pull request whose head branch
-starts with `agent-runner/` are excluded from idle scheduling until that pull request is closed.
+To avoid duplicate idle work, the runner injects the repository's open PR context into each idle prompt and instructs the implementation agent to avoid work that overlaps existing open PRs.
 
 ### GitHub notifications (GitHub App / bot token)
 
@@ -369,7 +368,7 @@ Example config snippet:
       "Bring the repo into compliance with AGENTS.md and project docs/standards. Identify the highest-impact gap, fix it, and update docs/tests as needed. If nothing meaningful is needed, exit."
     ],
     "repoScope": "local",
-    "promptTemplate": "You are running an autonomous idle task. Target repo: {{repo}}. Task: {{task}}",
+    "promptTemplate": "You are running an autonomous idle task. Target repo: {{repo}}. Task: {{task}}. Open PR count: {{openPrCount}}. Open PR context: {{openPrContext}}",
     "usageGate": {
       "enabled": true,
       "command": "codex",

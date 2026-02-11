@@ -50,6 +50,15 @@ export type PullRequestReview = {
   body: string | null;
 };
 
+export type OpenPullRequestInfo = {
+  number: number;
+  title: string;
+  body: string | null;
+  url: string;
+  updatedAt: string;
+  author: string | null;
+};
+
 export type PullRequestDetails = {
   number: number;
   url: string;
@@ -731,6 +740,43 @@ export class GitHubClient {
       throw new Error(`Missing default branch for ${repo.owner}/${repo.repo}`);
     }
     return branch;
+  }
+
+  async listOpenPullRequests(repo: RepoInfo): Promise<OpenPullRequestInfo[]> {
+    const pulls: OpenPullRequestInfo[] = [];
+    let page = 1;
+    while (true) {
+      const response = await this.octokit.pulls.list({
+        owner: repo.owner,
+        repo: repo.repo,
+        state: "open",
+        sort: "updated",
+        direction: "desc",
+        per_page: 100,
+        page
+      });
+
+      for (const pull of response.data) {
+        if (!pull.number || !pull.html_url) {
+          continue;
+        }
+        pulls.push({
+          number: pull.number,
+          title: pull.title ?? "",
+          body: pull.body ?? null,
+          url: pull.html_url,
+          updatedAt: pull.updated_at ?? "",
+          author: pull.user?.login ?? null
+        });
+      }
+
+      if (response.data.length < 100) {
+        break;
+      }
+      page += 1;
+    }
+
+    return pulls;
   }
 
   async getPullRequestHead(repo: RepoInfo, pullNumber: number): Promise<{

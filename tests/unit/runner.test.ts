@@ -4,7 +4,8 @@ import {
   buildCodexInvocation,
   buildCodexResumeInvocation,
   buildGeminiInvocation,
-  buildIssueTaskText
+  buildIssueTaskText,
+  renderIdlePrompt
 } from "../../src/runner.js";
 import fs from "node:fs";
 import os from "node:os";
@@ -369,6 +370,42 @@ describe("buildIssueTaskText", () => {
 
     const text = buildIssueTaskText(baseIssue, comments);
     expect(text).toContain("…[truncated]");
+  });
+});
+
+describe("renderIdlePrompt", () => {
+  const repo = { owner: "metyatech", repo: "demo" };
+
+  it("replaces open PR placeholders and always adds duplicate-work guard", () => {
+    const prompt = renderIdlePrompt(
+      "Repo {{repo}}\nTask {{task}}\nOpen PRs ({{openPrCount}})\n{{openPrContext}}",
+      repo,
+      "Improve retries",
+      {
+        openPrCount: 2,
+        openPrContext: "- #10 Existing PR",
+        openPrContextAvailable: true
+      }
+    );
+
+    expect(prompt).toContain("Repo metyatech/demo");
+    expect(prompt).toContain("Task Improve retries");
+    expect(prompt).toContain("Open PRs (2)");
+    expect(prompt).toContain("- #10 Existing PR");
+    expect(prompt).toContain("Duplicate-work guard");
+  });
+
+  it("appends open PR context when placeholders are missing", () => {
+    const prompt = renderIdlePrompt("Repo {{repo}}\nTask {{task}}", repo, "Improve retries", {
+      openPrCount: 1,
+      openPrContext: "- #22 Another PR",
+      openPrContextAvailable: true
+    });
+
+    expect(prompt).toContain("Repo metyatech/demo");
+    expect(prompt).toContain("Task Improve retries");
+    expect(prompt).toContain("Open PR context:");
+    expect(prompt).toContain("- #22 Another PR");
   });
 });
 
