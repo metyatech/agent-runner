@@ -120,4 +120,45 @@ describe("GitHubClient.listOpenPullRequests", () => {
       direction: "desc"
     });
   });
+
+  it("stops pagination once limit is reached", async () => {
+    const client = new GitHubClient("dummy");
+    const calls: any[] = [];
+    (client as any).octokit = {
+      pulls: {
+        list: async (params: any) => {
+          calls.push(params);
+          return {
+            data: [
+              {
+                number: 30,
+                title: "A",
+                body: "A",
+                html_url: "https://github.com/metyatech/demo/pull/30",
+                updated_at: "2026-02-11T10:00:00Z",
+                user: { login: "alice" }
+              },
+              {
+                number: 31,
+                title: "B",
+                body: "B",
+                html_url: "https://github.com/metyatech/demo/pull/31",
+                updated_at: "2026-02-11T09:00:00Z",
+                user: { login: "bob" }
+              }
+            ]
+          };
+        }
+      }
+    };
+
+    const listed = await client.listOpenPullRequests({ owner: "metyatech", repo: "demo" }, { limit: 1 });
+    expect(listed).toHaveLength(1);
+    expect(listed[0]?.number).toBe(30);
+    expect(calls).toHaveLength(1);
+    expect(calls[0]).toMatchObject({
+      per_page: 1,
+      page: 1
+    });
+  });
 });

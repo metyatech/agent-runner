@@ -291,6 +291,7 @@ When changes are made, the idle prompt is expected to open a PR. The runner will
 follow up on PR review feedback and can auto-merge managed PRs when all reviewers
 are in an OK state.
 To avoid duplicate idle work, the runner injects the repository's open PR context into each idle prompt and instructs the implementation agent to avoid work that overlaps existing open PRs.
+The injected context is bounded (top recent entries + total character budget) so prompt size stays stable on active repositories.
 
 ### GitHub notifications (GitHub App / bot token)
 

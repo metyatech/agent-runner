@@ -407,5 +407,17 @@ describe("renderIdlePrompt", () => {
     expect(prompt).toContain("Open PR context:");
     expect(prompt).toContain("- #22 Another PR");
   });
+
+  it("renders unknown open PR count when context lookup fails", () => {
+    const prompt = renderIdlePrompt("Repo {{repo}}\nOpen PRs {{openPrCount}}", repo, "Improve retries", {
+      openPrCount: null,
+      openPrContext: "Open PR context unavailable due to GitHub API error.",
+      openPrContextAvailable: false
+    });
+
+    expect(prompt).toContain("Open PRs unknown");
+    expect(prompt).toContain("count in this repository: unknown");
+    expect(prompt).toContain("Open PR context could not be fetched");
+  });
 });
 

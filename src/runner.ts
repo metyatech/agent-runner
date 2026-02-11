@@ -6,13 +6,16 @@ import {
   GitHubClient,
   type IssueComment,
   type IssueInfo,
-  type OpenPullRequestInfo,
   type PullRequestReviewComment,
   type RepoInfo
 } from "./github.js";
 import { resolveCodexCommand } from "./codex-command.js";
 import { recordAmazonQUsage, resolveAmazonQUsageStatePath } from "./amazon-q-usage.js";
-import { buildIdleDuplicateWorkGuard, buildIdleOpenPrContext } from "./idle-open-pr-context.js";
+import {
+  buildIdleDuplicateWorkGuard,
+  buildIdleOpenPrContext,
+  formatIdleOpenPrCount
+} from "./idle-open-pr-context.js";
 import {
   chooseIdleTask,
   loadIdleHistory,
@@ -125,6 +128,9 @@ const MAX_ISSUE_COMMENTS_COUNT = 8;
 const MAX_REVIEW_COMMENT_CHARS = 4_000;
 const MAX_REVIEW_COMMENTS_BLOCK_CHARS = 12_000;
 const MAX_REVIEW_COMMENTS_COUNT = 8;
+const MAX_IDLE_OPEN_PULL_REQUESTS = 50;
+const MAX_IDLE_OPEN_PR_CONTEXT_CHARS = 12_000;
+const MAX_IDLE_OPEN_PR_CONTEXT_ENTRIES = 50;
 
 function truncateForPrompt(value: string, maxChars: number): string {
   if (value.length <= maxChars) {
@@ -260,12 +266,13 @@ export function renderIdlePrompt(
   repo: RepoInfo,
   task: string,
   options: {
-    openPrCount: number;
+    openPrCount: number | null;
     openPrContext: string;
     openPrContextAvailable: boolean;
   }
 ): string {
   const repoSlug = `${repo.owner}/${repo.repo}`;
+  const openPrCountLabel = formatIdleOpenPrCount(options.openPrCount);
   let rendered = template
     .split("{{repo}}")
     .join(repoSlug)
@@ -274,7 +281,7 @@ export function renderIdlePrompt(
     .split("{{repoName}}")
     .join(repo.repo)
     .split("{{openPrCount}}")
-    .join(String(options.openPrCount))
+    .join(openPrCountLabel)
     .split("{{openPrContext}}")
     .join(options.openPrContext)
     .split("{{task}}")
@@ -284,7 +291,7 @@ export function renderIdlePrompt(
     rendered = `${rendered}\n\nOpen PR context:\n${options.openPrContext}`;
   }
   if (!template.includes("{{openPrCount}}")) {
-    rendered = `${rendered}\nOpen PR count: ${options.openPrCount}`;
+    rendered = `${rendered}\nOpen PR count: ${openPrCountLabel}`;
   }
 
   const guard = buildIdleDuplicateWorkGuard(options.openPrCount, options.openPrContextAvailable);
@@ -980,11 +987,15 @@ export async function runIdleTask(
     created = true;
 
     let openPrContextAvailable = true;
-    let openPullRequests: OpenPullRequestInfo[] = [];
+    let openPrCount: number | null = null;
     let openPrContext = "";
     try {
-      openPullRequests = await client.listOpenPullRequests(repo);
-      openPrContext = buildIdleOpenPrContext(openPullRequests);
+      const openPullRequests = await client.listOpenPullRequests(repo, { limit: MAX_IDLE_OPEN_PULL_REQUESTS });
+      openPrCount = openPullRequests.length;
+      openPrContext = buildIdleOpenPrContext(openPullRequests, {
+        maxEntries: MAX_IDLE_OPEN_PR_CONTEXT_ENTRIES,
+        maxChars: MAX_IDLE_OPEN_PR_CONTEXT_CHARS
+      });
     } catch (error) {
       openPrContextAvailable = false;
       const message = error instanceof Error ? error.message : String(error);
@@ -995,7 +1006,7 @@ export async function runIdleTask(
     }
 
     const prompt = renderIdlePrompt(config.idle?.promptTemplate ?? "", repo, task, {
-      openPrCount: openPullRequests.length,
+      openPrCount,
       openPrContext,
       openPrContextAvailable
     });
@@ -1018,7 +1029,7 @@ export async function runIdleTask(
     AGENT_RUNNER_REPO: `${repo.owner}/${repo.repo}`,
     AGENT_RUNNER_REPO_PATH: repoPath,
     AGENT_RUNNER_TASK: task,
-    AGENT_RUNNER_OPEN_PR_COUNT: String(openPullRequests.length),
+    AGENT_RUNNER_OPEN_PR_COUNT: formatIdleOpenPrCount(openPrCount),
     AGENT_RUNNER_PROMPT: prompt,
     AGENT_RUNNER_WORKROOT: workRoot,
     ...notifyEnv

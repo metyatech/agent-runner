@@ -742,21 +742,27 @@ export class GitHubClient {
     return branch;
   }
 
-  async listOpenPullRequests(repo: RepoInfo): Promise<OpenPullRequestInfo[]> {
+  async listOpenPullRequests(repo: RepoInfo, options?: { limit?: number }): Promise<OpenPullRequestInfo[]> {
     const pulls: OpenPullRequestInfo[] = [];
+    const limit = Math.max(1, Math.floor(options?.limit ?? Number.POSITIVE_INFINITY));
     let page = 1;
-    while (true) {
+    while (pulls.length < limit) {
+      const remaining = limit - pulls.length;
+      const perPage = Math.min(100, remaining);
       const response = await this.octokit.pulls.list({
         owner: repo.owner,
         repo: repo.repo,
         state: "open",
         sort: "updated",
         direction: "desc",
-        per_page: 100,
+        per_page: perPage,
         page
       });
 
       for (const pull of response.data) {
+        if (pulls.length >= limit) {
+          break;
+        }
         if (!pull.number || !pull.html_url) {
           continue;
         }
@@ -770,7 +776,7 @@ export class GitHubClient {
         });
       }
 
-      if (response.data.length < 100) {
+      if (response.data.length < perPage) {
         break;
       }
       page += 1;
