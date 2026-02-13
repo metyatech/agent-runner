@@ -488,14 +488,18 @@ stateDiagram-v2
 ```mermaid
 flowchart TD
   A[Managed PR] -->|new review/review comment| B[review queue]
-  B --> C{requiresEngine?}
-  C -->|yes| D[run follow-up]
+  B --> C{requiresEngine? review needs agent action}
+  C -->|yes: changes requested or actionable review feedback| D[run follow-up]
   D --> E[done / failed / needsUserReply]
-  C -->|no| F[approval path]
+  C -->|no: approved or OK non-actionable feedback| F[approval path]
   F --> G{merge ready?}
   G -->|yes| H[auto-merge and done]
   G -->|no| B
 ```
+
+`requiresEngine` decision guide:
+- `yes`: the review requires agent action (for example `changes requested`, actionable review comments)
+- `no`: approval-style/OK feedback only (for example `approved`, `no new comments`, `usage limit`, `unable to review`)
 
 ### Stuck recovery quick rule
 
