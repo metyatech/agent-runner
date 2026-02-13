@@ -132,7 +132,7 @@ Config file: `agent-runner.config.json`
 - `labels.needsUserReply`: Label for paused runs that require a user reply
 - `codex`: Codex CLI command and prompt template
 - `codex.args`: Default config runs with full access (`--dangerously-bypass-approvals-and-sandbox`); change this if you want approvals or sandboxing.
-- `codex.promptTemplate`: The runner expects a summary block in the output to post to the issue thread.
+- `codex.promptTemplate`: The runner expects a final response block (`AGENT_RUNNER_STATUS: ...` + message body) and posts that final message to the issue thread.
   - The default template allows GitHub operations (issues/PRs/commits/pushes) but forbids sending/posting outside GitHub unless the user explicitly approves in the issue.
 - `webhooks`: Optional GitHub webhook listener configuration (recommended to avoid repo-wide polling)
   - `webhooks.enabled`: Turn webhook mode on/off
@@ -332,7 +332,7 @@ Helper script (writes `state/github-notify-token.txt`):
 .\scripts\set-notify-token.ps1 -Token "<token>"
 ```
 
-For idle runs that create a PR, agent-runner will try to locate the PR URL from the idle summary or the idle log tail.
+For idle runs that create a PR, agent-runner will try to locate the PR URL from the idle final response or the idle log tail.
 If no PR URL is available, it will fall back to searching for an open PR by the idle run's head branch.
 When a PR is detected, agent-runner assigns the authenticated user associated with the runner GitHub token to the PR (to trigger GitHub notifications)
 and posts an idle completion comment. If a notify client is configured, the comment is posted as the notify identity; otherwise it is posted
@@ -653,17 +653,20 @@ Set `amazonQ` in the config (ships disabled by default):
 
 Note: `--trust-all-tools` is required for fully non-interactive runs, but it allows the agent to execute arbitrary shell commands. Only enable this on a machine you are comfortable with the agent operating on.
 
-### Summary block
+### Final response format
 
-At the end of each run, include a summary block so the runner can post it to GitHub:
+At the end of each run, the agent should output a final response in this format:
 
+```text
+AGENT_RUNNER_STATUS: done
+<message to post to GitHub>
 ```
-AGENT_RUNNER_SUMMARY_START
-- Change 1
-- Change 2
-Tests: npm run test
-Commits: abc1234
-AGENT_RUNNER_SUMMARY_END
+
+If the task is blocked and the user must reply:
+
+```text
+AGENT_RUNNER_STATUS: needs_user_reply
+<message asking the user what is needed>
 ```
 
 ## Label sync scheduling

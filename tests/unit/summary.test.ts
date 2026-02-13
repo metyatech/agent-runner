@@ -2,37 +2,62 @@ import { describe, expect, it } from "vitest";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { extractSummaryFromLog } from "../../src/runner.js";
+import { extractFinalResponseFromLog, parseAgentRunResult } from "../../src/runner.js";
 
-describe("extractSummaryFromLog", () => {
-  it("parses summary between markers", () => {
+describe("extractFinalResponseFromLog", () => {
+  it("parses the final codex response block before token stats", () => {
     const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "agent-runner-summary-"));
     const logPath = path.join(tempDir, "log.txt");
     const content = [
-      "line1",
-      "AGENT_RUNNER_SUMMARY_START",
+      "header",
+      "codex",
+      "old response",
+      "tokens used",
+      "123",
+      "codex",
+      "AGENT_RUNNER_STATUS: done",
       "- Change A",
       "Tests: npm run test",
       "Commits: abc1234",
-      "AGENT_RUNNER_SUMMARY_END",
-      "line2"
+      "tokens used",
+      "456"
     ].join("\n");
     fs.writeFileSync(logPath, content, "utf8");
 
-    const summary = extractSummaryFromLog(logPath);
-    expect(summary).toBe("- Change A\nTests: npm run test\nCommits: abc1234");
+    const summary = extractFinalResponseFromLog(logPath);
+    expect(summary).toBe("AGENT_RUNNER_STATUS: done\n- Change A\nTests: npm run test\nCommits: abc1234");
 
     fs.rmSync(tempDir, { recursive: true, force: true });
   });
 
-  it("returns null when markers are missing", () => {
+  it("returns null when codex response marker is missing", () => {
     const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "agent-runner-summary-"));
     const logPath = path.join(tempDir, "log.txt");
-    fs.writeFileSync(logPath, "no markers", "utf8");
+    fs.writeFileSync(logPath, "no codex block", "utf8");
 
-    const summary = extractSummaryFromLog(logPath);
+    const summary = extractFinalResponseFromLog(logPath);
     expect(summary).toBeNull();
 
     fs.rmSync(tempDir, { recursive: true, force: true });
+  });
+});
+
+describe("parseAgentRunResult", () => {
+  it("parses done status and strips status line from response", () => {
+    const parsed = parseAgentRunResult("AGENT_RUNNER_STATUS: done\nWork completed.");
+    expect(parsed.status).toBe("done");
+    expect(parsed.response).toBe("Work completed.");
+  });
+
+  it("parses needs_user_reply status and strips status line from response", () => {
+    const parsed = parseAgentRunResult("AGENT_RUNNER_STATUS: needs_user_reply\nPlease answer question A.");
+    expect(parsed.status).toBe("needs_user_reply");
+    expect(parsed.response).toBe("Please answer question A.");
+  });
+
+  it("treats response without status line as plain response", () => {
+    const parsed = parseAgentRunResult("Plain final response");
+    expect(parsed.status).toBeNull();
+    expect(parsed.response).toBe("Plain final response");
   });
 });

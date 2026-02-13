@@ -49,6 +49,7 @@ import {
 
 export type RunFailureKind = "quota" | "needs_user_reply" | "execution_error";
 export type RunFailureStage = "before_session" | "after_session";
+type AgentRunStatus = "done" | "needs_user_reply";
 
 export type RunResult = {
   success: boolean;
@@ -522,13 +523,6 @@ const QUOTA_ERROR_PATTERNS = [
   /insufficient credits/i,
   /credits?[^.\n]*(depleted|exhausted)/i
 ];
-const NEEDS_USER_REPLY_PATTERNS = [
-  /need(?:s)?(?:\s+more)?\s+(?:input|details|clarification|reply|response)/i,
-  /waiting for (?:the )?user/i,
-  /awaiting (?:the )?user/i,
-  /please reply/i,
-  /ask (?:the )?user/i
-];
 const MISSING_SESSION_PATTERNS = [
   /session[^.\n]*not found/i,
   /no matching session/i,
@@ -537,6 +531,7 @@ const MISSING_SESSION_PATTERNS = [
 ];
 const MAX_OUTPUT_TAIL_CHARS = 200_000;
 const MAX_RESUME_ATTEMPTS = 30;
+const AGENT_RUNNER_STATUS_PREFIX = "AGENT_RUNNER_STATUS:";
 
 function keepTail(value: string, limit: number = MAX_OUTPUT_TAIL_CHARS): string {
   if (value.length <= limit) {
@@ -844,8 +839,25 @@ export async function runIssue(
           latestSessionId = result.sessionId;
         }
 
-        const summary = extractSummaryFromLog(logPath);
+        const finalResponse = extractFinalResponseFromLog(logPath);
+        const agentResult = parseAgentRunResult(finalResponse);
+        const summary = agentResult.response;
         if (result.exitCode === 0) {
+          if (agentResult.status === "needs_user_reply") {
+            const stage: RunFailureStage = latestSessionId ? "after_session" : "before_session";
+            return {
+              success: false,
+              logPath,
+              repos,
+              summary,
+              activityId,
+              sessionId: latestSessionId,
+              failureKind: "needs_user_reply",
+              failureStage: stage,
+              failureDetail: null,
+              quotaResumeAt: null
+            };
+          }
           return {
             success: true,
             logPath,
@@ -883,7 +895,7 @@ export async function runIssue(
           };
         }
 
-        if (hasPattern(result.outputTail, NEEDS_USER_REPLY_PATTERNS)) {
+        if (agentResult.status === "needs_user_reply") {
           return {
             success: false,
             logPath,
@@ -1146,7 +1158,7 @@ export async function runIdleTask(
     throw error;
   }
 
-  const summary = extractSummaryFromLog(logPath);
+  const summary = extractFinalResponseFromLog(logPath);
   if (engine === "amazon-q") {
     const shouldRecordUsage = exitCode === 0 || summary !== null;
     if (shouldRecordUsage) {
@@ -1186,27 +1198,55 @@ export async function runIdleTask(
   }
 }
 
-const summaryStart = "AGENT_RUNNER_SUMMARY_START";
-const summaryEnd = "AGENT_RUNNER_SUMMARY_END";
-
-export function extractSummaryFromLog(logPath: string): string | null {
+export function extractFinalResponseFromLog(logPath: string): string | null {
   if (!fs.existsSync(logPath)) {
     return null;
   }
 
-  const raw = fs.readFileSync(logPath, "utf8");
-  const startIndex = raw.lastIndexOf(summaryStart);
-  if (startIndex === -1) {
-    return null;
+  const raw = stripAnsi(fs.readFileSync(logPath, "utf8"));
+  const speakerPattern = /(?:^|\r?\n)codex\r?\n/g;
+  let lastStart = -1;
+  let match: RegExpExecArray | null;
+  while ((match = speakerPattern.exec(raw)) !== null) {
+    lastStart = match.index + match[0].length;
   }
-  const endIndex = raw.indexOf(summaryEnd, startIndex);
-  if (endIndex === -1) {
+  if (lastStart === -1) {
     return null;
   }
 
-  const summary = raw
-    .slice(startIndex + summaryStart.length, endIndex)
-    .trim();
+  const afterSpeaker = raw.slice(lastStart);
+  const tokenStatsIndex = afterSpeaker.search(/\r?\ntokens used\b/i);
+  const body = tokenStatsIndex >= 0 ? afterSpeaker.slice(0, tokenStatsIndex) : afterSpeaker;
+  const trimmed = body.trim();
+  return trimmed.length > 0 ? trimmed : null;
+}
 
-  return summary.length > 0 ? summary : null;
+export function parseAgentRunResult(finalResponse: string | null): {
+  status: AgentRunStatus | null;
+  response: string | null;
+} {
+  const trimmed = finalResponse?.trim() ?? "";
+  if (!trimmed) {
+    return { status: null, response: null };
+  }
+
+  const lines = trimmed.split(/\r?\n/);
+  const firstNonEmpty = lines.findIndex((line) => line.trim().length > 0);
+  if (firstNonEmpty === -1) {
+    return { status: null, response: null };
+  }
+  const firstLine = lines[firstNonEmpty].trim();
+  if (!firstLine.toUpperCase().startsWith(AGENT_RUNNER_STATUS_PREFIX)) {
+    return { status: null, response: trimmed };
+  }
+
+  const rawStatus = firstLine.slice(AGENT_RUNNER_STATUS_PREFIX.length).trim().toLowerCase();
+  const status: AgentRunStatus | null =
+    rawStatus === "done" ? "done" : rawStatus === "needs_user_reply" ? "needs_user_reply" : null;
+  const responseBody = lines.slice(firstNonEmpty + 1).join("\n").trim();
+
+  return {
+    status,
+    response: responseBody.length > 0 ? responseBody : null
+  };
 }

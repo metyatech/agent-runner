@@ -120,11 +120,11 @@ describe("buildIdleOpenPrContext", () => {
 });
 
 describe("open PR count and duplicate-work guard", () => {
-  it("formats unknown count and references summary block markers", () => {
+  it("formats unknown count and references final response instructions", () => {
     expect(formatIdleOpenPrCount(null)).toBe("unknown");
     const guard = buildIdleDuplicateWorkGuard(null, false);
     expect(guard).toContain("count in this repository: unknown");
-    expect(guard).toContain("AGENT_RUNNER_SUMMARY_START/END block");
+    expect(guard).toContain("in your final response");
   });
 
   it("treats open PR context as untrusted instructions", () => {

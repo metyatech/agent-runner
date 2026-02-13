@@ -684,15 +684,14 @@ program
         await client.addLabels(issue, [config.labels.needsUserReply]);
         await tryRemoveLabel(issue, config.labels.running);
         await tryRemoveLabel(issue, config.labels.failed);
+        const userReplyBody =
+          result.summary?.trim() ||
+          `${contextLabel === "review-followup" ? "Agent runner paused review follow-up." : "Agent runner paused."}` +
+            `${detailLine}` +
+            `\n\nPlease reply on this thread. The runner will resume from the same Codex session after your reply.`;
         await commentCompletion(
           issue,
-          buildAgentComment(
-            `${contextLabel === "review-followup" ? "Agent runner paused review follow-up." : "Agent runner paused."}` +
-              `${detailLine}` +
-              `\n\nPlease reply on this thread. The runner will resume from the same Codex session after your reply.` +
-              `\n\nLog: ${result.logPath}`,
-            [NEEDS_USER_MARKER]
-          )
+          buildAgentComment(userReplyBody, [NEEDS_USER_MARKER])
         );
         return;
       }
@@ -1544,11 +1543,7 @@ program
                 await tryRemoveLabel(issue, config.labels.needsUserReply);
                 await commentCompletion(
                   issue,
-                  buildAgentComment(
-                    `Agent runner completed successfully.` +
-                      `${result.summary ? `\n\nSummary:\n${result.summary}` : ""}` +
-                      `\n\nLog: ${result.logPath}`
-                  )
+                  buildAgentComment(result.summary?.trim() || "Agent runner completed successfully.")
                 );
                 return;
               }
@@ -1695,11 +1690,7 @@ program
                 await tryRemoveLabel(issue, config.labels.needsUserReply);
                 await commentCompletion(
                   issue,
-                  buildAgentComment(
-                    `Agent runner completed review follow-up successfully.` +
-                      `${result.summary ? `\n\nSummary:\n${result.summary}` : ""}` +
-                      `\n\nLog: ${result.logPath}`
-                  )
+                  buildAgentComment(result.summary?.trim() || "Agent runner completed review follow-up successfully.")
                 );
                 return;
               }
