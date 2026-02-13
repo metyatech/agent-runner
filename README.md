@@ -483,23 +483,53 @@ stateDiagram-v2
   done --> queued: /agent run
 ```
 
-### State diagram: managed PR review follow-up
+### State transitions: managed PR review follow-up
 
 ```mermaid
 flowchart TD
-  A[Managed PR] -->|new review/review comment| B[review queue]
-  B --> C{requiresEngine? review needs agent action}
-  C -->|yes: changes requested or actionable review feedback| D[run follow-up]
-  D --> E[done / failed / needsUserReply]
-  C -->|no: approved or OK non-actionable feedback| F[approval path]
-  F --> G{merge ready?}
-  G -->|yes| H[auto-merge and done]
-  G -->|no| B
+  W1[When: review event arrives immediately] --> W2{Webhook event}
+  W2 -->|pull_request_review_comment created| W3[Classify comment body]
+  W2 -->|pull_request_review submitted| W4[Classify review state]
+  W3 --> W5{idle enabled and PR is managed}
+  W4 --> W5
+  W5 -->|no| X1[No enqueue]
+  W5 -->|yes| W6[Set requiresEngine and enqueue review queue]
+
+  C1[When: each runner cycle starts] --> C2[Managed PR catch-up scan]
+  C2 --> C3{PR open and not queued running needsUserReply failed}
+  C3 -->|no| X2[Skip catch-up enqueue]
+  C3 -->|yes| C4{Review summary}
+  C4 -->|actionable feedback exists| C5[enqueue requiresEngine true]
+  C4 -->|approved and no actionable feedback| C6[enqueue requiresEngine false]
+
+  W6 --> S1[In the same cycle: schedule from review queue]
+  C5 --> S1
+  C6 --> S1
+  S1 --> S2[take requiresEngine false first]
+  S2 --> S3{capacity left and engine gate allows}
+  S3 -->|yes| S4[take requiresEngine true]
+  S3 -->|no| S5[keep remaining queued]
+  S4 --> E1[Execute scheduled follow-ups]
+  S5 --> E1
+  S2 --> E1
+
+  E1 --> E2{requiresEngine}
+  E2 -->|false| E3[approval path auto-merge check]
+  E3 --> E4{merge ready}
+  E4 -->|yes| E5[auto-merge and done]
+  E4 -->|no| E6[re-enqueue requiresEngine false]
+  E2 -->|true| E7[run agent follow-up]
+  E7 --> E8[done or failed or needsUserReply]
 ```
 
-`requiresEngine` decision guide:
-- `yes`: the review requires agent action (for example `changes requested`, actionable review comments)
-- `no`: approval-style/OK feedback only (for example `approved`, `no new comments`, `usage limit`, `unable to review`)
+When this happens:
+- Immediate: webhook review events enqueue follow-ups right away.
+- Every cycle: catch-up can enqueue missed follow-ups, then queue scheduling and execution run.
+- `requiresEngine` is decided when enqueued, then used during scheduling and execution branching.
+
+`requiresEngine` rules:
+- `true`: actionable review follow-up is required (for example `changes_requested`, actionable review comments).
+- `false`: approval-style handling only (for example `approved`, `no new comments`, `usage limit`, `unable to review`).
 
 ### Stuck recovery quick rule
 
