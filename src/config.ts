@@ -96,6 +96,8 @@ export type AgentRunnerConfig = {
     failed: string;
     needsUserReply: string;
     reviewFollowup: string;
+    reviewFollowupWaiting?: string;
+    reviewFollowupActionRequired?: string;
   };
   codex: {
     command: string;

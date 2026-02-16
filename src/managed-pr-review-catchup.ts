@@ -2,6 +2,7 @@ import type { AgentRunnerConfig } from "./config.js";
 import type { GitHubClient, IssueInfo, RepoInfo } from "./github.js";
 import { ensureManagedPullRequestRecorded, isManagedPullRequestIssue } from "./managed-pr.js";
 import { summarizeLatestReviews } from "./pr-review-automation.js";
+import { labelsForReviewFollowupState, listReviewFollowupLabels } from "./review-followup-labels.js";
 import { enqueueReviewTask, resolveReviewQueuePath } from "./review-queue.js";
 import { listManagedPullRequests, resolveManagedPullRequestsStatePath } from "./managed-pull-requests.js";
 
@@ -28,13 +29,34 @@ async function enqueueFollowupWithLabel(options: {
   if (!added) {
     return false;
   }
+  const allReviewFollowupLabels = listReviewFollowupLabels(options.config);
+  const desired = new Set(labelsForReviewFollowupState(options.config, "queued"));
   try {
-    await options.client.addLabels(options.issue, [options.config.labels.reviewFollowup]);
+    const toAdd = Array.from(desired).filter((label) => !options.issue.labels.includes(label));
+    if (toAdd.length > 0) {
+      await options.client.addLabels(options.issue, toAdd);
+      options.issue.labels = Array.from(new Set([...options.issue.labels, ...toAdd]));
+    }
   } catch (error) {
     options.onLog?.("warn", "Managed PR catch-up scan failed to add review follow-up label.", {
       url: options.issue.url,
       error: error instanceof Error ? error.message : String(error)
     });
+  }
+  for (const label of allReviewFollowupLabels) {
+    if (desired.has(label)) {
+      continue;
+    }
+    try {
+      await options.client.removeLabel(options.issue, label);
+      options.issue.labels = options.issue.labels.filter((row) => row !== label);
+    } catch (error) {
+      options.onLog?.("warn", "Managed PR catch-up scan failed to remove stale review follow-up label.", {
+        url: options.issue.url,
+        label,
+        error: error instanceof Error ? error.message : String(error)
+      });
+    }
   }
   return true;
 }
@@ -56,11 +78,12 @@ export async function enqueueManagedPullRequestReviewFollowups(options: {
 
   const excludeLabels = [
     options.config.labels.queued,
-    options.config.labels.reviewFollowup,
+    ...listReviewFollowupLabels(options.config),
     options.config.labels.running,
     options.config.labels.needsUserReply,
     options.config.labels.failed
   ];
+  const reviewFollowupLabelSet = new Set(listReviewFollowupLabels(options.config));
 
   const managedStatePath = resolveManagedPullRequestsStatePath(options.config.workdirRoot);
   let managed: Array<{ repo: RepoInfo; prNumber: number; key: string }> = [];
@@ -180,7 +203,7 @@ export async function enqueueManagedPullRequestReviewFollowups(options: {
     }
     if (
       issue.labels.includes(options.config.labels.queued) ||
-      issue.labels.includes(options.config.labels.reviewFollowup) ||
+      issue.labels.some((label) => reviewFollowupLabelSet.has(label)) ||
       issue.labels.includes(options.config.labels.running) ||
       issue.labels.includes(options.config.labels.needsUserReply) ||
       issue.labels.includes(options.config.labels.failed)

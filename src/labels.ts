@@ -1,4 +1,8 @@
 import type { AgentRunnerConfig } from "./config.js";
+import {
+  resolveReviewFollowupActionRequiredLabel,
+  resolveReviewFollowupWaitingLabel
+} from "./review-followup-labels.js";
 
 export type LabelDefinition = {
   name: string;
@@ -37,6 +41,16 @@ export function buildAgentLabels(config: AgentRunnerConfig): LabelDefinition[] {
       name: config.labels.reviewFollowup,
       color: "0E8A16",
       description: "Managed PR review follow-up is queued."
+    },
+    {
+      name: resolveReviewFollowupWaitingLabel(config),
+      color: "1D76DB",
+      description: "Managed PR review follow-up is waiting for idle engine availability."
+    },
+    {
+      name: resolveReviewFollowupActionRequiredLabel(config),
+      color: "B60205",
+      description: "Managed PR review follow-up requires manual action."
     }
   ];
 }

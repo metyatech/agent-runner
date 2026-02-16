@@ -221,7 +221,9 @@
         "done": { "type": "string", "minLength": 1 },
         "failed": { "type": "string", "minLength": 1 },
         "needsUserReply": { "type": "string", "minLength": 1 },
-        "reviewFollowup": { "type": "string", "minLength": 1 }
+        "reviewFollowup": { "type": "string", "minLength": 1 },
+        "reviewFollowupWaiting": { "type": "string", "minLength": 1 },
+        "reviewFollowupActionRequired": { "type": "string", "minLength": 1 }
       },
       "additionalProperties": false
     },

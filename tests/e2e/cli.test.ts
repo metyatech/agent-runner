@@ -39,4 +39,12 @@ describe("cli", () => {
     expect(result.status).toBe(0);
     expect(result.stderr).not.toContain("ExperimentalWarning: SQLite");
   });
+
+  it("shows ui lifecycle subcommands", () => {
+    const result = runCli(["ui", "--help"]);
+    expect(result.status).toBe(0);
+    expect(result.stdout).toContain("start");
+    expect(result.stdout).toContain("stop");
+    expect(result.stdout).toContain("status");
+  });
 });

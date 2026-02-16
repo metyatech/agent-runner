@@ -26,6 +26,9 @@ export type ReviewFollowupSnapshot = ReviewQueueEntry & {
   enqueuedAtLocal: string | null;
   waitMinutes: number;
   status: "queued" | "waiting";
+  waitReasonCode: string;
+  waitReason: string;
+  retryHint: string;
   nextAction: string;
 };
 
@@ -225,11 +228,27 @@ function toReviewFollowupSnapshot(
   const waitMs = enqueuedMs === null ? 0 : Math.max(0, nowMs - enqueuedMs);
   const waitMinutes = Math.round((waitMs / 60000) * 10) / 10;
   const waiting = entry.requiresEngine && reviewIdleGateBlocked;
+  const waitReasonCode = waiting
+    ? "idle_engine_gates_blocked"
+    : entry.requiresEngine
+      ? "queued_engine_followup"
+      : "queued_merge_followup";
+  const waitReason = waiting
+    ? "Idle engine usage gates are currently blocked."
+    : entry.requiresEngine
+      ? "Queued for an idle engine to run this follow-up."
+      : "Queued for merge-only follow-up handling.";
+  const retryHint = waiting
+    ? "Automatic retry runs every cycle once an idle engine gate opens."
+    : "Automatic retry runs every cycle.";
   return {
     ...entry,
     enqueuedAtLocal: formatLocal(entry.enqueuedAt),
     waitMinutes,
     status: waiting ? "waiting" : "queued",
+    waitReasonCode,
+    waitReason,
+    retryHint,
     nextAction: waiting
       ? "No action required. Waiting for idle usage gates to open."
       : "No action required. Runner will process this follow-up automatically."

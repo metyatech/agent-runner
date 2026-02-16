@@ -417,7 +417,10 @@ setInterval( refresh , 5_000 );
               enqueuedAtLocal: now,
               waitMinutes: 93.1,
               status: "waiting",
-              nextAction: "No action required. Waiting for idle usage gates to open."
+              nextAction: "No action required. Waiting for idle usage gates to open.",
+              waitReasonCode: "idle_engine_gates_blocked",
+              waitReason: "Idle engine usage gates are currently blocked.",
+              retryHint: "Automatic retry runs every cycle once an idle engine gate opens."
             }
           ],
           activityUpdatedAt: now,
@@ -437,6 +440,9 @@ setInterval( refresh , 5_000 );
       top.children.some((child) => child.textContent === "Approved or no-action review")
     ).toBe(true);
     expect(action.textContent.toLowerCase()).toContain("no action required");
+    const detail = row.children[2];
+    expect(detail.textContent.toLowerCase()).toContain("why:");
+    expect(detail.textContent.toLowerCase()).toContain("retry:");
   });
 
   it("clears hero metadata when refresh fails after a successful render", async () => {

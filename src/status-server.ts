@@ -299,6 +299,11 @@ function renderHtml(): string {
         color: var(--muted);
         font-size: 12px;
       }
+      .review-followup-detail {
+        color: var(--muted);
+        font-size: 12px;
+        margin-top: 2px;
+      }
 
       code {
         font-family: "Cascadia Mono", "Consolas", monospace;
@@ -700,6 +705,13 @@ function renderHtml(): string {
           action.textContent =
             row.nextAction || "No action required. Runner will process this follow-up automatically.";
           li.appendChild(action);
+
+          const detail = document.createElement("div");
+          detail.className = "review-followup-detail";
+          const why = row.waitReason || "Queued for automatic processing.";
+          const retry = row.retryHint || "Automatic retry runs every cycle.";
+          detail.textContent = "why: " + why + " | retry: " + retry;
+          li.appendChild(detail);
 
           target.appendChild(li);
         });

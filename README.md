@@ -131,6 +131,8 @@ Config file: `agent-runner.config.json`
 - `labels.failed`: Label for execution failures
 - `labels.needsUserReply`: Label for paused runs that require a user reply
 - `labels.reviewFollowup`: Label for queued managed-PR review follow-ups
+- `labels.reviewFollowupWaiting`: Optional label for follow-ups waiting on idle engine gates (default: `<reviewFollowup>:waiting`)
+- `labels.reviewFollowupActionRequired`: Optional label for follow-ups that need manual action (default: `<reviewFollowup>:action-required`)
 - `codex`: Codex CLI command and prompt template
 - `codex.args`: Default config runs with full access (`--dangerously-bypass-approvals-and-sandbox`); change this if you want approvals or sandboxing.
 - `codex.promptTemplate`: The runner expects a final response block (`AGENT_RUNNER_STATUS: ...` + message body) and posts that final message to the issue thread.
@@ -449,6 +451,8 @@ node dist/cli.js labels sync --yes
 
 - `queued`: waiting for an available worker slot
 - `reviewFollowup`: managed PR review follow-up is queued
+- `reviewFollowup:waiting`: managed PR follow-up is queued but blocked by idle engine gates
+- `reviewFollowup:action-required`: managed PR follow-up stopped and needs manual intervention
 - `running`: currently executing in Codex
 - `failed`: execution failed (error path)
 - `needsUserReply`: execution paused because the agent explicitly needs user input
@@ -467,7 +471,7 @@ If a request is labeled `agent:running` but the tracked process exits, the runne
 
 ## State transitions (operator guide)
 
-Visible labels: `queued`, `reviewFollowup`, `running`, `done`, `failed`, `needsUserReply`
+Visible labels: `queued`, `reviewFollowup`, `reviewFollowup:waiting`, `reviewFollowup:action-required`, `running`, `done`, `failed`, `needsUserReply`
 
 ### State diagram: issue/PR run
 
@@ -717,16 +721,34 @@ node dist/cli.js resume --config agent-runner.config.json
 
 ## Status UI (GUI)
 
-Serve a local status dashboard that highlights active tasks and recent logs:
+Start the local status dashboard in the background:
 
 ```bash
-node dist/cli.js ui --config agent-runner.config.json --port 4311
+node dist/cli.js ui start --config agent-runner.config.json --port 4311
 ```
 
 Then open:
 
 ```text
 http://127.0.0.1:4311/
+```
+
+Check background UI state:
+
+```bash
+node dist/cli.js ui status --config agent-runner.config.json
+```
+
+Stop background UI:
+
+```bash
+node dist/cli.js ui stop --config agent-runner.config.json
+```
+
+Foreground mode (for manual debugging):
+
+```bash
+node dist/cli.js ui serve --config agent-runner.config.json --port 4311
 ```
 
 Paths shown in the status UI are clickable and will open the file in Explorer.

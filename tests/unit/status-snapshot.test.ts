@@ -138,6 +138,9 @@ describe("status-snapshot", () => {
     expect(snapshot.reviewIdleGateBlocked).toBe(true);
     expect(snapshot.reviewFollowups[0]?.status).toBe("waiting");
     expect(snapshot.reviewFollowups[0]?.nextAction).toContain("No action required");
+    expect(snapshot.reviewFollowups[0]?.waitReason).toContain("Idle engine usage gates");
+    expect(snapshot.reviewFollowups[0]?.retryHint).toContain("every cycle");
+    expect(snapshot.reviewFollowups[0]?.waitReasonCode).toBe("idle_engine_gates_blocked");
   });
 
   it("marks follow-ups as queued when idle gates are not blocked", async () => {
@@ -156,5 +159,8 @@ describe("status-snapshot", () => {
     expect(snapshot.reviewIdleGateBlocked).toBe(false);
     expect(snapshot.reviewFollowups[0]?.status).toBe("queued");
     expect(snapshot.reviewFollowups[0]?.nextAction).toContain("automatically");
+    expect(snapshot.reviewFollowups[0]?.waitReason).toContain("Queued for an idle engine");
+    expect(snapshot.reviewFollowups[0]?.retryHint).toContain("every cycle");
+    expect(snapshot.reviewFollowups[0]?.waitReasonCode).toBe("queued_engine_followup");
   });
 });

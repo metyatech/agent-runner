@@ -86,6 +86,8 @@
   "labels": {
     "queued": "agent:queued",
     "reviewFollowup": "agent:review-followup",
+    "reviewFollowupWaiting": "agent:review-followup:waiting",
+    "reviewFollowupActionRequired": "agent:review-followup:action-required",
     "running": "agent:running",
     "done": "agent:done",
     "failed": "agent:failed",

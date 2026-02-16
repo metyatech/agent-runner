@@ -15,6 +15,10 @@ import { ensureManagedPullRequestRecorded, isManagedPullRequestIssue } from "./m
 import { enqueueWebhookIssue } from "./webhook-queue.js";
 import { enqueueReviewTask, resolveReviewQueuePath } from "./review-queue.js";
 import { reviewFeedbackIndicatesOk } from "./review-feedback.js";
+import {
+  labelsForReviewFollowupState,
+  listReviewFollowupLabels
+} from "./review-followup-labels.js";
 import type { WebhookEvent } from "./webhook-server.js";
 
 type IssuePayload = {
@@ -105,11 +109,20 @@ function parseIssue(payload: WebhookPayload, repo: RepoInfo): IssueInfo | null {
 }
 
 function isBusyOrTerminal(issue: IssueInfo, config: AgentRunnerConfig): "running" | "queued" | "terminal" | null {
+  const queuedReviewLabels = new Set([
+    ...labelsForReviewFollowupState(config, "queued"),
+    ...labelsForReviewFollowupState(config, "waiting")
+  ]);
+  const actionRequiredLabels = new Set(labelsForReviewFollowupState(config, "action-required"));
+
   if (issue.labels.includes(config.labels.running)) {
     return "running";
   }
-  if (issue.labels.includes(config.labels.queued) || issue.labels.includes(config.labels.reviewFollowup)) {
+  if (issue.labels.includes(config.labels.queued) || issue.labels.some((label) => queuedReviewLabels.has(label))) {
     return "queued";
+  }
+  if (issue.labels.some((label) => actionRequiredLabels.has(label))) {
+    return "terminal";
   }
   if (issue.labels.includes(config.labels.needsUserReply)) {
     return "terminal";
@@ -147,6 +160,45 @@ async function safeRemoveLabel(
     onLog?.("warn", `Failed to remove label ${label} from ${issue.url}`, {
       error: error instanceof Error ? error.message : String(error)
     });
+  }
+}
+
+async function safeRemoveReviewFollowupLabels(
+  client: GitHubClient,
+  issue: IssueInfo,
+  config: AgentRunnerConfig,
+  onLog?: (level: "info" | "warn" | "error", message: string, data?: Record<string, unknown>) => void
+): Promise<void> {
+  for (const label of listReviewFollowupLabels(config)) {
+    await safeRemoveLabel(client, issue, label, onLog);
+  }
+}
+
+async function safeApplyReviewFollowupLabelState(options: {
+  client: GitHubClient;
+  issue: IssueInfo;
+  config: AgentRunnerConfig;
+  state: "queued" | "waiting" | "action-required" | "none";
+  onLog?: (level: "info" | "warn" | "error", message: string, data?: Record<string, unknown>) => void;
+}): Promise<void> {
+  const allLabels = listReviewFollowupLabels(options.config);
+  const desired = new Set(labelsForReviewFollowupState(options.config, options.state));
+  const toAdd = Array.from(desired).filter((label) => !options.issue.labels.includes(label));
+  if (toAdd.length > 0) {
+    try {
+      await options.client.addLabels(options.issue, toAdd);
+    } catch (error) {
+      options.onLog?.("warn", "Failed to add review follow-up labels.", {
+        issue: options.issue.url,
+        labels: toAdd,
+        error: error instanceof Error ? error.message : String(error)
+      });
+    }
+  }
+  for (const label of allLabels) {
+    if (!desired.has(label)) {
+      await safeRemoveLabel(options.client, options.issue, label, options.onLog);
+    }
   }
 }
 
@@ -207,7 +259,7 @@ async function handleAgentRunCommand(options: {
   await safeRemoveLabel(client, issue, config.labels.done, onLog);
   await safeRemoveLabel(client, issue, config.labels.running, onLog);
   await safeRemoveLabel(client, issue, config.labels.queued, onLog);
-  await safeRemoveLabel(client, issue, config.labels.reviewFollowup, onLog);
+  await safeRemoveReviewFollowupLabels(client, issue, config, onLog);
 
   await ensureQueued(client, config, queuePath, issue);
   await markAgentCommandCommentProcessed(statePath, commentId);
@@ -253,7 +305,7 @@ async function handleReviewFollowup(options: {
   await safeRemoveLabel(client, issue, config.labels.done, onLog);
   await safeRemoveLabel(client, issue, config.labels.running, onLog);
   await safeRemoveLabel(client, issue, config.labels.queued, onLog);
-  await safeRemoveLabel(client, issue, config.labels.reviewFollowup, onLog);
+  await safeRemoveReviewFollowupLabels(client, issue, config, onLog);
 
   const reviewQueuePath = resolveReviewQueuePath(config.workdirRoot);
   await enqueueReviewTask(reviewQueuePath, {
@@ -264,7 +316,13 @@ async function handleReviewFollowup(options: {
     reason,
     requiresEngine
   });
-  await client.addLabels(issue, [config.labels.reviewFollowup]);
+  await safeApplyReviewFollowupLabelState({
+    client,
+    issue,
+    config,
+    state: "queued",
+    onLog
+  });
 }
 
 export async function handleWebhookEvent(options: {
@@ -338,7 +396,7 @@ export async function handleWebhookEvent(options: {
     await safeRemoveLabel(client, issue, config.labels.failed, onLog);
     await safeRemoveLabel(client, issue, config.labels.running, onLog);
     await safeRemoveLabel(client, issue, config.labels.queued, onLog);
-    await safeRemoveLabel(client, issue, config.labels.reviewFollowup, onLog);
+    await safeRemoveReviewFollowupLabels(client, issue, config, onLog);
     await client.comment(
       issue,
       buildAgentComment(

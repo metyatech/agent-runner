@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { spawn } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import process from "node:process";
@@ -113,6 +114,16 @@ import {
   isManualActionRequiredForAutoMergeSkip,
   shouldPostReviewFollowupMarkerComment
 } from "./review-followup-status.js";
+import { labelsForReviewFollowupState, listReviewFollowupLabels } from "./review-followup-labels.js";
+import {
+  clearUiServerState,
+  isUiServerProcessAlive,
+  loadUiServerState,
+  probeUiServer,
+  resolveUiServerStatePath,
+  saveUiServerState,
+  type UiServerState
+} from "./ui-server-control.js";
 
 const program = new Command();
 
@@ -127,6 +138,32 @@ function resolveWebhookSecret(config?: AgentRunnerConfig["webhooks"]): string | 
     return process.env[config.secretEnv] ?? null;
   }
   return null;
+}
+
+function parsePort(raw: string, fieldName = "port"): number {
+  const port = Number.parseInt(raw, 10);
+  if (Number.isNaN(port) || port <= 0 || port > 65535) {
+    throw new Error(`Invalid ${fieldName}: ${raw}`);
+  }
+  return port;
+}
+
+function resolveCliEntryScriptPath(): string {
+  const entry = process.argv[1];
+  if (!entry || entry.trim().length === 0) {
+    throw new Error("Unable to resolve CLI entry script path.");
+  }
+  return path.resolve(entry);
+}
+
+async function waitForUiServer(host: string, port: number, attempts: number, intervalMs: number): Promise<boolean> {
+  for (let i = 0; i < attempts; i += 1) {
+    if (await probeUiServer(host, port, Math.max(200, intervalMs))) {
+      return true;
+    }
+    await new Promise((resolve) => setTimeout(resolve, intervalMs));
+  }
+  return false;
 }
 
 async function maybeRunWebhookCatchup(options: {
@@ -156,7 +193,7 @@ async function maybeRunWebhookCatchup(options: {
   const maxIssues = catchup.maxIssuesPerRun;
   const excludeLabels = [
     config.labels.queued,
-    config.labels.reviewFollowup,
+    ...listReviewFollowupLabels(config),
     config.labels.running,
     config.labels.done,
     config.labels.failed,
@@ -304,6 +341,7 @@ async function resolveWebhookQueuedIssues(
   if (entries.length === 0) {
     return { issues: [], removeIds: [] };
   }
+  const reviewFollowupLabelSet = new Set(listReviewFollowupLabels(config));
 
   const issues: IssueInfo[] = [];
   const removeIds: number[] = [];
@@ -332,7 +370,7 @@ async function resolveWebhookQueuedIssues(
 
     if (
       issue.labels.includes(config.labels.running) ||
-      issue.labels.includes(config.labels.reviewFollowup) ||
+      issue.labels.some((label) => reviewFollowupLabelSet.has(label)) ||
       issue.labels.includes(config.labels.needsUserReply) ||
       issue.labels.includes(config.labels.done) ||
       issue.labels.includes(config.labels.failed)
@@ -468,6 +506,8 @@ program
     const notifySource = notify?.source ?? null;
     const issueSessionStatePath = resolveIssueSessionStatePath(config.workdirRoot);
     const scheduledRetryStatePath = resolveScheduledRetryStatePath(config.workdirRoot);
+    const reviewFollowupLabels = listReviewFollowupLabels(config);
+    const reviewFollowupLabelSet = new Set(reviewFollowupLabels);
     if (notifyClient) {
       log(
         "info",
@@ -486,6 +526,37 @@ program
           error: error instanceof Error ? error.message : String(error)
         }, "run");
       }
+    };
+    const tryRemoveReviewFollowupLabels = async (issue: IssueInfo): Promise<void> => {
+      for (const label of reviewFollowupLabels) {
+        await tryRemoveLabel(issue, label);
+      }
+      issue.labels = issue.labels.filter((label) => !reviewFollowupLabelSet.has(label));
+    };
+    const tryApplyReviewFollowupLabelState = async (
+      issue: IssueInfo,
+      state: "queued" | "waiting" | "action-required" | "none"
+    ): Promise<void> => {
+      const desired = new Set(labelsForReviewFollowupState(config, state));
+      const toAdd = Array.from(desired).filter((label) => !issue.labels.includes(label));
+      if (toAdd.length > 0) {
+        try {
+          await client.addLabels(issue, toAdd);
+          issue.labels = Array.from(new Set([...issue.labels, ...toAdd]));
+        } catch (error) {
+          log("warn", "Failed to add review follow-up labels.", json, {
+            issue: issue.url,
+            labels: toAdd,
+            error: error instanceof Error ? error.message : String(error)
+          }, "review");
+        }
+      }
+      for (const label of reviewFollowupLabels) {
+        if (!desired.has(label)) {
+          await tryRemoveLabel(issue, label);
+        }
+      }
+      issue.labels = issue.labels.filter((label) => !reviewFollowupLabelSet.has(label) || desired.has(label));
     };
 
     const commentCompletion = async (issue: IssueInfo, body: string): Promise<void> => {
@@ -526,9 +597,7 @@ program
       }
 
       try {
-        if (options.state === "waiting" && !options.issue.labels.includes(config.labels.reviewFollowup)) {
-          await client.addLabels(options.issue, [config.labels.reviewFollowup]);
-        }
+        await tryApplyReviewFollowupLabelState(options.issue, options.state);
       } catch (error) {
         log("warn", "Failed to add review follow-up label while posting state.", json, {
           issue: options.issue.url,
@@ -623,7 +692,7 @@ program
         await tryRemoveLabel(issue, config.labels.failed);
         await tryRemoveLabel(issue, config.labels.done);
         await tryRemoveLabel(issue, config.labels.needsUserReply);
-        await tryRemoveLabel(issue, config.labels.reviewFollowup);
+        await tryRemoveReviewFollowupLabels(issue);
 
         if (entry.sessionId) {
           setIssueSession(issueSessionStatePath, issue, entry.sessionId);
@@ -666,7 +735,7 @@ program
           await tryRemoveLabel(issue, config.labels.failed);
           await tryRemoveLabel(issue, config.labels.done);
           await tryRemoveLabel(issue, config.labels.running);
-          await tryRemoveLabel(issue, config.labels.reviewFollowup);
+          await tryRemoveReviewFollowupLabels(issue);
           clearRetry(scheduledRetryStatePath, issue.id);
           await client.comment(
             issue,
@@ -741,7 +810,7 @@ program
         await client.addLabels(issue, [config.labels.failed]);
         await tryRemoveLabel(issue, config.labels.running);
         await tryRemoveLabel(issue, config.labels.needsUserReply);
-        await tryRemoveLabel(issue, config.labels.reviewFollowup);
+        await tryRemoveReviewFollowupLabels(issue);
         const when = formatResumeTime(runAfter);
         await commentCompletion(
           issue,
@@ -760,7 +829,7 @@ program
         await client.addLabels(issue, [config.labels.needsUserReply]);
         await tryRemoveLabel(issue, config.labels.running);
         await tryRemoveLabel(issue, config.labels.failed);
-        await tryRemoveLabel(issue, config.labels.reviewFollowup);
+        await tryRemoveReviewFollowupLabels(issue);
         const userReplyBody =
           result.summary?.trim() ||
           `${contextLabel === "review-followup" ? "Agent runner paused review follow-up." : "Agent runner paused."}` +
@@ -783,7 +852,7 @@ program
       await client.addLabels(issue, [config.labels.failed]);
       await tryRemoveLabel(issue, config.labels.running);
       await tryRemoveLabel(issue, config.labels.needsUserReply);
-      await tryRemoveLabel(issue, config.labels.reviewFollowup);
+      await tryRemoveReviewFollowupLabels(issue);
       await commentCompletion(
         issue,
         buildAgentComment(
@@ -797,7 +866,7 @@ program
     const queueNewRequestsByAgentRunComment = async (repos: RepoInfo[]): Promise<IssueInfo[]> => {
       const excludeLabels = [
         config.labels.queued,
-        config.labels.reviewFollowup,
+        ...reviewFollowupLabels,
         config.labels.running,
         config.labels.done,
         config.labels.failed,
@@ -1597,7 +1666,7 @@ program
 
               await client.addLabels(issue, [config.labels.running]);
               await tryRemoveLabel(issue, config.labels.queued);
-              await tryRemoveLabel(issue, config.labels.reviewFollowup);
+              await tryRemoveReviewFollowupLabels(issue);
               await commentCompletion(
                 issue,
                 buildAgentComment(`Agent runner started on ${new Date().toISOString()}. Concurrency ${config.concurrency}.`)
@@ -1633,7 +1702,7 @@ program
                 await tryRemoveLabel(issue, config.labels.running);
                 await tryRemoveLabel(issue, config.labels.failed);
                 await tryRemoveLabel(issue, config.labels.needsUserReply);
-                await tryRemoveLabel(issue, config.labels.reviewFollowup);
+                await tryRemoveReviewFollowupLabels(issue);
                 await commentCompletion(
                   issue,
                   buildAgentComment(result.summary?.trim() || "Agent runner completed successfully.")
@@ -1648,7 +1717,7 @@ program
               await client.addLabels(issue, [config.labels.failed]);
               await tryRemoveLabel(issue, config.labels.running);
               await tryRemoveLabel(issue, config.labels.needsUserReply);
-              await tryRemoveLabel(issue, config.labels.reviewFollowup);
+              await tryRemoveReviewFollowupLabels(issue);
               await commentCompletion(
                 issue,
                 buildAgentComment(
@@ -1671,7 +1740,7 @@ program
               log("warn", "Review follow-up skipped: unable to resolve PR.", json, { url: followup.url }, "review");
               return;
             }
-            await tryRemoveLabel(issue, config.labels.reviewFollowup);
+            await tryRemoveReviewFollowupLabels(issue);
 
             if (!followup.requiresEngine) {
               try {
@@ -1705,7 +1774,7 @@ program
                     reason: followup.reason,
                     requiresEngine
                   });
-                  await client.addLabels(issue, [config.labels.reviewFollowup]);
+                  await tryApplyReviewFollowupLabelState(issue, "queued");
                   log("info", "Auto-merge not ready yet; re-queued approval follow-up.", json, {
                     url: followup.url,
                     reason: merge.reason,
@@ -1735,7 +1804,7 @@ program
             try {
               await client.addLabels(issue, [config.labels.running]);
               await tryRemoveLabel(issue, config.labels.queued);
-              await tryRemoveLabel(issue, config.labels.reviewFollowup);
+              await tryRemoveReviewFollowupLabels(issue);
               await commentCompletion(
                 issue,
                 buildAgentComment(
@@ -1794,7 +1863,7 @@ program
                 await tryRemoveLabel(issue, config.labels.running);
                 await tryRemoveLabel(issue, config.labels.failed);
                 await tryRemoveLabel(issue, config.labels.needsUserReply);
-                await tryRemoveLabel(issue, config.labels.reviewFollowup);
+                await tryRemoveReviewFollowupLabels(issue);
                 await commentCompletion(
                   issue,
                   buildAgentComment(result.summary?.trim() || "Agent runner completed review follow-up successfully.")
@@ -1809,7 +1878,7 @@ program
               await client.addLabels(issue, [config.labels.failed]);
               await tryRemoveLabel(issue, config.labels.running);
               await tryRemoveLabel(issue, config.labels.needsUserReply);
-              await tryRemoveLabel(issue, config.labels.reviewFollowup);
+              await tryRemoveReviewFollowupLabels(issue);
               await commentCompletion(
                 issue,
                 buildAgentComment(
@@ -2055,20 +2124,213 @@ program
     console.log("Stop request cleared.");
   });
 
-program
+const uiCommand = program
   .command("ui")
-  .description("Serve a local status UI for the agent runner.")
+  .description("Manage the local status UI server.");
+
+uiCommand
+  .command("start")
+  .description("Start status UI in the background.")
   .option("-c, --config <path>", "Path to config file", "agent-runner.config.json")
   .option("--host <host>", "Host to bind", "127.0.0.1")
   .option("--port <port>", "Port to bind", "4311")
   .action(async (options) => {
     const configPath = path.resolve(process.cwd(), options.config);
     const config = loadConfig(configPath);
-    const port = Number.parseInt(options.port, 10);
-    if (Number.isNaN(port) || port <= 0) {
-      throw new Error(`Invalid port: ${options.port}`);
-    }
     const host = String(options.host);
+    const port = parsePort(String(options.port));
+    const statePath = resolveUiServerStatePath(config.workdirRoot);
+    const existing = loadUiServerState(statePath);
+    if (existing) {
+      const alive = isUiServerProcessAlive(existing);
+      const listening = alive ? await probeUiServer(existing.host, existing.port, 500) : false;
+      if (alive && listening) {
+        console.log(`Status UI already running on http://${existing.host}:${existing.port}/ (pid ${existing.pid}).`);
+        return;
+      }
+      clearUiServerState(statePath);
+    }
+
+    const entryScript = resolveCliEntryScriptPath();
+    const child = spawn(
+      process.execPath,
+      [
+        entryScript,
+        "ui",
+        "serve",
+        "--config",
+        configPath,
+        "--host",
+        host,
+        "--port",
+        String(port)
+      ],
+      {
+        cwd: process.cwd(),
+        detached: true,
+        stdio: "ignore",
+        windowsHide: true
+      }
+    );
+    if (!child.pid || child.pid <= 0) {
+      throw new Error("Failed to start status UI process.");
+    }
+    child.unref();
+
+    const state: UiServerState = {
+      pid: child.pid,
+      host,
+      port,
+      startedAt: new Date().toISOString(),
+      configPath
+    };
+    saveUiServerState(statePath, state);
+
+    const listening = await waitForUiServer(host, port, 30, 150);
+    if (listening) {
+      console.log(`Status UI started on http://${host}:${port}/ (pid ${child.pid}).`);
+      return;
+    }
+    console.log(
+      `Status UI process started (pid ${child.pid}), but endpoint is not reachable yet. Check with 'agent-runner ui status'.`
+    );
+  });
+
+uiCommand
+  .command("stop")
+  .description("Stop background status UI process.")
+  .option("-c, --config <path>", "Path to config file", "agent-runner.config.json")
+  .action(async (options) => {
+    const configPath = path.resolve(process.cwd(), options.config);
+    const config = loadConfig(configPath);
+    const statePath = resolveUiServerStatePath(config.workdirRoot);
+    const state = loadUiServerState(statePath);
+    if (!state) {
+      console.log("Status UI is not running.");
+      return;
+    }
+
+    const alive = isUiServerProcessAlive(state);
+    if (!alive) {
+      clearUiServerState(statePath);
+      console.log("Status UI state was stale and has been cleared.");
+      return;
+    }
+
+    try {
+      process.kill(state.pid);
+    } catch (error) {
+      const code = typeof error === "object" && error ? (error as NodeJS.ErrnoException).code : null;
+      if (code !== "ESRCH") {
+        throw error;
+      }
+    }
+
+    let stopped = false;
+    for (let i = 0; i < 30; i += 1) {
+      if (!isUiServerProcessAlive(state)) {
+        stopped = true;
+        break;
+      }
+      await new Promise((resolve) => setTimeout(resolve, 100));
+    }
+
+    clearUiServerState(statePath);
+    if (stopped) {
+      console.log("Status UI stopped.");
+      return;
+    }
+    console.log("Stop signal sent. Process may still be shutting down.");
+  });
+
+uiCommand
+  .command("status")
+  .description("Show background status UI state.")
+  .option("-c, --config <path>", "Path to config file", "agent-runner.config.json")
+  .option("--json", "Output JSON", false)
+  .action(async (options) => {
+    const configPath = path.resolve(process.cwd(), options.config);
+    const config = loadConfig(configPath);
+    const statePath = resolveUiServerStatePath(config.workdirRoot);
+    const state = loadUiServerState(statePath);
+    if (!state) {
+      if (options.json) {
+        console.log(JSON.stringify({ status: "stopped", statePath }, null, 2));
+      } else {
+        console.log("Status UI: stopped");
+      }
+      return;
+    }
+
+    const alive = isUiServerProcessAlive(state);
+    const listening = alive ? await probeUiServer(state.host, state.port, 500) : false;
+    const status = alive ? (listening ? "running" : "starting") : "stopped";
+    if (!alive) {
+      clearUiServerState(statePath);
+    }
+
+    if (options.json) {
+      console.log(
+        JSON.stringify(
+          {
+            status,
+            alive,
+            listening,
+            statePath,
+            host: state.host,
+            port: state.port,
+            pid: state.pid,
+            startedAt: state.startedAt,
+            configPath: state.configPath
+          },
+          null,
+          2
+        )
+      );
+      return;
+    }
+
+    console.log(`Status UI: ${status}`);
+    console.log(`URL: http://${state.host}:${state.port}/`);
+    console.log(`PID: ${state.pid}`);
+    console.log(`Started: ${state.startedAt}`);
+    if (!alive) {
+      console.log("Stored state was stale and has been cleared.");
+    } else if (!listening) {
+      console.log("Process is alive, but endpoint is not reachable yet.");
+    }
+  });
+
+uiCommand
+  .command("serve")
+  .description("Serve status UI in foreground (used by `ui start`).")
+  .option("-c, --config <path>", "Path to config file", "agent-runner.config.json")
+  .option("--host <host>", "Host to bind", "127.0.0.1")
+  .option("--port <port>", "Port to bind", "4311")
+  .action(async (options) => {
+    const configPath = path.resolve(process.cwd(), options.config);
+    const config = loadConfig(configPath);
+    const host = String(options.host);
+    const port = parsePort(String(options.port));
+    const statePath = resolveUiServerStatePath(config.workdirRoot);
+    saveUiServerState(statePath, {
+      pid: process.pid,
+      host,
+      port,
+      startedAt: new Date().toISOString(),
+      configPath
+    });
+
+    process.once("exit", () => clearUiServerState(statePath));
+    process.once("SIGTERM", () => {
+      clearUiServerState(statePath);
+      process.exit(0);
+    });
+    process.once("SIGINT", () => {
+      clearUiServerState(statePath);
+      process.exit(0);
+    });
+
     await startStatusServer({
       workdirRoot: config.workdirRoot,
       host,

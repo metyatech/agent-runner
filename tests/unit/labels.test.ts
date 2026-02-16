@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { buildAgentLabels } from "../../src/labels.js";
 
 describe("buildAgentLabels", () => {
-  it("returns six labeled definitions", () => {
+  it("returns review follow-up state labels with derived defaults", () => {
     const labels = buildAgentLabels({
       owner: "metyatech",
       repos: "all",
@@ -30,7 +30,9 @@ describe("buildAgentLabels", () => {
       "agent:done",
       "agent:failed",
       "agent:needs-user",
-      "agent:review-followup"
+      "agent:review-followup",
+      "agent:review-followup:waiting",
+      "agent:review-followup:action-required"
     ]);
   });
 });

@@ -60,12 +60,14 @@ describe("webhook-handler review followup", () => {
     const pr = makePullRequestIssue(repo);
     const queuePath = path.join(root, "agent-runner", "state", "webhook-queue.json");
 
-    const calls: { addLabels: string[][] } = { addLabels: [] };
+    const calls: { addLabels: string[][]; removeLabels: string[] } = { addLabels: [], removeLabels: [] };
     const client = {
       addLabels: async (_issue: IssueInfo, labels: string[]) => {
         calls.addLabels.push(labels);
       },
-      removeLabel: async () => {},
+      removeLabel: async (_issue: IssueInfo, label: string) => {
+        calls.removeLabels.push(label);
+      },
       comment: async () => {},
       listIssueComments: async () => [],
       getIssue: async (_repo: RepoInfo, number: number) => (number === pr.number ? pr : null)
@@ -93,6 +95,8 @@ describe("webhook-handler review followup", () => {
     });
 
     expect(calls.addLabels.flat()).toContain("agent:review-followup");
+    expect(calls.removeLabels).toContain("agent:review-followup:waiting");
+    expect(calls.removeLabels).toContain("agent:review-followup:action-required");
     const reviewQueuePath = resolveReviewQueuePath(config.workdirRoot);
     expect(loadReviewQueue(reviewQueuePath)).toHaveLength(1);
   });

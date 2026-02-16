@@ -207,6 +207,7 @@ function Ensure-StatusServer {
   $statusArgs = @(
     $cliPath,
     "ui",
+    "start",
     "--config",
     $ConfigPath,
     "--host",
