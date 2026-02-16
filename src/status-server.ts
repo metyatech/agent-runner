@@ -289,6 +289,16 @@ function renderHtml(): string {
         font-size: 12px;
         margin-top: 4px;
       }
+      .review-followup-hint {
+        margin: -2px 0 10px;
+        color: var(--muted);
+        font-size: 12px;
+        line-height: 1.5;
+      }
+      .review-followup-reason {
+        color: var(--muted);
+        font-size: 12px;
+      }
 
       code {
         font-family: "Cascadia Mono", "Consolas", monospace;
@@ -359,6 +369,12 @@ function renderHtml(): string {
       </section>
       <section class="panel">
         <h2>Review Follow-ups</h2>
+        <p class="review-followup-hint">
+          Reason tags:
+          <code>REVIEW_COMMENT</code> = Inline review comment requires follow-up,
+          <code>REVIEW</code> = Submitted review requires follow-up,
+          <code>APPROVAL</code> = Approved or no-action review
+        </p>
         <ul id="reviewFollowupsList" class="log-list"></ul>
       </section>
     </div>
@@ -450,6 +466,26 @@ function renderHtml(): string {
         a.target = "_blank";
         a.rel = "noopener noreferrer";
         return a;
+      };
+
+      const describeReviewReason = (value) => {
+        const normalized = String(value || "").toLowerCase();
+        if (normalized === "review_comment") {
+          return {
+            code: "REVIEW_COMMENT",
+            summary: "Inline review comment requires follow-up"
+          };
+        }
+        if (normalized === "approval") {
+          return {
+            code: "APPROVAL",
+            summary: "Approved or no-action review"
+          };
+        }
+        return {
+          code: "REVIEW",
+          summary: "Submitted review requires follow-up"
+        };
       };
 
       /* ── Render running task cards ── */
@@ -630,8 +666,14 @@ function renderHtml(): string {
 
           const reason = document.createElement("span");
           reason.className = "log-label";
-          reason.textContent = row.reason || "review";
+          const reasonInfo = describeReviewReason(row.reason);
+          reason.textContent = reasonInfo.code;
           top.appendChild(reason);
+
+          const reasonSummary = document.createElement("span");
+          reasonSummary.className = "review-followup-reason";
+          reasonSummary.textContent = reasonInfo.summary;
+          top.appendChild(reasonSummary);
 
           const statusText = row.status === "waiting" ? "waiting" : "queued";
           const status = document.createElement("span");

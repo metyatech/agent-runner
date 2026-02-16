@@ -37,6 +37,10 @@ describe("status-server", () => {
       expect(html).toContain("Agent Runner Status");
       expect(html).toContain("Running Tasks");
       expect(html).toContain("Review Follow-ups");
+      expect(html).toContain("Reason tags:");
+      expect(html).toContain("REVIEW_COMMENT</code> = Inline review comment requires follow-up");
+      expect(html).toContain("REVIEW</code> = Submitted review requires follow-up");
+      expect(html).toContain("APPROVAL</code> = Approved or no-action review");
       expect(html).toMatch(/@media\s*\(prefers-reduced-motion:\s*reduce\)[\s\S]*\.hero\s*\{\s*transition:\s*none;/);
       expect(html).toMatch(/@media\s*\(prefers-reduced-motion:\s*reduce\)[\s\S]*\.pulse\s*\{\s*animation:\s*none;/);
       expect(html).toMatch(/\.hero\.idle\s*\{\s*background:\s*#b45309;\s*color:\s*#fff;\s*\}/);

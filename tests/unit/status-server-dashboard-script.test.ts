@@ -433,6 +433,9 @@ setInterval( refresh , 5_000 );
     const top = row.children[0];
     const action = row.children[1];
     expect(top.children.some((child) => child.textContent.toLowerCase() === "waiting")).toBe(true);
+    expect(
+      top.children.some((child) => child.textContent === "Approved or no-action review")
+    ).toBe(true);
     expect(action.textContent.toLowerCase()).toContain("no action required");
   });
 
