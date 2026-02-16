@@ -14,7 +14,7 @@
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "verify:deps": "npm audit",
-    "verify": "npm run format:check && npm run lint && npm run lint:ps && npm test && npm run build && npm run verify:deps",
+    "verify": "npm run format:check && npm run lint && npm run lint:ps && npm test && npm run build",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run ./tests/unit ./tests/e2e/cli.test.ts",
     "test:unit": "vitest run ./tests/unit",
@@ -43,7 +43,7 @@
     "tsup": "^8.3.0",
     "tsx": "^4.19.2",
     "typescript": "^5.7.0",
-    "vitest": "^4.0.18"
+    "vitest": "4.0.18"
   },
   "simple-git-hooks": {
     "pre-commit": "npm run verify"

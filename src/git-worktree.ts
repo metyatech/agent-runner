@@ -191,13 +191,6 @@ export async function createWorktreeForRemoteBranch(options: {
       );
       const startRef = await resolveBranchStartRef(options.cachePath, options.branch);
       await runCommand("git", ["-C", options.cachePath, "branch", "-f", options.branch, startRef], { env });
-      if (startRef.startsWith("refs/remotes/origin/")) {
-        await runCommand(
-          "git",
-          ["-C", options.cachePath, "branch", "--set-upstream-to", `origin/${options.branch}`, options.branch],
-          { env }
-        );
-      }
       await runCommand("git", ["-C", options.cachePath, "worktree", "add", options.worktreePath, options.branch], {
         env
       });
