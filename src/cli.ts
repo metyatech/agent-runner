@@ -80,7 +80,8 @@ import type { ScheduledReviewFollowup } from "./review-scheduler.js";
 import {
   attemptAutoMergeApprovedPullRequest,
   reRequestAllReviewers,
-  resolveAllUnresolvedReviewThreads
+  resolveAllUnresolvedReviewThreads,
+  shouldAutoMergeRetryRequireEngine
 } from "./pr-review-actions.js";
 import {
   markManagedPullRequest,
@@ -147,6 +148,7 @@ async function maybeRunWebhookCatchup(options: {
   const maxIssues = catchup.maxIssuesPerRun;
   const excludeLabels = [
     config.labels.queued,
+    config.labels.reviewFollowup,
     config.labels.running,
     config.labels.done,
     config.labels.failed,
@@ -322,6 +324,7 @@ async function resolveWebhookQueuedIssues(
 
     if (
       issue.labels.includes(config.labels.running) ||
+      issue.labels.includes(config.labels.reviewFollowup) ||
       issue.labels.includes(config.labels.needsUserReply) ||
       issue.labels.includes(config.labels.done) ||
       issue.labels.includes(config.labels.failed)
@@ -550,6 +553,7 @@ program
         await tryRemoveLabel(issue, config.labels.failed);
         await tryRemoveLabel(issue, config.labels.done);
         await tryRemoveLabel(issue, config.labels.needsUserReply);
+        await tryRemoveLabel(issue, config.labels.reviewFollowup);
 
         if (entry.sessionId) {
           setIssueSession(issueSessionStatePath, issue, entry.sessionId);
@@ -592,6 +596,7 @@ program
           await tryRemoveLabel(issue, config.labels.failed);
           await tryRemoveLabel(issue, config.labels.done);
           await tryRemoveLabel(issue, config.labels.running);
+          await tryRemoveLabel(issue, config.labels.reviewFollowup);
           clearRetry(scheduledRetryStatePath, issue.id);
           await client.comment(
             issue,
@@ -666,6 +671,7 @@ program
         await client.addLabels(issue, [config.labels.failed]);
         await tryRemoveLabel(issue, config.labels.running);
         await tryRemoveLabel(issue, config.labels.needsUserReply);
+        await tryRemoveLabel(issue, config.labels.reviewFollowup);
         const when = formatResumeTime(runAfter);
         await commentCompletion(
           issue,
@@ -684,6 +690,7 @@ program
         await client.addLabels(issue, [config.labels.needsUserReply]);
         await tryRemoveLabel(issue, config.labels.running);
         await tryRemoveLabel(issue, config.labels.failed);
+        await tryRemoveLabel(issue, config.labels.reviewFollowup);
         const userReplyBody =
           result.summary?.trim() ||
           `${contextLabel === "review-followup" ? "Agent runner paused review follow-up." : "Agent runner paused."}` +
@@ -706,6 +713,7 @@ program
       await client.addLabels(issue, [config.labels.failed]);
       await tryRemoveLabel(issue, config.labels.running);
       await tryRemoveLabel(issue, config.labels.needsUserReply);
+      await tryRemoveLabel(issue, config.labels.reviewFollowup);
       await commentCompletion(
         issue,
         buildAgentComment(
@@ -719,6 +727,7 @@ program
     const queueNewRequestsByAgentRunComment = async (repos: RepoInfo[]): Promise<IssueInfo[]> => {
       const excludeLabels = [
         config.labels.queued,
+        config.labels.reviewFollowup,
         config.labels.running,
         config.labels.done,
         config.labels.failed,
@@ -1506,6 +1515,7 @@ program
 
               await client.addLabels(issue, [config.labels.running]);
               await tryRemoveLabel(issue, config.labels.queued);
+              await tryRemoveLabel(issue, config.labels.reviewFollowup);
               await commentCompletion(
                 issue,
                 buildAgentComment(`Agent runner started on ${new Date().toISOString()}. Concurrency ${config.concurrency}.`)
@@ -1541,6 +1551,7 @@ program
                 await tryRemoveLabel(issue, config.labels.running);
                 await tryRemoveLabel(issue, config.labels.failed);
                 await tryRemoveLabel(issue, config.labels.needsUserReply);
+                await tryRemoveLabel(issue, config.labels.reviewFollowup);
                 await commentCompletion(
                   issue,
                   buildAgentComment(result.summary?.trim() || "Agent runner completed successfully.")
@@ -1555,6 +1566,7 @@ program
               await client.addLabels(issue, [config.labels.failed]);
               await tryRemoveLabel(issue, config.labels.running);
               await tryRemoveLabel(issue, config.labels.needsUserReply);
+              await tryRemoveLabel(issue, config.labels.reviewFollowup);
               await commentCompletion(
                 issue,
                 buildAgentComment(
@@ -1577,6 +1589,7 @@ program
               log("warn", "Review follow-up skipped: unable to resolve PR.", json, { url: followup.url }, "review");
               return;
             }
+            await tryRemoveLabel(issue, config.labels.reviewFollowup);
 
             if (!followup.requiresEngine) {
               try {
@@ -1600,6 +1613,7 @@ program
                 }
 
                 if (merge.retry) {
+                  const requiresEngine = shouldAutoMergeRetryRequireEngine(merge.reason);
                   const reviewQueuePath = resolveReviewQueuePath(config.workdirRoot);
                   await enqueueReviewTask(reviewQueuePath, {
                     issueId: followup.issueId,
@@ -1607,11 +1621,13 @@ program
                     repo: followup.repo,
                     url: followup.url,
                     reason: followup.reason,
-                    requiresEngine: false
+                    requiresEngine
                   });
+                  await client.addLabels(issue, [config.labels.reviewFollowup]);
                   log("info", "Auto-merge not ready yet; re-queued approval follow-up.", json, {
                     url: followup.url,
-                    reason: merge.reason
+                    reason: merge.reason,
+                    requiresEngine
                   }, "review");
                   return;
                 }
@@ -1630,6 +1646,7 @@ program
             try {
               await client.addLabels(issue, [config.labels.running]);
               await tryRemoveLabel(issue, config.labels.queued);
+              await tryRemoveLabel(issue, config.labels.reviewFollowup);
               await commentCompletion(
                 issue,
                 buildAgentComment(
@@ -1688,6 +1705,7 @@ program
                 await tryRemoveLabel(issue, config.labels.running);
                 await tryRemoveLabel(issue, config.labels.failed);
                 await tryRemoveLabel(issue, config.labels.needsUserReply);
+                await tryRemoveLabel(issue, config.labels.reviewFollowup);
                 await commentCompletion(
                   issue,
                   buildAgentComment(result.summary?.trim() || "Agent runner completed review follow-up successfully.")
@@ -1702,6 +1720,7 @@ program
               await client.addLabels(issue, [config.labels.failed]);
               await tryRemoveLabel(issue, config.labels.running);
               await tryRemoveLabel(issue, config.labels.needsUserReply);
+              await tryRemoveLabel(issue, config.labels.reviewFollowup);
               await commentCompletion(
                 issue,
                 buildAgentComment(
@@ -1917,6 +1936,12 @@ program
     console.log(`Workdir: ${snapshot.workdirRoot}`);
     console.log(`Running: ${snapshot.running.length}`);
     console.log(`Stale: ${snapshot.stale.length}`);
+    const followups = snapshot.reviewFollowups ?? [];
+    const mergeOnly = followups.filter((entry) => !entry.requiresEngine).length;
+    const engineRequired = followups.length - mergeOnly;
+    console.log(
+      `Review follow-ups: ${followups.length} (merge-only: ${mergeOnly}, engine-required: ${engineRequired})`
+    );
   });
 
 program

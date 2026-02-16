@@ -11,6 +11,7 @@ function baseConfig(partial: Partial<AgentRunnerConfig> = {}): AgentRunnerConfig
     concurrency: 8,
     labels: {
       queued: "agent:queued",
+      reviewFollowup: "agent:review-followup",
       running: "agent:running",
       done: "agent:done",
       failed: "agent:failed",

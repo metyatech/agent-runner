@@ -21,6 +21,7 @@ describe("buildCodexInvocation", () => {
         workdirRoot: "D:\\ghws",
         labels: {
           queued: "agent:queued",
+          reviewFollowup: "agent:review-followup",
           running: "agent:running",
           done: "agent:done",
           failed: "agent:failed",
@@ -50,6 +51,7 @@ describe("buildCodexInvocation", () => {
         workdirRoot: "D:\\ghws",
         labels: {
           queued: "agent:queued",
+          reviewFollowup: "agent:review-followup",
           running: "agent:running",
           done: "agent:done",
           failed: "agent:failed",
@@ -93,6 +95,7 @@ describe("buildCodexInvocation", () => {
           workdirRoot: "D:\\ghws",
         labels: {
           queued: "agent:queued",
+          reviewFollowup: "agent:review-followup",
           running: "agent:running",
           done: "agent:done",
           failed: "agent:failed",
@@ -140,6 +143,7 @@ describe("buildCodexInvocation", () => {
           workdirRoot: "D:\\ghws",
           labels: {
             queued: "agent:queued",
+            reviewFollowup: "agent:review-followup",
             running: "agent:running",
             done: "agent:done",
             failed: "agent:failed",
@@ -176,6 +180,7 @@ describe("buildAmazonQInvocation", () => {
         workdirRoot: "D:\\ghws",
         labels: {
           queued: "agent:queued",
+          reviewFollowup: "agent:review-followup",
           running: "agent:running",
           done: "agent:done",
           failed: "agent:failed",
@@ -212,6 +217,7 @@ describe("buildAmazonQInvocation", () => {
         workdirRoot: "D:\\ghws",
         labels: {
           queued: "agent:queued",
+          reviewFollowup: "agent:review-followup",
           running: "agent:running",
           done: "agent:done",
           failed: "agent:failed",
@@ -253,6 +259,7 @@ describe("buildGeminiInvocation", () => {
           workdirRoot: tempDir,
           labels: {
             queued: "agent:queued",
+            reviewFollowup: "agent:review-followup",
             running: "agent:running",
             done: "agent:done",
             failed: "agent:failed",

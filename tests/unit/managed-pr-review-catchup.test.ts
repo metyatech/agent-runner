@@ -17,6 +17,7 @@ function makeConfig(workdirRoot: string): AgentRunnerConfig {
     concurrency: 1,
     labels: {
       queued: "agent:queued",
+      reviewFollowup: "agent:review-followup",
       running: "agent:running",
       done: "agent:done",
       failed: "agent:failed",
@@ -80,6 +81,7 @@ describe("managed-pr-review-catchup", () => {
       getPullRequest: async () => makePullRequestDetails(),
       listPullRequestReviewThreads: async () => [{ id: "t1", isResolved: false, isOutdated: false }],
       listPullRequestReviews: async () => [],
+      addLabels: async () => {},
       searchOpenPullRequestsByAuthorAcrossOwner: async (_owner: string, author: string) =>
         author === "app/agent-runner-bot" ? [{ ...issue, author: "app/agent-runner-bot" }] : []
     };
@@ -114,6 +116,7 @@ describe("managed-pr-review-catchup", () => {
       getPullRequest: async () => makePullRequestDetails(),
       listPullRequestReviewThreads: async () => [{ id: "t1", isResolved: false, isOutdated: false }],
       listPullRequestReviews: async () => [],
+      addLabels: async () => {},
       searchOpenPullRequestsByAuthorAcrossOwner: async (_owner: string, author: string) =>
         author === "app/agent-runner-bot" ? [outOfScope] : []
     };
@@ -140,11 +143,15 @@ describe("managed-pr-review-catchup", () => {
     const managedStatePath = resolveManagedPullRequestsStatePath(config.workdirRoot);
     await markManagedPullRequest(managedStatePath, repo, issue.number);
 
+    const addLabelCalls: string[][] = [];
     const client = {
       getIssue: async () => issue,
       getPullRequest: async () => makePullRequestDetails(),
       listPullRequestReviewThreads: async () => [{ id: "t1", isResolved: false, isOutdated: false }],
       listPullRequestReviews: async () => [],
+      addLabels: async (_issue: IssueInfo, labels: string[]) => {
+        addLabelCalls.push(labels);
+      },
       searchOpenPullRequestsByAuthorAcrossOwner: async () => []
     };
 
@@ -161,6 +168,7 @@ describe("managed-pr-review-catchup", () => {
     expect(queued).toHaveLength(1);
     expect(queued[0]?.reason).toBe("review_comment");
     expect(queued[0]?.requiresEngine).toBe(true);
+    expect(addLabelCalls.flat()).toContain("agent:review-followup");
   });
 
   it("enqueues review follow-up when changes are requested", async () => {
@@ -184,6 +192,7 @@ describe("managed-pr-review-catchup", () => {
           body: "Please address these issues."
         }
       ],
+      addLabels: async () => {},
       searchOpenPullRequestsByAuthorAcrossOwner: async () => []
     };
 
@@ -223,6 +232,7 @@ describe("managed-pr-review-catchup", () => {
           body: "LGTM"
         }
       ],
+      addLabels: async () => {},
       searchOpenPullRequestsByAuthorAcrossOwner: async () => []
     };
 
@@ -252,6 +262,7 @@ describe("managed-pr-review-catchup", () => {
       getPullRequest: async () => makePullRequestDetails(),
       listPullRequestReviewThreads: async () => [{ id: "t1", isResolved: false, isOutdated: false }],
       listPullRequestReviews: async () => [],
+      addLabels: async () => {},
       searchOpenPullRequestsByAuthorAcrossOwner: async (_owner: string, author: string) =>
         author === "app/agent-runner-bot" ? [issue] : []
     };
@@ -283,6 +294,7 @@ describe("managed-pr-review-catchup", () => {
       getPullRequest: async () => makePullRequestDetails(),
       listPullRequestReviewThreads: async () => [{ id: "t1", isResolved: false, isOutdated: false }],
       listPullRequestReviews: async () => [],
+      addLabels: async () => {},
       searchOpenPullRequestsByAuthorAcrossOwner: async (_owner: string, author: string) => {
         searchAuthors.push(author);
         return author === "app/agent-runner-bot" ? [issue] : [];

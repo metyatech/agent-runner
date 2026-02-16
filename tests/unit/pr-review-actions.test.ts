@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 import type { IssueInfo, RepoInfo } from "../../src/github.js";
-import { attemptAutoMergeApprovedPullRequest, reRequestAllReviewers } from "../../src/pr-review-actions.js";
+import {
+  attemptAutoMergeApprovedPullRequest,
+  reRequestAllReviewers,
+  shouldAutoMergeRetryRequireEngine
+} from "../../src/pr-review-actions.js";
 
 function makeRepo(): RepoInfo {
   return { owner: "metyatech", repo: "demo" };
@@ -21,6 +25,27 @@ function makeIssue(repo: RepoInfo): IssueInfo {
 }
 
 describe("pr-review-actions", () => {
+  describe("shouldAutoMergeRetryRequireEngine", () => {
+    it.each([
+      "unresolved_review_threads",
+      "not_mergeable:unstable",
+      "not_mergeable:dirty",
+      "merge_failed:head branch was modified"
+    ])("returns true for fixable retry reason %s", (reason) => {
+      expect(shouldAutoMergeRetryRequireEngine(reason)).toBe(true);
+    });
+
+    it.each([
+      "awaiting_reviewer_feedback",
+      "draft",
+      "mergeable_unavailable",
+      "review_threads_unavailable",
+      "not_mergeable:blocked"
+    ])("returns false for wait-only retry reason %s", (reason) => {
+      expect(shouldAutoMergeRetryRequireEngine(reason)).toBe(false);
+    });
+  });
+
   it("re-requests prior reviewers (human/copilot/codex)", async () => {
     const repo = makeRepo();
     const issue = makeIssue(repo);
@@ -159,4 +184,3 @@ describe("pr-review-actions", () => {
     expect(result).toEqual({ merged: false, retry: false, reason: "actionable_review_feedback" });
   });
 });
-

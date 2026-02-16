@@ -17,6 +17,7 @@ function makeConfig(workdirRoot: string): AgentRunnerConfig {
     concurrency: 1,
     labels: {
       queued: "agent:queued",
+      reviewFollowup: "agent:review-followup",
       running: "agent:running",
       done: "agent:done",
       failed: "agent:failed",
@@ -91,7 +92,7 @@ describe("webhook-handler review followup", () => {
       queuePath
     });
 
-    expect(calls.addLabels.flat()).toHaveLength(0);
+    expect(calls.addLabels.flat()).toContain("agent:review-followup");
     const reviewQueuePath = resolveReviewQueuePath(config.workdirRoot);
     expect(loadReviewQueue(reviewQueuePath)).toHaveLength(1);
   });

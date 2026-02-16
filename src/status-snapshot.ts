@@ -6,6 +6,7 @@ import {
   resolveActivityStatePath,
   type ActivityRecord
 } from "./activity-state.js";
+import { loadReviewQueue, resolveReviewQueuePath, type ReviewQueueEntry } from "./review-queue.js";
 import { isProcessAlive, loadRunnerState, resolveRunnerStatePath } from "./runner-state.js";
 import { isStopRequested } from "./stop-flag.js";
 
@@ -21,6 +22,11 @@ export type FileSnapshot = {
   updatedAtLocal: string | null;
 };
 
+export type ReviewFollowupSnapshot = ReviewQueueEntry & {
+  enqueuedAtLocal: string | null;
+  waitMinutes: number;
+};
+
 export type StatusSnapshot = {
   generatedAt: string;
   generatedAtLocal: string;
@@ -31,6 +37,7 @@ export type StatusSnapshot = {
   stale: ActivitySnapshot[];
   activityUpdatedAt: string | null;
   activityUpdatedAtLocal: string | null;
+  reviewFollowups: ReviewFollowupSnapshot[];
   latestTaskRun: FileSnapshot | null;
   latestIdle: FileSnapshot | null;
   logs: FileSnapshot[];
@@ -144,6 +151,17 @@ function mergeRunnerState(
   return records.concat(additions);
 }
 
+function toReviewFollowupSnapshot(entry: ReviewQueueEntry, nowMs: number): ReviewFollowupSnapshot {
+  const enqueuedMs = safeParseDate(entry.enqueuedAt);
+  const waitMs = enqueuedMs === null ? 0 : Math.max(0, nowMs - enqueuedMs);
+  const waitMinutes = Math.round((waitMs / 60000) * 10) / 10;
+  return {
+    ...entry,
+    enqueuedAtLocal: formatLocal(entry.enqueuedAt),
+    waitMinutes
+  };
+}
+
 export function buildStatusSnapshot(workdirRoot: string): StatusSnapshot {
   const now = new Date();
   const nowMs = now.getTime();
@@ -172,6 +190,9 @@ export function buildStatusSnapshot(workdirRoot: string): StatusSnapshot {
   const reportsDir = path.resolve(workdirRoot, "agent-runner", "reports");
   const latestTaskRun = snapshotFromPointer(path.join(logsDir, "latest-task-run.path"));
   const latestIdle = snapshotFromPointer(path.join(logsDir, "latest-idle.path"));
+  const reviewFollowups = loadReviewQueue(resolveReviewQueuePath(workdirRoot)).map((entry) =>
+    toReviewFollowupSnapshot(entry, nowMs)
+  );
 
   const generatedAt = now.toISOString();
   return {
@@ -184,6 +205,7 @@ export function buildStatusSnapshot(workdirRoot: string): StatusSnapshot {
     stale,
     activityUpdatedAt,
     activityUpdatedAtLocal: formatLocal(activityUpdatedAt),
+    reviewFollowups,
     latestTaskRun,
     latestIdle,
     logs: listRecentFiles(logsDir, 5, /\.path$|^agent-runner-run-.*\.(out|err)\.log$/i),

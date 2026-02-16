@@ -128,6 +128,9 @@ Source: github:metyatech/agent-rules@HEAD/rules/global/implementation-and-coding
 - Avoid deep nesting; use guard clauses and small functions.
 - Use clear, intention-revealing naming; avoid "Utils" dumping grounds.
 - Prefer configuration/constants over hardcoding; consolidate change points.
+- For GUI changes, prioritize ergonomics and discoverability so first-time users can complete core flows without external documents.
+- Every user-facing GUI component (inputs, actions, status indicators, lists, and dialog controls) must include an in-app explanation (for example tooltip, context help panel, or equivalent).
+- Do not rely on README-only guidance for GUI operation; critical usage guidance must be available inside the GUI itself.
 - Keep everything DRY across code, specs, docs, tests, configs, and scripts; proactively refactor repeated procedures into shared configs/scripts with small, local overrides.
 - Persist durable runtime/domain data in a database with a fully normalized schema (3NF/BCNF target): store each fact once with keys/constraints, and compute derived statuses/views at read time instead of duplicating them.
 - Fix root causes; remove obsolete/unused code, branches, comments, and helpers.
@@ -150,6 +153,17 @@ Source: github:metyatech/agent-rules@HEAD/rules/global/linting-formatting-and-st
 - Treat warnings as errors in CI; when a tool cannot, use its strictest available setting so warnings fail CI.
 - Do not disable rules globally; keep suppressions narrow, justified, and time-bounded.
 - Pin tool versions (lockfiles/manifests) for reproducible CI.
+
+## Design and visual accessibility automation
+
+- For any design/UI styling change in any project, enforce automated visual accessibility checks as part of the repo-standard `verify` command and CI.
+- Do not rely on per-page/manual test maintenance; use route discovery (for example sitemap, generated route lists, or framework route manifests) so newly added pages are automatically included.
+- Validate both light and dark themes when theme switching is supported.
+- Validate at least default, hover, and focus states for interactive elements.
+- Enforce non-text boundary contrast checks across all visible UI elements that present boundaries (including interactive controls and container-like elements), not only predefined component classes.
+- Do not hardcode a narrow selector allowlist for boundary checks; use broad DOM discovery with only minimal technical exclusions (for example hidden/zero-size/non-rendered nodes).
+- Fail CI on violations; do not silently ignore design regressions.
+- If temporary exclusions are unavoidable, keep them narrowly scoped, documented with rationale, and remove them promptly.
 
 ## Security baseline
 

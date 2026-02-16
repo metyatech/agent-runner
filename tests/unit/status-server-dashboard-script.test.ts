@@ -151,7 +151,8 @@ async function createDashboardRuntime(scenarios: FetchScenario[] = []): Promise<
     "staleDetails",
     "staleBody",
     "logsList",
-    "reportsList"
+    "reportsList",
+    "reviewFollowupsList"
   ];
   const elements = Object.fromEntries(ids.map((id) => [id, new FakeElement(id)])) as Record<string, FakeElement>;
   elements.staleSection.hidden = true;

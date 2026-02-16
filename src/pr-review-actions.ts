@@ -37,6 +37,28 @@ export type ReRequestReviewResult = {
   requestedCodex: boolean;
 };
 
+export function shouldAutoMergeRetryRequireEngine(reason: string): boolean {
+  const normalized = reason.trim().toLowerCase();
+  if (!normalized) {
+    return false;
+  }
+
+  if (normalized === "unresolved_review_threads") {
+    return true;
+  }
+
+  if (normalized.startsWith("merge_failed:")) {
+    return true;
+  }
+
+  if (normalized.startsWith("not_mergeable:")) {
+    const state = normalized.slice("not_mergeable:".length);
+    return state === "unstable" || state === "dirty";
+  }
+
+  return false;
+}
+
 async function waitForMergeable(options: {
   client: GitHubClient;
   repo: RepoInfo;

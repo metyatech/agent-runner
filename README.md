@@ -130,6 +130,7 @@ Config file: `agent-runner.config.json`
 - `labels`: Workflow labels
 - `labels.failed`: Label for execution failures
 - `labels.needsUserReply`: Label for paused runs that require a user reply
+- `labels.reviewFollowup`: Label for queued managed-PR review follow-ups
 - `codex`: Codex CLI command and prompt template
 - `codex.args`: Default config runs with full access (`--dangerously-bypass-approvals-and-sandbox`); change this if you want approvals or sandboxing.
 - `codex.promptTemplate`: The runner expects a final response block (`AGENT_RUNNER_STATUS: ...` + message body) and posts that final message to the issue thread.
@@ -447,6 +448,7 @@ node dist/cli.js labels sync --yes
 ## Failure and pause behavior
 
 - `queued`: waiting for an available worker slot
+- `reviewFollowup`: managed PR review follow-up is queued
 - `running`: currently executing in Codex
 - `failed`: execution failed (error path)
 - `needsUserReply`: execution paused because the agent explicitly needs user input
@@ -465,7 +467,7 @@ If a request is labeled `agent:running` but the tracked process exits, the runne
 
 ## State transitions (operator guide)
 
-Visible labels: `queued`, `running`, `done`, `failed`, `needsUserReply`
+Visible labels: `queued`, `reviewFollowup`, `running`, `done`, `failed`, `needsUserReply`
 
 ### State diagram: issue/PR run
 
@@ -725,6 +727,7 @@ http://127.0.0.1:4311/
 ```
 
 Paths shown in the status UI are clickable and will open the file in Explorer.
+The dashboard also shows a `Review Follow-ups` panel with currently queued follow-up items.
 
 ## System tray
 

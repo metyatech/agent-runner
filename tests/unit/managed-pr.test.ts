@@ -16,6 +16,7 @@ function makeConfig(workdirRoot: string): AgentRunnerConfig {
     concurrency: 1,
     labels: {
       queued: "agent:queued",
+      reviewFollowup: "agent:review-followup",
       running: "agent:running",
       done: "agent:done",
       failed: "agent:failed",

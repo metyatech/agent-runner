@@ -336,6 +336,10 @@ function renderHtml(): string {
         <h2>Reports</h2>
         <ul id="reportsList" class="log-list"></ul>
       </section>
+      <section class="panel">
+        <h2>Review Follow-ups</h2>
+        <ul id="reviewFollowupsList" class="log-list"></ul>
+      </section>
     </div>
 
     <script>
@@ -353,6 +357,7 @@ function renderHtml(): string {
       const staleBody = $("staleBody");
       const logsList = $("logsList");
       const reportsList = $("reportsList");
+      const reviewFollowupsList = $("reviewFollowupsList");
 
       staleToggle.addEventListener("click", () => {
         staleDetails.hidden = !staleDetails.hidden;
@@ -414,6 +419,15 @@ function renderHtml(): string {
         a.href = targetHref;
         a.textContent = label || pathValue;
         a.addEventListener("click", (e) => { e.preventDefault(); openPath(pathValue); });
+        return a;
+      };
+
+      const makeExternalLink = (url, label) => {
+        const a = document.createElement("a");
+        a.href = url || "";
+        a.textContent = label || url || "-";
+        a.target = "_blank";
+        a.rel = "noopener noreferrer";
         return a;
       };
 
@@ -572,6 +586,44 @@ function renderHtml(): string {
         });
       };
 
+      const renderReviewFollowups = (target, rows) => {
+        target.textContent = "";
+        if (!rows || !rows.length) {
+          const li = document.createElement("li");
+          li.textContent = "None";
+          li.className = "empty";
+          target.appendChild(li);
+          return;
+        }
+        rows.forEach((row) => {
+          const li = document.createElement("li");
+
+          const mode = document.createElement("span");
+          mode.className = "log-label";
+          mode.textContent = row.requiresEngine ? "engine" : "merge-only";
+          li.appendChild(mode);
+
+          const reason = document.createElement("span");
+          reason.className = "log-label";
+          reason.textContent = row.reason || "review";
+          li.appendChild(reason);
+
+          const label =
+            row.url ||
+            (row.repo && row.prNumber
+              ? row.repo.owner + "/" + row.repo.repo + "#" + row.prNumber
+              : "review follow-up");
+          li.appendChild(makeExternalLink(row.url, label));
+
+          const wait = document.createElement("span");
+          wait.className = "log-time";
+          wait.textContent = row.waitMinutes == null ? "-" : humanAge(row.waitMinutes) + " queued";
+          li.appendChild(wait);
+
+          target.appendChild(li);
+        });
+      };
+
       async function refresh() {
         try {
           const res = await fetch("/api/status");
@@ -608,6 +660,7 @@ function renderHtml(): string {
           renderStale(data.stale || []);
           renderLogs(logsList, data.latestTaskRun, data.latestIdle, data.logs);
           renderReports(reportsList, data.reports || []);
+          renderReviewFollowups(reviewFollowupsList, data.reviewFollowups || []);
         } catch (error) {
           heroTitle.textContent = "Error";
           hero.className = "hero idle";

@@ -31,6 +31,7 @@ describe("cli", () => {
     expect(data).toHaveProperty("generatedAt");
     expect(data).toHaveProperty("generatedAtLocal");
     expect(data).toHaveProperty("busy");
+    expect(data).toHaveProperty("reviewFollowups");
   });
 
   it("does not print SQLite ExperimentalWarning", () => {

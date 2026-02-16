@@ -9,6 +9,36 @@ function buildCandidateKey(repo: RepoInfo, prNumber: number): string {
   return `${repo.owner.toLowerCase()}/${repo.repo.toLowerCase()}#${prNumber}`;
 }
 
+async function enqueueFollowupWithLabel(options: {
+  client: GitHubClient;
+  config: AgentRunnerConfig;
+  issue: IssueInfo;
+  reviewQueuePath: string;
+  entry: {
+    issueId: number;
+    prNumber: number;
+    repo: RepoInfo;
+    url: string;
+    reason: "review_comment" | "review" | "approval";
+    requiresEngine: boolean;
+  };
+  onLog?: (level: "info" | "warn" | "error", message: string, data?: Record<string, unknown>) => void;
+}): Promise<boolean> {
+  const added = await enqueueReviewTask(options.reviewQueuePath, options.entry);
+  if (!added) {
+    return false;
+  }
+  try {
+    await options.client.addLabels(options.issue, [options.config.labels.reviewFollowup]);
+  } catch (error) {
+    options.onLog?.("warn", "Managed PR catch-up scan failed to add review follow-up label.", {
+      url: options.issue.url,
+      error: error instanceof Error ? error.message : String(error)
+    });
+  }
+  return true;
+}
+
 export async function enqueueManagedPullRequestReviewFollowups(options: {
   client: GitHubClient;
   config: AgentRunnerConfig;
@@ -26,6 +56,7 @@ export async function enqueueManagedPullRequestReviewFollowups(options: {
 
   const excludeLabels = [
     options.config.labels.queued,
+    options.config.labels.reviewFollowup,
     options.config.labels.running,
     options.config.labels.needsUserReply,
     options.config.labels.failed
@@ -149,6 +180,7 @@ export async function enqueueManagedPullRequestReviewFollowups(options: {
     }
     if (
       issue.labels.includes(options.config.labels.queued) ||
+      issue.labels.includes(options.config.labels.reviewFollowup) ||
       issue.labels.includes(options.config.labels.running) ||
       issue.labels.includes(options.config.labels.needsUserReply) ||
       issue.labels.includes(options.config.labels.failed)
@@ -169,13 +201,20 @@ export async function enqueueManagedPullRequestReviewFollowups(options: {
           enqueued += 1;
           continue;
         }
-        const added = await enqueueReviewTask(reviewQueuePath, {
-          issueId: issue.id,
-          prNumber: entry.prNumber,
-          repo: entry.repo,
-          url: issue.url,
-          reason: "review_comment",
-          requiresEngine: true
+        const added = await enqueueFollowupWithLabel({
+          client: options.client,
+          config: options.config,
+          issue,
+          reviewQueuePath,
+          entry: {
+            issueId: issue.id,
+            prNumber: entry.prNumber,
+            repo: entry.repo,
+            url: issue.url,
+            reason: "review_comment",
+            requiresEngine: true
+          },
+          onLog: options.onLog
         });
         if (added) {
           enqueued += 1;
@@ -216,13 +255,20 @@ export async function enqueueManagedPullRequestReviewFollowups(options: {
         enqueued += 1;
         continue;
       }
-      const added = await enqueueReviewTask(reviewQueuePath, {
-        issueId: issue.id,
-        prNumber: entry.prNumber,
-        repo: entry.repo,
-        url: issue.url,
-        reason: "review",
-        requiresEngine: true
+      const added = await enqueueFollowupWithLabel({
+        client: options.client,
+        config: options.config,
+        issue,
+        reviewQueuePath,
+        entry: {
+          issueId: issue.id,
+          prNumber: entry.prNumber,
+          repo: entry.repo,
+          url: issue.url,
+          reason: "review",
+          requiresEngine: true
+        },
+        onLog: options.onLog
       });
       if (added) {
         enqueued += 1;
@@ -235,13 +281,20 @@ export async function enqueueManagedPullRequestReviewFollowups(options: {
         enqueued += 1;
         continue;
       }
-      const added = await enqueueReviewTask(reviewQueuePath, {
-        issueId: issue.id,
-        prNumber: entry.prNumber,
-        repo: entry.repo,
-        url: issue.url,
-        reason: "approval",
-        requiresEngine: false
+      const added = await enqueueFollowupWithLabel({
+        client: options.client,
+        config: options.config,
+        issue,
+        reviewQueuePath,
+        entry: {
+          issueId: issue.id,
+          prNumber: entry.prNumber,
+          repo: entry.repo,
+          url: issue.url,
+          reason: "approval",
+          requiresEngine: false
+        },
+        onLog: options.onLog
       });
       if (added) {
         enqueued += 1;

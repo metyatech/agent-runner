@@ -214,13 +214,14 @@
     },
     "labels": {
       "type": "object",
-      "required": ["queued", "running", "done", "failed", "needsUserReply"],
+      "required": ["queued", "running", "done", "failed", "needsUserReply", "reviewFollowup"],
       "properties": {
         "queued": { "type": "string", "minLength": 1 },
         "running": { "type": "string", "minLength": 1 },
         "done": { "type": "string", "minLength": 1 },
         "failed": { "type": "string", "minLength": 1 },
-        "needsUserReply": { "type": "string", "minLength": 1 }
+        "needsUserReply": { "type": "string", "minLength": 1 },
+        "reviewFollowup": { "type": "string", "minLength": 1 }
       },
       "additionalProperties": false
     },

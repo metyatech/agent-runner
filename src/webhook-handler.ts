@@ -108,7 +108,7 @@ function isBusyOrTerminal(issue: IssueInfo, config: AgentRunnerConfig): "running
   if (issue.labels.includes(config.labels.running)) {
     return "running";
   }
-  if (issue.labels.includes(config.labels.queued)) {
+  if (issue.labels.includes(config.labels.queued) || issue.labels.includes(config.labels.reviewFollowup)) {
     return "queued";
   }
   if (issue.labels.includes(config.labels.needsUserReply)) {
@@ -207,6 +207,7 @@ async function handleAgentRunCommand(options: {
   await safeRemoveLabel(client, issue, config.labels.done, onLog);
   await safeRemoveLabel(client, issue, config.labels.running, onLog);
   await safeRemoveLabel(client, issue, config.labels.queued, onLog);
+  await safeRemoveLabel(client, issue, config.labels.reviewFollowup, onLog);
 
   await ensureQueued(client, config, queuePath, issue);
   await markAgentCommandCommentProcessed(statePath, commentId);
@@ -252,6 +253,7 @@ async function handleReviewFollowup(options: {
   await safeRemoveLabel(client, issue, config.labels.done, onLog);
   await safeRemoveLabel(client, issue, config.labels.running, onLog);
   await safeRemoveLabel(client, issue, config.labels.queued, onLog);
+  await safeRemoveLabel(client, issue, config.labels.reviewFollowup, onLog);
 
   const reviewQueuePath = resolveReviewQueuePath(config.workdirRoot);
   await enqueueReviewTask(reviewQueuePath, {
@@ -262,6 +264,7 @@ async function handleReviewFollowup(options: {
     reason,
     requiresEngine
   });
+  await client.addLabels(issue, [config.labels.reviewFollowup]);
 }
 
 export async function handleWebhookEvent(options: {
@@ -335,6 +338,7 @@ export async function handleWebhookEvent(options: {
     await safeRemoveLabel(client, issue, config.labels.failed, onLog);
     await safeRemoveLabel(client, issue, config.labels.running, onLog);
     await safeRemoveLabel(client, issue, config.labels.queued, onLog);
+    await safeRemoveLabel(client, issue, config.labels.reviewFollowup, onLog);
     await client.comment(
       issue,
       buildAgentComment(

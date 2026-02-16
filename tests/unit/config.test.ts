@@ -55,6 +55,7 @@ describe("loadConfig", () => {
           },
           labels: {
             queued: "agent:queued",
+            reviewFollowup: "agent:review-followup",
             running: "agent:running",
             done: "agent:done",
             failed: "agent:failed",
@@ -125,6 +126,7 @@ describe("loadConfig", () => {
           },
           labels: {
             queued: "agent:queued",
+            reviewFollowup: "agent:review-followup",
             running: "agent:running",
             done: "agent:done",
             failed: "agent:failed",

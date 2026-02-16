@@ -8,6 +8,7 @@ import {
   recordActivity,
   resolveActivityStatePath
 } from "../../src/activity-state.js";
+import { enqueueReviewTask, resolveReviewQueuePath } from "../../src/review-queue.js";
 import { recordRunningIssue, resolveRunnerStatePath } from "../../src/runner-state.js";
 import { buildStatusSnapshot } from "../../src/status-snapshot.js";
 
@@ -90,5 +91,23 @@ describe("status-snapshot", () => {
     expect(snapshot.generatedAtLocal).toBeTruthy();
     expect(snapshot.running.length).toBe(1);
     expect(snapshot.running[0].issueId).toBe(123);
+  });
+
+  it("includes review follow-up queue entries", async () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "agent-runner-status-"));
+    const queuePath = resolveReviewQueuePath(root);
+    await enqueueReviewTask(queuePath, {
+      issueId: 777,
+      prNumber: 10,
+      repo: { owner: "metyatech", repo: "programming-course-docs" },
+      url: "https://github.com/metyatech/programming-course-docs/pull/10",
+      reason: "approval",
+      requiresEngine: true
+    });
+
+    const snapshot = buildStatusSnapshot(root);
+    expect(snapshot.reviewFollowups).toHaveLength(1);
+    expect(snapshot.reviewFollowups[0]?.issueId).toBe(777);
+    expect(snapshot.reviewFollowups[0]?.waitMinutes).toBeGreaterThanOrEqual(0);
   });
 });

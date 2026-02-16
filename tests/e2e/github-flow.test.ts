@@ -180,6 +180,7 @@ describe("github flow", () => {
         concurrency: 1,
         labels: {
           queued: "agent:e2e-queued",
+          reviewFollowup: "agent:e2e-review-followup",
           running: "agent:e2e-running",
           done: "agent:e2e-done",
           failed: "agent:e2e-failed",

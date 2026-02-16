@@ -95,6 +95,7 @@ export type AgentRunnerConfig = {
     done: string;
     failed: string;
     needsUserReply: string;
+    reviewFollowup: string;
   };
   codex: {
     command: string;

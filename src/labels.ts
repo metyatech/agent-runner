@@ -32,6 +32,11 @@ export function buildAgentLabels(config: AgentRunnerConfig): LabelDefinition[] {
       name: config.labels.needsUserReply,
       color: "F9D0C4",
       description: "Agent paused and waiting for user reply."
+    },
+    {
+      name: config.labels.reviewFollowup,
+      color: "0E8A16",
+      description: "Managed PR review follow-up is queued."
     }
   ];
 }
