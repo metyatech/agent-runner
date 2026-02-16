@@ -392,6 +392,50 @@ setInterval( refresh , 5_000 );
     ).toBe(true);
   });
 
+  it("refresh renders review follow-up status and next action", async () => {
+    const now = new Date().toISOString();
+    const { api, elements } = await createDashboardRuntime([
+      {
+        data: {
+          stopRequested: false,
+          busy: false,
+          running: [],
+          stale: [],
+          latestTaskRun: null,
+          latestIdle: null,
+          logs: [],
+          reports: [],
+          reviewFollowups: [
+            {
+              issueId: 777,
+              prNumber: 10,
+              repo: { owner: "metyatech", repo: "programming-course-docs" },
+              url: "https://github.com/metyatech/programming-course-docs/pull/10",
+              reason: "approval",
+              requiresEngine: true,
+              enqueuedAt: now,
+              enqueuedAtLocal: now,
+              waitMinutes: 93.1,
+              status: "waiting",
+              nextAction: "No action required. Waiting for idle usage gates to open."
+            }
+          ],
+          activityUpdatedAt: now,
+          generatedAt: now,
+          workdirRoot: "D:/ghws/agent-runner"
+        }
+      }
+    ]);
+
+    await api.refresh();
+    expect(elements.reviewFollowupsList.children).toHaveLength(1);
+    const row = elements.reviewFollowupsList.children[0];
+    const top = row.children[0];
+    const action = row.children[1];
+    expect(top.children.some((child) => child.textContent.toLowerCase() === "waiting")).toBe(true);
+    expect(action.textContent.toLowerCase()).toContain("no action required");
+  });
+
   it("clears hero metadata when refresh fails after a successful render", async () => {
     const now = new Date().toISOString();
     const { api, elements } = await createDashboardRuntime([

@@ -25,6 +25,8 @@ export type FileSnapshot = {
 export type ReviewFollowupSnapshot = ReviewQueueEntry & {
   enqueuedAtLocal: string | null;
   waitMinutes: number;
+  status: "queued" | "waiting";
+  nextAction: string;
 };
 
 export type StatusSnapshot = {
@@ -37,12 +39,18 @@ export type StatusSnapshot = {
   stale: ActivitySnapshot[];
   activityUpdatedAt: string | null;
   activityUpdatedAtLocal: string | null;
+  reviewIdleGateBlocked: boolean;
   reviewFollowups: ReviewFollowupSnapshot[];
   latestTaskRun: FileSnapshot | null;
   latestIdle: FileSnapshot | null;
   logs: FileSnapshot[];
   reports: FileSnapshot[];
 };
+
+const REVIEW_IDLE_GATE_BLOCK_LOG =
+  "Review follow-up backlog detected but all idle engine gates are blocked.";
+const REVIEW_IDLE_GATE_BLOCK_TTL_MS = 15 * 60 * 1000;
+const TASK_RUN_TAIL_BYTES = 128 * 1024;
 
 function safeParseDate(value: string): number | null {
   const parsed = Date.parse(value);
@@ -121,6 +129,63 @@ function snapshotFromPointer(pointerPath: string): FileSnapshot | null {
   return snapshotFile(target);
 }
 
+function readUtf8Tail(filePath: string, maxBytes: number): string | null {
+  try {
+    const stat = fs.statSync(filePath);
+    const size = stat.size;
+    if (size <= 0) {
+      return "";
+    }
+    const length = Math.min(size, maxBytes);
+    const start = size - length;
+    const fd = fs.openSync(filePath, "r");
+    try {
+      const buffer = Buffer.alloc(length);
+      fs.readSync(fd, buffer, 0, length, start);
+      return buffer.toString("utf8");
+    } finally {
+      fs.closeSync(fd);
+    }
+  } catch {
+    return null;
+  }
+}
+
+function detectRecentReviewIdleGateBlock(taskRunLogPath: string | null, nowMs: number): boolean {
+  if (!taskRunLogPath) {
+    return false;
+  }
+  if (!fs.existsSync(taskRunLogPath)) {
+    return false;
+  }
+
+  const tail = readUtf8Tail(taskRunLogPath, TASK_RUN_TAIL_BYTES);
+  if (tail === null) {
+    return false;
+  }
+
+  const lines = tail.split(/\r?\n/);
+  for (let index = lines.length - 1; index >= 0; index -= 1) {
+    const line = lines[index] ?? "";
+    if (!line.includes(REVIEW_IDLE_GATE_BLOCK_LOG)) {
+      continue;
+    }
+
+    const match = line.match(/^\[([^\]]+)\]/);
+    if (!match) {
+      return true;
+    }
+
+    const parsed = Date.parse(match[1]);
+    if (Number.isNaN(parsed)) {
+      return true;
+    }
+    return nowMs - parsed <= REVIEW_IDLE_GATE_BLOCK_TTL_MS;
+  }
+
+  return false;
+}
+
 function mergeRunnerState(
   records: ActivityRecord[],
   workdirRoot: string
@@ -151,14 +216,23 @@ function mergeRunnerState(
   return records.concat(additions);
 }
 
-function toReviewFollowupSnapshot(entry: ReviewQueueEntry, nowMs: number): ReviewFollowupSnapshot {
+function toReviewFollowupSnapshot(
+  entry: ReviewQueueEntry,
+  nowMs: number,
+  reviewIdleGateBlocked: boolean
+): ReviewFollowupSnapshot {
   const enqueuedMs = safeParseDate(entry.enqueuedAt);
   const waitMs = enqueuedMs === null ? 0 : Math.max(0, nowMs - enqueuedMs);
   const waitMinutes = Math.round((waitMs / 60000) * 10) / 10;
+  const waiting = entry.requiresEngine && reviewIdleGateBlocked;
   return {
     ...entry,
     enqueuedAtLocal: formatLocal(entry.enqueuedAt),
-    waitMinutes
+    waitMinutes,
+    status: waiting ? "waiting" : "queued",
+    nextAction: waiting
+      ? "No action required. Waiting for idle usage gates to open."
+      : "No action required. Runner will process this follow-up automatically."
   };
 }
 
@@ -190,8 +264,9 @@ export function buildStatusSnapshot(workdirRoot: string): StatusSnapshot {
   const reportsDir = path.resolve(workdirRoot, "agent-runner", "reports");
   const latestTaskRun = snapshotFromPointer(path.join(logsDir, "latest-task-run.path"));
   const latestIdle = snapshotFromPointer(path.join(logsDir, "latest-idle.path"));
+  const reviewIdleGateBlocked = detectRecentReviewIdleGateBlock(latestTaskRun?.path ?? null, nowMs);
   const reviewFollowups = loadReviewQueue(resolveReviewQueuePath(workdirRoot)).map((entry) =>
-    toReviewFollowupSnapshot(entry, nowMs)
+    toReviewFollowupSnapshot(entry, nowMs, reviewIdleGateBlocked)
   );
 
   const generatedAt = now.toISOString();
@@ -205,6 +280,7 @@ export function buildStatusSnapshot(workdirRoot: string): StatusSnapshot {
     stale,
     activityUpdatedAt,
     activityUpdatedAtLocal: formatLocal(activityUpdatedAt),
+    reviewIdleGateBlocked,
     reviewFollowups,
     latestTaskRun,
     latestIdle,

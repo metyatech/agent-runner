@@ -268,6 +268,27 @@ function renderHtml(): string {
         color: var(--muted);
         white-space: nowrap;
       }
+      .status-waiting {
+        color: #b54708;
+      }
+      .status-queued {
+        color: #0369a1;
+      }
+      .log-list li.review-followup-item {
+        display: block;
+        padding: 8px 0;
+      }
+      .review-followup-row {
+        display: flex;
+        align-items: baseline;
+        gap: 8px;
+        flex-wrap: wrap;
+      }
+      .review-followup-action {
+        color: var(--muted);
+        font-size: 12px;
+        margin-top: 4px;
+      }
 
       code {
         font-family: "Cascadia Mono", "Consolas", monospace;
@@ -597,28 +618,46 @@ function renderHtml(): string {
         }
         rows.forEach((row) => {
           const li = document.createElement("li");
+          li.className = "review-followup-item";
+
+          const top = document.createElement("div");
+          top.className = "review-followup-row";
 
           const mode = document.createElement("span");
           mode.className = "log-label";
           mode.textContent = row.requiresEngine ? "engine" : "merge-only";
-          li.appendChild(mode);
+          top.appendChild(mode);
 
           const reason = document.createElement("span");
           reason.className = "log-label";
           reason.textContent = row.reason || "review";
-          li.appendChild(reason);
+          top.appendChild(reason);
+
+          const statusText = row.status === "waiting" ? "waiting" : "queued";
+          const status = document.createElement("span");
+          status.className = "log-label " + (statusText === "waiting" ? "status-waiting" : "status-queued");
+          status.textContent = statusText;
+          top.appendChild(status);
 
           const label =
             row.url ||
             (row.repo && row.prNumber
               ? row.repo.owner + "/" + row.repo.repo + "#" + row.prNumber
               : "review follow-up");
-          li.appendChild(makeExternalLink(row.url, label));
+          top.appendChild(makeExternalLink(row.url, label));
 
           const wait = document.createElement("span");
           wait.className = "log-time";
           wait.textContent = row.waitMinutes == null ? "-" : humanAge(row.waitMinutes) + " queued";
-          li.appendChild(wait);
+          top.appendChild(wait);
+
+          li.appendChild(top);
+
+          const action = document.createElement("div");
+          action.className = "review-followup-action";
+          action.textContent =
+            row.nextAction || "No action required. Runner will process this follow-up automatically.";
+          li.appendChild(action);
 
           target.appendChild(li);
         });

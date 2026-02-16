@@ -731,6 +731,7 @@ http://127.0.0.1:4311/
 
 Paths shown in the status UI are clickable and will open the file in Explorer.
 The dashboard also shows a `Review Follow-ups` panel with currently queued follow-up items.
+Each row includes `status` (`queued` or `waiting`) and `next action` guidance so operators can quickly tell whether to wait or intervene.
 
 ## System tray
 
