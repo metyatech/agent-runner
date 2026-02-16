@@ -528,6 +528,9 @@ When this happens:
 - Immediate: webhook review events enqueue follow-ups right away.
 - Every cycle: catch-up can enqueue missed follow-ups, then queue scheduling and execution run.
 - `requiresEngine` is decided when enqueued, then used during scheduling and execution branching.
+- On GitHub PR threads, runner now posts state comments for blocked follow-ups:
+  - `<!-- agent-runner:review-followup:waiting -->`: queued but blocked by idle engine gates (`No action required`).
+  - `<!-- agent-runner:review-followup:action-required -->`: auto-merge stopped with non-retry reason (`Action required` with next step guidance).
 
 `requiresEngine` rules:
 - `true`: actionable review follow-up is required (for example `changes_requested`, actionable review comments).

@@ -105,6 +105,14 @@ import {
 } from "./scheduled-retry-state.js";
 import { recoverStalledIssue } from "./stalled-issue-recovery.js";
 import { createServiceLimiters, idleEngineToService } from "./service-concurrency.js";
+import {
+  REVIEW_FOLLOWUP_ACTION_REQUIRED_MARKER,
+  REVIEW_FOLLOWUP_WAITING_MARKER,
+  buildReviewFollowupActionRequiredComment,
+  buildReviewFollowupWaitingComment,
+  isManualActionRequiredForAutoMergeSkip,
+  shouldPostReviewFollowupMarkerComment
+} from "./review-followup-status.js";
 
 const program = new Command();
 
@@ -493,6 +501,68 @@ program
         }
       }
       await client.comment(issue, body);
+    };
+
+    type ReviewFollowupStateComment = "waiting" | "action-required";
+    const postedReviewFollowupStateMarkers = new Set<string>();
+
+    const maybePostReviewFollowupStateComment = async (options: {
+      issue: IssueInfo;
+      state: ReviewFollowupStateComment;
+      reason: string;
+      queuedEngineFollowups?: number;
+    }): Promise<void> => {
+      if (dryRun) {
+        return;
+      }
+
+      const marker =
+        options.state === "waiting"
+          ? REVIEW_FOLLOWUP_WAITING_MARKER
+          : REVIEW_FOLLOWUP_ACTION_REQUIRED_MARKER;
+      const key = `${options.issue.repo.owner}/${options.issue.repo.repo}#${options.issue.number}:${marker}`;
+      if (postedReviewFollowupStateMarkers.has(key)) {
+        return;
+      }
+
+      try {
+        if (options.state === "waiting" && !options.issue.labels.includes(config.labels.reviewFollowup)) {
+          await client.addLabels(options.issue, [config.labels.reviewFollowup]);
+        }
+      } catch (error) {
+        log("warn", "Failed to add review follow-up label while posting state.", json, {
+          issue: options.issue.url,
+          error: error instanceof Error ? error.message : String(error)
+        }, "review");
+      }
+
+      try {
+        const comments = await client.listIssueComments(options.issue);
+        if (!shouldPostReviewFollowupMarkerComment(comments, marker)) {
+          postedReviewFollowupStateMarkers.add(key);
+          return;
+        }
+
+        const body =
+          options.state === "waiting"
+            ? buildReviewFollowupWaitingComment({
+                reason: options.reason,
+                queuedEngineFollowups: options.queuedEngineFollowups ?? 0
+              })
+            : buildReviewFollowupActionRequiredComment({
+                reason: options.reason
+              });
+
+        await commentCompletion(options.issue, body);
+        postedReviewFollowupStateMarkers.add(key);
+      } catch (error) {
+        log("warn", "Failed to post review follow-up state comment.", json, {
+          issue: options.issue.url,
+          state: options.state,
+          reason: options.reason,
+          error: error instanceof Error ? error.message : String(error)
+        }, "review");
+      }
     };
 
     const maybeNotifyIdlePullRequest = async (result: IdleTaskResult): Promise<void> => {
@@ -1316,6 +1386,18 @@ program
                   { queued: engineBacklog.length },
                   "review"
                 );
+                for (const entry of engineBacklog) {
+                  const followupIssue = await client.getIssue(entry.repo, entry.prNumber);
+                  if (!followupIssue) {
+                    continue;
+                  }
+                  await maybePostReviewFollowupStateComment({
+                    issue: followupIssue,
+                    state: "waiting",
+                    reason: "idle_engine_gates_blocked",
+                    queuedEngineFollowups: engineBacklog.length
+                  });
+                }
               } else {
                 const engineTasks = await takeReviewTasksWhere(reviewQueuePath, remaining, (entry) => entry.requiresEngine);
                 queue.push(...engineTasks);
@@ -1633,6 +1715,13 @@ program
                 }
 
                 log("info", "Auto-merge skipped.", json, { url: followup.url, reason: merge.reason }, "review");
+                if (isManualActionRequiredForAutoMergeSkip(merge.reason)) {
+                  await maybePostReviewFollowupStateComment({
+                    issue,
+                    state: "action-required",
+                    reason: merge.reason
+                  });
+                }
               } catch (error) {
                 log("warn", "Auto-merge failed.", json, {
                   url: followup.url,
