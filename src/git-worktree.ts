@@ -5,6 +5,7 @@ import { commandExists } from "./command-exists.js";
 import { runCommand } from "./git.js";
 import { buildGitAuthEnv } from "./git-auth-env.js";
 import { withGitCacheLock } from "./git-cache-lock.js";
+import { isProcessAlive, loadRunnerState, resolveRunnerStatePath } from "./runner-state.js";
 
 function resolveCacheDir(workdirRoot: string): string {
   return path.resolve(workdirRoot, "agent-runner", "git-cache");
@@ -66,6 +67,140 @@ function buildRemoteBranchRef(branch: string): string {
 
 function buildBranchFetchRefspec(branch: string): string {
   return `+refs/heads/${branch}:${buildRemoteBranchRef(branch)}`;
+}
+
+type GitWorktreeEntry = {
+  path: string;
+  branchRef: string | null;
+  bare: boolean;
+};
+
+function normalizePathForComparison(value: string): string {
+  const normalized = path.resolve(value).replace(/\\/g, "/");
+  return normalized.endsWith("/") ? normalized.slice(0, -1).toLowerCase() : normalized.toLowerCase();
+}
+
+function parseGitWorktreeList(output: string): GitWorktreeEntry[] {
+  const entries: GitWorktreeEntry[] = [];
+  let current: GitWorktreeEntry | null = null;
+
+  const lines = output.split(/\r?\n/);
+  for (const line of lines) {
+    if (!line.trim()) {
+      if (current) {
+        entries.push(current);
+        current = null;
+      }
+      continue;
+    }
+
+    if (line.startsWith("worktree ")) {
+      if (current) {
+        entries.push(current);
+      }
+      current = {
+        path: line.slice("worktree ".length).trim(),
+        branchRef: null,
+        bare: false
+      };
+      continue;
+    }
+
+    if (!current) {
+      continue;
+    }
+
+    if (line === "bare") {
+      current.bare = true;
+      continue;
+    }
+
+    if (line.startsWith("branch ")) {
+      current.branchRef = line.slice("branch ".length).trim();
+    }
+  }
+
+  if (current) {
+    entries.push(current);
+  }
+
+  return entries;
+}
+
+function parseIssueIdFromWorktreePath(workdirRoot: string, worktreePath: string): number | null {
+  const workRoot = normalizePathForComparison(path.resolve(workdirRoot, "agent-runner", "work"));
+  const candidate = normalizePathForComparison(worktreePath);
+  if (!candidate.startsWith(`${workRoot}/`)) {
+    return null;
+  }
+
+  const relative = candidate.slice(workRoot.length + 1);
+  const runId = relative.split("/")[0] ?? "";
+  const match = /^issue-(\d+)-\d+$/i.exec(runId);
+  if (!match) {
+    return null;
+  }
+
+  const parsed = Number.parseInt(match[1], 10);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+async function cleanupConflictingBranchWorktrees(options: {
+  workdirRoot: string;
+  cachePath: string;
+  branch: string;
+  targetWorktreePath: string;
+}): Promise<void> {
+  const env = buildAuthEnv();
+  const desiredBranchRef = `refs/heads/${options.branch}`;
+  const targetPathKey = normalizePathForComparison(options.targetWorktreePath);
+
+  const listWorktrees = async (): Promise<GitWorktreeEntry[]> => {
+    const result = await runCommand("git", ["-C", options.cachePath, "worktree", "list", "--porcelain"], { env });
+    return parseGitWorktreeList(result.stdout);
+  };
+
+  const conflicts = (await listWorktrees()).filter((entry) => !entry.bare && entry.branchRef === desiredBranchRef);
+
+  if (conflicts.length === 0) {
+    return;
+  }
+
+  const statePath = resolveRunnerStatePath(options.workdirRoot);
+  const runnerState = loadRunnerState(statePath);
+
+  for (const conflict of conflicts) {
+    const conflictKey = normalizePathForComparison(conflict.path);
+    let remove = false;
+
+    if (conflictKey === targetPathKey) {
+      remove = true;
+    } else if (!fs.existsSync(conflict.path)) {
+      remove = true;
+    } else {
+      const issueId = parseIssueIdFromWorktreePath(options.workdirRoot, conflict.path);
+      if (issueId !== null) {
+        const record = runnerState.running.find((entry) => entry.issueId === issueId);
+        if (!record || !isProcessAlive(record.pid)) {
+          remove = true;
+        }
+      }
+    }
+
+    if (remove) {
+      await runCommand("git", ["-C", options.cachePath, "worktree", "remove", "--force", conflict.path], { env });
+    }
+  }
+
+  await runCommand("git", ["-C", options.cachePath, "worktree", "prune"], { env });
+
+  const remaining = (await listWorktrees()).filter((entry) => !entry.bare && entry.branchRef === desiredBranchRef);
+  if (remaining.length > 0) {
+    throw new Error(
+      `Branch ${options.branch} is already checked out by an active worktree: ${remaining[0].path}. ` +
+        "Wait for the current run to finish or remove the stale worktree manually."
+    );
+  }
 }
 
 export async function ensureRepoCache(workdirRoot: string, repo: RepoInfo): Promise<string> {
@@ -200,6 +335,12 @@ export async function createWorktreeForRemoteBranch(options: {
         ["-C", options.cachePath, "fetch", "--prune", "origin", buildBranchFetchRefspec(options.branch)],
         { env }
       );
+      await cleanupConflictingBranchWorktrees({
+        workdirRoot: options.workdirRoot,
+        cachePath: options.cachePath,
+        branch: options.branch,
+        targetWorktreePath: options.worktreePath
+      });
       const startRef = await resolveBranchStartRef(options.cachePath, options.branch);
       await runCommand("git", ["-C", options.cachePath, "branch", "-f", options.branch, startRef], { env });
       await runCommand("git", ["-C", options.cachePath, "worktree", "add", options.worktreePath, options.branch], { env });
