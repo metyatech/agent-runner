@@ -107,6 +107,7 @@ import {
 import { recoverStalledIssue } from "./stalled-issue-recovery.js";
 import { planWebhookRunningRecoveries } from "./webhook-running-recovery.js";
 import { createServiceLimiters, idleEngineToService } from "./service-concurrency.js";
+import { runWithServiceSlot } from "./service-slot.js";
 import {
   REVIEW_FOLLOWUP_ACTION_REQUIRED_MARKER,
   REVIEW_FOLLOWUP_WAITING_MARKER,
@@ -1707,19 +1708,24 @@ program
                 await markManagedPullRequest(managedStatePath, issue.repo, issue.number);
               }
 
-              await client.addLabels(issue, [config.labels.running]);
-              await tryRemoveLabel(issue, config.labels.queued);
-              await tryRemoveReviewFollowupLabels(issue);
-              await commentCompletion(
-                issue,
-                buildAgentComment(`Agent runner started on ${new Date().toISOString()}. Concurrency ${config.concurrency}.`)
-              );
-              clearRetry(scheduledRetryStatePath, issue.id);
-              if (webhooksEnabled && webhookQueuePath) {
-                await removeWebhookIssues(webhookQueuePath, [issue.id]);
-              }
-
-              const result = await serviceLimiters.codex(() => runIssueWithSessionResume(issue, "codex"));
+              const result = await runWithServiceSlot(serviceLimiters.codex, {
+                beforeStart: async () => {
+                  await client.addLabels(issue, [config.labels.running]);
+                  await tryRemoveLabel(issue, config.labels.queued);
+                  await tryRemoveReviewFollowupLabels(issue);
+                  await commentCompletion(
+                    issue,
+                    buildAgentComment(
+                      `Agent runner started on ${new Date().toISOString()}. Concurrency ${config.concurrency}.`
+                    )
+                  );
+                  clearRetry(scheduledRetryStatePath, issue.id);
+                  if (webhooksEnabled && webhookQueuePath) {
+                    await removeWebhookIssues(webhookQueuePath, [issue.id]);
+                  }
+                },
+                task: () => runIssueWithSessionResume(issue, "codex")
+              });
               activityId = result.activityId;
               if (result.success) {
                 clearRetry(scheduledRetryStatePath, issue.id);
@@ -1845,19 +1851,22 @@ program
 
             let activityId: string | null = null;
             try {
-              await client.addLabels(issue, [config.labels.running]);
-              await tryRemoveLabel(issue, config.labels.queued);
-              await tryRemoveReviewFollowupLabels(issue);
-              await commentCompletion(
-                issue,
-                buildAgentComment(
-                  `Agent runner started review follow-up (${followup.reason}) on ${new Date().toISOString()}. Concurrency ${config.concurrency}.`
-                )
-              );
-              clearRetry(scheduledRetryStatePath, issue.id);
-
               const service = idleEngineToService(followup.engine);
-              const result = await serviceLimiters[service](() => runIssueWithSessionResume(issue, followup.engine));
+              const result = await runWithServiceSlot(serviceLimiters[service], {
+                beforeStart: async () => {
+                  await client.addLabels(issue, [config.labels.running]);
+                  await tryRemoveLabel(issue, config.labels.queued);
+                  await tryRemoveReviewFollowupLabels(issue);
+                  await commentCompletion(
+                    issue,
+                    buildAgentComment(
+                      `Agent runner started review follow-up (${followup.reason}) on ${new Date().toISOString()}. Concurrency ${config.concurrency}.`
+                    )
+                  );
+                  clearRetry(scheduledRetryStatePath, issue.id);
+                },
+                task: () => runIssueWithSessionResume(issue, followup.engine)
+              });
               activityId = result.activityId;
               if (result.success) {
                 clearRetry(scheduledRetryStatePath, issue.id);
