@@ -105,6 +105,7 @@ import {
   takeDueRetries
 } from "./scheduled-retry-state.js";
 import { recoverStalledIssue } from "./stalled-issue-recovery.js";
+import { planWebhookRunningRecoveries } from "./webhook-running-recovery.js";
 import { createServiceLimiters, idleEngineToService } from "./service-concurrency.js";
 import {
   REVIEW_FOLLOWUP_ACTION_REQUIRED_MARKER,
@@ -1069,29 +1070,71 @@ program
             }
           }
         } else if (webhooksEnabled) {
-          for (const record of state.running) {
-            if (isProcessAlive(record.pid)) {
-              continue;
-            }
-            const issue = await client.getIssue(record.repo, record.issueNumber);
-            if (!issue) {
-              continue;
-            }
-            await recoverStalledIssue({
-              issue,
-              reason: "dead_process",
-              pid: record.pid,
-              dryRun,
-              labels: config.labels,
-              webhookQueuePath,
-              addLabel: (target, labels) => client.addLabels(target, labels),
-              removeLabel: tryRemoveLabel,
-              enqueueWebhookIssue,
-              removeRunningIssue: (issueId) => removeRunningIssue(statePath, issueId),
-              removeActivity: (activityId) => removeActivity(activityPath, activityId),
-              clearRetry: (issueId) => clearRetry(scheduledRetryStatePath, issueId),
-              log: (level, message, data) => log(level, message, json, data, "recovery")
+          let runningIssues: IssueInfo[] | null = null;
+          try {
+            runningIssues = await client.searchOpenItemsByLabelAcrossOwner(config.owner, config.labels.running, {
+              perPage: 100,
+              maxPages: 1
             });
+          } catch (error) {
+            log(
+              "warn",
+              "Failed to search running issues in webhook mode; falling back to state-only recovery.",
+              json,
+              { error: error instanceof Error ? error.message : String(error) },
+              "recovery"
+            );
+          }
+
+          if (runningIssues) {
+            const plans = planWebhookRunningRecoveries({
+              issuesWithRunningLabel: runningIssues,
+              state,
+              config,
+              aliveCheck: isProcessAlive
+            });
+            for (const plan of plans) {
+              await recoverStalledIssue({
+                issue: plan.issue,
+                reason: plan.reason,
+                pid: plan.pid,
+                dryRun,
+                labels: config.labels,
+                webhookQueuePath,
+                addLabel: (target, labels) => client.addLabels(target, labels),
+                removeLabel: tryRemoveLabel,
+                enqueueWebhookIssue,
+                removeRunningIssue: (issueId) => removeRunningIssue(statePath, issueId),
+                removeActivity: (activityId) => removeActivity(activityPath, activityId),
+                clearRetry: (issueId) => clearRetry(scheduledRetryStatePath, issueId),
+                log: (level, message, data) => log(level, message, json, data, "recovery")
+              });
+            }
+          } else {
+            for (const record of state.running) {
+              if (isProcessAlive(record.pid)) {
+                continue;
+              }
+              const issue = await client.getIssue(record.repo, record.issueNumber);
+              if (!issue) {
+                continue;
+              }
+              await recoverStalledIssue({
+                issue,
+                reason: "dead_process",
+                pid: record.pid,
+                dryRun,
+                labels: config.labels,
+                webhookQueuePath,
+                addLabel: (target, labels) => client.addLabels(target, labels),
+                removeLabel: tryRemoveLabel,
+                enqueueWebhookIssue,
+                removeRunningIssue: (issueId) => removeRunningIssue(statePath, issueId),
+                removeActivity: (activityId) => removeActivity(activityPath, activityId),
+                clearRetry: (issueId) => clearRetry(scheduledRetryStatePath, issueId),
+                log: (level, message, data) => log(level, message, json, data, "recovery")
+              });
+            }
           }
         }
       }
