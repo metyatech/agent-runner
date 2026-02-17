@@ -1231,19 +1231,26 @@ export function parseAgentRunResult(finalResponse: string | null): {
   }
 
   const lines = trimmed.split(/\r?\n/);
-  const firstNonEmpty = lines.findIndex((line) => line.trim().length > 0);
-  if (firstNonEmpty === -1) {
-    return { status: null, response: null };
-  }
-  const firstLine = lines[firstNonEmpty].trim();
-  if (!firstLine.toUpperCase().startsWith(AGENT_RUNNER_STATUS_PREFIX)) {
+  const statusCandidates = lines
+    .map((line, index) => ({ line: line.trim(), index }))
+    .filter((entry) => entry.line.length > 0 && entry.line.toUpperCase().startsWith(AGENT_RUNNER_STATUS_PREFIX));
+
+  if (statusCandidates.length === 0) {
     return { status: null, response: trimmed };
   }
 
-  const rawStatus = firstLine.slice(AGENT_RUNNER_STATUS_PREFIX.length).trim().toLowerCase();
+  const statusLine = statusCandidates.at(-1);
+  if (!statusLine) {
+    return { status: null, response: null };
+  }
+
+  const rawStatus = statusLine.line.slice(AGENT_RUNNER_STATUS_PREFIX.length).trim().toLowerCase();
   const status: AgentRunStatus | null =
     rawStatus === "done" ? "done" : rawStatus === "needs_user_reply" ? "needs_user_reply" : null;
-  const responseBody = lines.slice(firstNonEmpty + 1).join("\n").trim();
+  const responseBody = lines
+    .filter((_, index) => index !== statusLine.index)
+    .join("\n")
+    .trim();
 
   return {
     status,

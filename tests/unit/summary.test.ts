@@ -55,6 +55,20 @@ describe("parseAgentRunResult", () => {
     expect(parsed.response).toBe("Please answer question A.");
   });
 
+  it("parses status line even when explanatory text appears before it", () => {
+    const parsed = parseAgentRunResult(
+      [
+        "I verified the current state and prepared a plan.",
+        "AGENT_RUNNER_STATUS: needs_user_reply",
+        "Please confirm whether I should proceed with this plan."
+      ].join("\n")
+    );
+    expect(parsed.status).toBe("needs_user_reply");
+    expect(parsed.response).toBe(
+      "I verified the current state and prepared a plan.\nPlease confirm whether I should proceed with this plan."
+    );
+  });
+
   it("treats response without status line as plain response", () => {
     const parsed = parseAgentRunResult("Plain final response");
     expect(parsed.status).toBeNull();
