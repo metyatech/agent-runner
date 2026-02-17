@@ -1049,6 +1049,8 @@ program
                 removeRunningIssue: (issueId) => removeRunningIssue(statePath, issueId),
                 removeActivity: (activityId) => removeActivity(activityPath, activityId),
                 clearRetry: (issueId) => clearRetry(scheduledRetryStatePath, issueId),
+                postRecoveryComment: (target, message) =>
+                  commentCompletion(target, buildAgentComment(message)),
                 log: (level, message, data) => log(level, message, json, data, "recovery")
               });
             }
@@ -1066,6 +1068,8 @@ program
                 removeRunningIssue: (issueId) => removeRunningIssue(statePath, issueId),
                 removeActivity: (activityId) => removeActivity(activityPath, activityId),
                 clearRetry: (issueId) => clearRetry(scheduledRetryStatePath, issueId),
+                postRecoveryComment: (target, message) =>
+                  commentCompletion(target, buildAgentComment(message)),
                 log: (level, message, data) => log(level, message, json, data, "recovery")
               });
             }
@@ -1108,6 +1112,8 @@ program
                 removeRunningIssue: (issueId) => removeRunningIssue(statePath, issueId),
                 removeActivity: (activityId) => removeActivity(activityPath, activityId),
                 clearRetry: (issueId) => clearRetry(scheduledRetryStatePath, issueId),
+                postRecoveryComment: (target, message) =>
+                  commentCompletion(target, buildAgentComment(message)),
                 log: (level, message, data) => log(level, message, json, data, "recovery")
               });
             }
@@ -1133,6 +1139,8 @@ program
                 removeRunningIssue: (issueId) => removeRunningIssue(statePath, issueId),
                 removeActivity: (activityId) => removeActivity(activityPath, activityId),
                 clearRetry: (issueId) => clearRetry(scheduledRetryStatePath, issueId),
+                postRecoveryComment: (target, message) =>
+                  commentCompletion(target, buildAgentComment(message)),
                 log: (level, message, data) => log(level, message, json, data, "recovery")
               });
             }

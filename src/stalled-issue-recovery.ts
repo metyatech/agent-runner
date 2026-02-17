@@ -22,8 +22,28 @@ export type RecoverStalledIssueOptions = {
   removeRunningIssue: (issueId: number) => void;
   removeActivity: (activityId: string) => void;
   clearRetry: (issueId: number) => void;
+  postRecoveryComment?: (issue: IssueInfo, message: string) => Promise<void>;
   log: Logger;
 };
+
+function buildRecoveryMessage(options: Pick<RecoverStalledIssueOptions, "issue" | "reason" | "pid">): string {
+  const reasonLine =
+    options.reason === "dead_process"
+      ? `- Runner state referenced process PID ${options.pid ?? "unknown"}, but the process was no longer alive.`
+      : "- The `agent:running` label remained, but no active local runner state was found for this request.";
+
+  return [
+    "Agent runner detected a stale running state and automatically recovered this request.",
+    "",
+    "Situation:",
+    reasonLine,
+    "- This state can appear after a runner restart, crash, or abrupt process termination.",
+    "",
+    "Action taken:",
+    "- Cleared stale running markers from local state.",
+    "- Re-queued this request and resumed execution automatically."
+  ].join("\n");
+}
 
 export async function recoverStalledIssue(options: RecoverStalledIssueOptions): Promise<void> {
   const baseData: Record<string, unknown> = {
@@ -50,6 +70,10 @@ export async function recoverStalledIssue(options: RecoverStalledIssueOptions): 
 
   if (options.webhookQueuePath) {
     await options.enqueueWebhookIssue(options.webhookQueuePath, options.issue);
+  }
+
+  if (options.postRecoveryComment) {
+    await options.postRecoveryComment(options.issue, buildRecoveryMessage(options));
   }
 
   options.log("info", "Recovered stalled running issue and re-queued.", baseData);

@@ -25,6 +25,7 @@ describe("recoverStalledIssue", () => {
     const removeRunningIssue = vi.fn();
     const removeActivity = vi.fn();
     const clearRetry = vi.fn();
+    const postRecoveryComment = vi.fn<[IssueInfo, string], Promise<void>>(async () => {});
     const log = vi.fn();
 
     await recoverStalledIssue({
@@ -45,8 +46,9 @@ describe("recoverStalledIssue", () => {
       removeRunningIssue,
       removeActivity,
       clearRetry,
+      postRecoveryComment,
       log
-    });
+    } as any);
 
     expect(addLabel).not.toHaveBeenCalled();
     expect(removeLabel).not.toHaveBeenCalled();
@@ -54,10 +56,11 @@ describe("recoverStalledIssue", () => {
     expect(removeRunningIssue).not.toHaveBeenCalled();
     expect(removeActivity).not.toHaveBeenCalled();
     expect(clearRetry).not.toHaveBeenCalled();
+    expect(postRecoveryComment).not.toHaveBeenCalled();
     expect(log).toHaveBeenCalledWith("info", expect.stringContaining("Dry-run"), expect.any(Object));
   });
 
-  it("cleans local state and re-queues without posting failure comments", async () => {
+  it("cleans local state, re-queues, and posts a recovery context comment", async () => {
     const issue = createIssue();
     const addLabel = vi.fn(async () => {});
     const removeLabel = vi.fn(async () => {});
@@ -65,6 +68,7 @@ describe("recoverStalledIssue", () => {
     const removeRunningIssue = vi.fn();
     const removeActivity = vi.fn();
     const clearRetry = vi.fn();
+    const postRecoveryComment = vi.fn<[IssueInfo, string], Promise<void>>(async () => {});
     const log = vi.fn();
 
     await recoverStalledIssue({
@@ -84,8 +88,9 @@ describe("recoverStalledIssue", () => {
       removeRunningIssue,
       removeActivity,
       clearRetry,
+      postRecoveryComment,
       log
-    });
+    } as any);
 
     expect(clearRetry).toHaveBeenCalledWith(issue.id);
     expect(removeRunningIssue).toHaveBeenCalledWith(issue.id);
@@ -95,6 +100,11 @@ describe("recoverStalledIssue", () => {
     expect(removeLabel).toHaveBeenNthCalledWith(2, issue, "agent:failed");
     expect(removeLabel).toHaveBeenNthCalledWith(3, issue, "agent:needs-user-reply");
     expect(enqueueWebhookIssue).toHaveBeenCalledWith("queue.json", issue);
+    expect(postRecoveryComment).toHaveBeenCalledTimes(1);
+    const recoveryMessage = postRecoveryComment.mock.calls[0]?.[1];
+    expect(typeof recoveryMessage).toBe("string");
+    expect(recoveryMessage).toContain("Situation:");
+    expect(recoveryMessage).toContain("Action taken:");
     expect(log).toHaveBeenCalledWith("info", "Recovered stalled running issue and re-queued.", expect.any(Object));
   });
 });
