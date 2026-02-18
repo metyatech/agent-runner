@@ -1,9 +1,7 @@
 {
   "source": "github:metyatech/agent-rules",
   "domains": [
-    "cli",
-    "node",
-    "release"
+    "node"
   ],
   "extra": [
     "agent-rules-local/operations.md"
