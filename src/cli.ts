@@ -33,7 +33,7 @@ import {
 } from "./amazon-q-usage.js";
 import { commandExists } from "./command-exists.js";
 import { listTargetRepos, listQueuedIssues, pickNextIssues } from "./queue.js";
-import { planIdleTasks, runIdleTask, runIssue } from "./runner.js";
+import { planIdleTasks, runIdleTask, runIssue, QUOTA_ERROR_PATTERNS, hasPattern } from "./runner.js";
 import type { IdleEngine, IdleTaskResult } from "./runner.js";
 import { listLocalRepos } from "./local-repos.js";
 import {
@@ -817,7 +817,7 @@ program
         await commentCompletion(
           issue,
           buildAgentComment(
-            `${title}\n\nCause: Codex usage limit reached.${detailLine}` +
+            `${title}\n\nCause: ${result.engine ?? "Codex"} usage limit reached.${detailLine}` +
               `\n\nNext automatic retry: ${when.iso} (${when.local}).` +
               `\nThe runner will automatically resume at or after that time.` +
               `\n\nLog: ${result.logPath}`
@@ -1931,8 +1931,70 @@ program
                 return;
               }
 
+              if (result.failureKind === "quota") {
+                const reqPath = resolveReviewQueuePath(config.workdirRoot);
+                await enqueueReviewTask(reqPath, {
+                  issueId: followup.issueId,
+                  prNumber: followup.prNumber,
+                  repo: followup.repo,
+                  url: followup.url,
+                  reason: followup.reason,
+                  requiresEngine: followup.requiresEngine
+                });
+                await tryRemoveLabel(issue, config.labels.running);
+                await tryApplyReviewFollowupLabelState(issue, "queued");
+                const engineName = result.engine ?? followup.engine ?? "unknown";
+                await commentCompletion(
+                  issue,
+                  buildAgentComment(
+                    `Review follow-up paused due to engine capacity limits (${engineName}).` +
+                      `\n\nThe task has been re-queued and will retry when engine capacity is available.` +
+                      `${result.logPath ? `\n\nLog: ${result.logPath}` : ""}`
+                  )
+                );
+                log("info", "Review follow-up re-queued after quota/capacity failure.", json, {
+                  url: followup.url,
+                  engine: engineName
+                }, "review");
+                return;
+              }
               await handleRunFailure(issue, result, "review-followup");
             } catch (error) {
+              const errorMessage = error instanceof Error ? error.message : String(error);
+              if (hasPattern(errorMessage, QUOTA_ERROR_PATTERNS)) {
+                try {
+                  const reqPath = resolveReviewQueuePath(config.workdirRoot);
+                  await enqueueReviewTask(reqPath, {
+                    issueId: followup.issueId,
+                    prNumber: followup.prNumber,
+                    repo: followup.repo,
+                    url: followup.url,
+                    reason: followup.reason,
+                    requiresEngine: followup.requiresEngine
+                  });
+                  await tryRemoveLabel(issue, config.labels.running);
+                  await tryApplyReviewFollowupLabelState(issue, "queued");
+                  const engineName = followup.engine ?? "unknown";
+                  await commentCompletion(
+                    issue,
+                    buildAgentComment(
+                      `Review follow-up paused due to engine capacity limits (${engineName}).` +
+                        `\n\nThe task has been re-queued and will retry when engine capacity is available.`
+                    )
+                  );
+                  log("info", "Review follow-up re-queued after exception with quota pattern.", json, {
+                    url: followup.url,
+                    engine: engineName,
+                    error: errorMessage
+                  }, "review");
+                  return;
+                } catch (requeueError) {
+                  log("warn", "Failed to re-queue review follow-up after quota exception.", json, {
+                    url: followup.url,
+                    error: requeueError instanceof Error ? requeueError.message : String(requeueError)
+                  }, "review");
+                }
+              }
               clearRetry(scheduledRetryStatePath, issue.id);
               clearIssueSession(issueSessionStatePath, issue.id);
               await client.addLabels(issue, [config.labels.failed]);
@@ -1942,9 +2004,7 @@ program
               await commentCompletion(
                 issue,
                 buildAgentComment(
-                  `Agent runner failed review follow-up with error: ${
-                    error instanceof Error ? error.message : String(error)
-                  }`
+                  `Agent runner failed review follow-up with error: ${errorMessage}`
                 )
               );
             } finally {

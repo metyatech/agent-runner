@@ -58,6 +58,7 @@ export type RunResult = {
   summary: string | null;
   activityId: string | null;
   sessionId: string | null;
+  engine: IdleEngine | null;
   failureKind: RunFailureKind | null;
   failureStage: RunFailureStage | null;
   failureDetail: string | null;
@@ -515,7 +516,7 @@ type IssueAttemptResult = {
 };
 
 const SESSION_ID_REGEX = /session id:\s*([0-9a-z-]{8,})/i;
-const QUOTA_ERROR_PATTERNS = [
+export const QUOTA_ERROR_PATTERNS = [
   /usage limit/i,
   /quota[^.\n]*(exceeded|reached|exhausted)/i,
   /rate limit/i,
@@ -549,7 +550,7 @@ function detectSessionId(value: string): string | null {
   return match?.[1] ?? null;
 }
 
-function hasPattern(value: string, patterns: RegExp[]): boolean {
+export function hasPattern(value: string, patterns: RegExp[]): boolean {
   const cleaned = stripAnsi(value);
   return patterns.some((pattern) => pattern.test(cleaned));
 }
@@ -852,6 +853,7 @@ export async function runIssue(
               summary,
               activityId,
               sessionId: latestSessionId,
+              engine,
               failureKind: "needs_user_reply",
               failureStage: stage,
               failureDetail: null,
@@ -865,6 +867,7 @@ export async function runIssue(
             summary,
             activityId,
             sessionId: latestSessionId,
+            engine,
             failureKind: null,
             failureStage: null,
             failureDetail: null,
@@ -888,6 +891,7 @@ export async function runIssue(
             summary,
             activityId,
             sessionId: latestSessionId,
+            engine,
             failureKind: "quota",
             failureStage: stage,
             failureDetail: extractFailureDetail(result.outputTail),
@@ -903,6 +907,7 @@ export async function runIssue(
             summary,
             activityId,
             sessionId: latestSessionId,
+            engine,
             failureKind: "needs_user_reply",
             failureStage: stage,
             failureDetail: extractFailureDetail(result.outputTail),
@@ -932,6 +937,7 @@ export async function runIssue(
           summary,
           activityId,
           sessionId: latestSessionId,
+          engine,
           failureKind: "execution_error",
           failureStage: stage,
           failureDetail: extractFailureDetail(result.outputTail),
