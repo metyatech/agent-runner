@@ -3,7 +3,8 @@ import path from "node:path";
 import { describe, expect, it } from "vitest";
 
 function readRepoFile(...segments: string[]): string {
-  return fs.readFileSync(path.join(process.cwd(), ...segments), "utf8");
+  // Normalize CRLF to LF so string searches with "\n" work on Windows CI
+  return fs.readFileSync(path.join(process.cwd(), ...segments), "utf8").replace(/\r\n/g, "\n");
 }
 
 describe("cli log call style", () => {
