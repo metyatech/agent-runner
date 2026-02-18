@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   buildAmazonQInvocation,
+  buildClaudeInvocation,
   buildCodexInvocation,
   buildCodexResumeInvocation,
   buildGeminiInvocation,
@@ -246,6 +247,145 @@ describe("buildAmazonQInvocation", () => {
 
     expect(invocation.args.at(-1)).toBe("Prompt for Q");
     expect(invocation.stdin).toBeUndefined();
+  });
+});
+
+describe("buildClaudeInvocation", () => {
+  it("passes prompt as last arg when promptMode=arg (default)", () => {
+    const invocation = buildClaudeInvocation(
+      {
+        workdirRoot: "D:\\ghws",
+        labels: {
+          queued: "agent:queued",
+          reviewFollowup: "agent:review-followup",
+          running: "agent:running",
+          done: "agent:done",
+          failed: "agent:failed",
+          needsUserReply: "agent:needs-user"
+        },
+        owner: "metyatech",
+        repos: "all",
+        pollIntervalSeconds: 60,
+        concurrency: 1,
+        claude: {
+          enabled: true,
+          command: "claude",
+          args: ["--print"],
+          promptMode: "arg"
+        },
+        codex: {
+          command: "codex",
+          args: ["exec", "--full-auto"],
+          promptTemplate: "Template {{repos}} {{task}}"
+        }
+      },
+      "D:\\ghws\\repo",
+      "Prompt for Claude"
+    );
+
+    expect(invocation.args.at(-1)).toBe("Prompt for Claude");
+    expect(invocation.stdin).toBeUndefined();
+    expect(invocation.options.shell).toBe(false);
+  });
+
+  it("passes prompt via stdin when promptMode=stdin", () => {
+    const invocation = buildClaudeInvocation(
+      {
+        workdirRoot: "D:\\ghws",
+        labels: {
+          queued: "agent:queued",
+          reviewFollowup: "agent:review-followup",
+          running: "agent:running",
+          done: "agent:done",
+          failed: "agent:failed",
+          needsUserReply: "agent:needs-user"
+        },
+        owner: "metyatech",
+        repos: "all",
+        pollIntervalSeconds: 60,
+        concurrency: 1,
+        claude: {
+          enabled: true,
+          command: "claude",
+          args: ["--print"],
+          promptMode: "stdin"
+        },
+        codex: {
+          command: "codex",
+          args: ["exec", "--full-auto"],
+          promptTemplate: "Template {{repos}} {{task}}"
+        }
+      },
+      "D:\\ghws\\repo",
+      "Prompt for Claude"
+    );
+
+    expect(invocation.args.at(-1)).toBe("--print");
+    expect(invocation.stdin).toBe("Prompt for Claude");
+  });
+
+  it("defaults to arg mode when promptMode is omitted", () => {
+    const invocation = buildClaudeInvocation(
+      {
+        workdirRoot: "D:\\ghws",
+        labels: {
+          queued: "agent:queued",
+          reviewFollowup: "agent:review-followup",
+          running: "agent:running",
+          done: "agent:done",
+          failed: "agent:failed",
+          needsUserReply: "agent:needs-user"
+        },
+        owner: "metyatech",
+        repos: "all",
+        pollIntervalSeconds: 60,
+        concurrency: 1,
+        claude: {
+          enabled: true,
+          command: "claude",
+          args: ["--print"]
+        },
+        codex: {
+          command: "codex",
+          args: ["exec", "--full-auto"],
+          promptTemplate: "Template {{repos}} {{task}}"
+        }
+      },
+      "D:\\ghws\\repo",
+      "Prompt for Claude"
+    );
+
+    expect(invocation.args.at(-1)).toBe("Prompt for Claude");
+    expect(invocation.stdin).toBeUndefined();
+  });
+
+  it("throws when claude config is not set", () => {
+    expect(() =>
+      buildClaudeInvocation(
+        {
+          workdirRoot: "D:\\ghws",
+          labels: {
+            queued: "agent:queued",
+            reviewFollowup: "agent:review-followup",
+            running: "agent:running",
+            done: "agent:done",
+            failed: "agent:failed",
+            needsUserReply: "agent:needs-user"
+          },
+          owner: "metyatech",
+          repos: "all",
+          pollIntervalSeconds: 60,
+          concurrency: 1,
+          codex: {
+            command: "codex",
+            args: ["exec", "--full-auto"],
+            promptTemplate: "Template {{repos}} {{task}}"
+          }
+        },
+        "D:\\ghws\\repo",
+        "Prompt"
+      )
+    ).toThrow("Claude command not configured.");
   });
 });
 

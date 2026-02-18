@@ -11,6 +11,7 @@ import {
 } from "./github.js";
 import { resolveCodexCommand } from "./codex-command.js";
 import { recordAmazonQUsage, resolveAmazonQUsageStatePath } from "./amazon-q-usage.js";
+import { recordClaudeUsage, resolveClaudeUsageStatePath } from "./claude-usage.js";
 import {
   buildIdleDuplicateWorkGuard,
   buildIdleOpenPrContext,
@@ -65,7 +66,7 @@ export type RunResult = {
   quotaResumeAt: string | null;
 };
 
-export type IdleEngine = "codex" | "copilot" | "gemini-pro" | "gemini-flash" | "amazon-q";
+export type IdleEngine = "codex" | "copilot" | "gemini-pro" | "gemini-flash" | "amazon-q" | "claude";
 
 export type IdleTaskResult = {
   success: boolean;
@@ -104,6 +105,34 @@ export function buildAmazonQInvocation(
     promptMode === "arg"
       ? [...resolved.prefixArgs, ...config.amazonQ.args, prompt]
       : [...resolved.prefixArgs, ...config.amazonQ.args];
+
+  return {
+    command: resolved.command,
+    args,
+    stdin: promptMode === "stdin" ? prompt : undefined,
+    options: {
+      cwd: primaryPath,
+      shell: false,
+      env: { ...process.env, ...envOverrides }
+    }
+  };
+}
+
+export function buildClaudeInvocation(
+  config: AgentRunnerConfig,
+  primaryPath: string,
+  prompt: string,
+  envOverrides: NodeJS.ProcessEnv = {}
+): EngineInvocation {
+  if (!config.claude || !config.claude.enabled) {
+    throw new Error("Claude command not configured.");
+  }
+  const resolved = resolveCodexCommand(config.claude.command, process.env.PATH);
+  const promptMode = config.claude.promptMode ?? "arg";
+  const args =
+    promptMode === "arg"
+      ? [...resolved.prefixArgs, ...config.claude.args, prompt]
+      : [...resolved.prefixArgs, ...config.claude.args];
 
   return {
     command: resolved.command,
@@ -645,6 +674,8 @@ async function runCodexAttempt(options: {
       ? buildCopilotInvocation(options.config, options.primaryPath, options.prompt, options.envOverrides)
       : options.engine === "amazon-q"
       ? buildAmazonQInvocation(options.config, options.primaryPath, options.prompt, options.envOverrides)
+      : options.engine === "claude"
+      ? buildClaudeInvocation(options.config, options.primaryPath, options.prompt, options.envOverrides)
       : options.engine === "gemini-pro" || options.engine === "gemini-flash"
       ? buildGeminiInvocation(options.config, options.primaryPath, options.prompt, options.engine, options.envOverrides)
       : options.mode === "resume" && options.resumeSessionId
@@ -1128,6 +1159,8 @@ export async function runIdleTask(
       ? buildCopilotInvocation(config, repoPath, prompt, envOverrides)
       : engine === "amazon-q"
       ? buildAmazonQInvocation(config, repoPath, prompt, envOverrides)
+      : engine === "claude"
+      ? buildClaudeInvocation(config, repoPath, prompt, envOverrides)
       : engine === "gemini-pro" || engine === "gemini-flash"
       ? buildGeminiInvocation(config, repoPath, prompt, engine, envOverrides)
       : buildCodexInvocation(config, repoPath, prompt, { envOverrides, addDir: workRoot });
@@ -1189,6 +1222,17 @@ export async function runIdleTask(
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
         process.stderr.write(`[WARN] Failed to record Amazon Q usage: ${message}\n`);
+      }
+    }
+  }
+  if (engine === "claude") {
+    const shouldRecordUsage = exitCode === 0 || summary !== null;
+    if (shouldRecordUsage) {
+      try {
+        recordClaudeUsage(resolveClaudeUsageStatePath(config.workdirRoot), 1, new Date());
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        process.stderr.write(`[WARN] Failed to record Claude usage: ${message}\n`);
       }
     }
   }

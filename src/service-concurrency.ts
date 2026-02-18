@@ -2,7 +2,7 @@ import pLimit from "p-limit";
 import type { AgentRunnerConfig } from "./config.js";
 import type { IdleEngine } from "./runner.js";
 
-export type ServiceName = "codex" | "copilot" | "gemini" | "amazon-q";
+export type ServiceName = "codex" | "copilot" | "gemini" | "amazon-q" | "claude";
 
 function normalizePositiveInt(value: unknown, fallback: number): number {
   if (typeof value !== "number" || !Number.isFinite(value)) {
@@ -20,7 +20,8 @@ export function resolveServiceConcurrency(config: AgentRunnerConfig): Record<Ser
     codex: 1,
     copilot: 1,
     gemini: 1,
-    "amazon-q": 1
+    "amazon-q": 1,
+    claude: 1
   };
 
   const overrides = config.serviceConcurrency;
@@ -32,7 +33,8 @@ export function resolveServiceConcurrency(config: AgentRunnerConfig): Record<Ser
     codex: normalizePositiveInt(overrides.codex, defaults.codex),
     copilot: normalizePositiveInt(overrides.copilot, defaults.copilot),
     gemini: normalizePositiveInt(overrides.gemini, defaults.gemini),
-    "amazon-q": normalizePositiveInt(overrides.amazonQ, defaults["amazon-q"])
+    "amazon-q": normalizePositiveInt(overrides.amazonQ, defaults["amazon-q"]),
+    claude: normalizePositiveInt(overrides.claude, defaults.claude)
   };
 }
 
@@ -44,6 +46,8 @@ export function idleEngineToService(engine: IdleEngine): ServiceName {
       return "copilot";
     case "amazon-q":
       return "amazon-q";
+    case "claude":
+      return "claude";
     case "gemini-pro":
     case "gemini-flash":
       return "gemini";
@@ -62,7 +66,8 @@ export function createServiceLimiters(
     codex: pLimit(concurrency.codex),
     copilot: pLimit(concurrency.copilot),
     gemini: pLimit(concurrency.gemini),
-    "amazon-q": pLimit(concurrency["amazon-q"])
+    "amazon-q": pLimit(concurrency["amazon-q"]),
+    claude: pLimit(concurrency.claude)
   };
 }
 

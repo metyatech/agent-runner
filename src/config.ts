@@ -15,6 +15,7 @@ export type AgentRunnerConfig = {
     copilot?: number;
     gemini?: number;
     amazonQ?: number;
+    claude?: number;
   };
   logMaintenance?: {
     enabled: boolean;
@@ -35,6 +36,12 @@ export type AgentRunnerConfig = {
     command: string;
     args: string[];
     promptMode?: "stdin" | "arg";
+  };
+  claude?: {
+    enabled: boolean;
+    command: string;
+    args: string[];
+    promptMode?: "arg" | "stdin";
   };
   idle?: {
     enabled: boolean;
@@ -80,6 +87,15 @@ export type AgentRunnerConfig = {
       minRemainingPercentAtEnd: number;
     };
     amazonQUsageGate?: {
+      enabled: boolean;
+      monthlyLimit: number;
+      monthlySchedule: {
+        startMinutes: number;
+        minRemainingPercentAtStart: number;
+        minRemainingPercentAtEnd: number;
+      };
+    };
+    claudeUsageGate?: {
       enabled: boolean;
       monthlyLimit: number;
       monthlySchedule: {

@@ -8,7 +8,7 @@ export type ActivityKind = "issue" | "idle";
 export type ActivityRecord = {
   id: string;
   kind: ActivityKind;
-  engine?: "codex" | "copilot" | "gemini-pro" | "gemini-flash" | "amazon-q";
+  engine?: "codex" | "copilot" | "gemini-pro" | "gemini-flash" | "amazon-q" | "claude";
   repo: RepoInfo;
   startedAt: string;
   pid: number;

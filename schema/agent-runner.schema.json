@@ -39,7 +39,8 @@
         "codex": { "type": "integer", "minimum": 1, "maximum": 16 },
         "copilot": { "type": "integer", "minimum": 1, "maximum": 16 },
         "gemini": { "type": "integer", "minimum": 1, "maximum": 16 },
-        "amazonQ": { "type": "integer", "minimum": 1, "maximum": 16 }
+        "amazonQ": { "type": "integer", "minimum": 1, "maximum": 16 },
+        "claude": { "type": "integer", "minimum": 1, "maximum": 16 }
       },
       "additionalProperties": false
     },
@@ -75,6 +76,17 @@
         "command": { "type": "string", "minLength": 1 },
         "args": { "type": "array", "items": { "type": "string" } },
         "promptMode": { "type": "string", "enum": ["stdin", "arg"] }
+      },
+      "additionalProperties": false
+    },
+    "claude": {
+      "type": "object",
+      "required": ["enabled", "command", "args"],
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "command": { "type": "string", "minLength": 1 },
+        "args": { "type": "array", "items": { "type": "string" } },
+        "promptMode": { "type": "string", "enum": ["arg", "stdin"] }
       },
       "additionalProperties": false
     },
@@ -187,6 +199,29 @@
           "additionalProperties": false
         },
         "amazonQUsageGate": {
+          "type": "object",
+          "required": ["enabled", "monthlyLimit", "monthlySchedule"],
+          "properties": {
+            "enabled": { "type": "boolean" },
+            "monthlyLimit": { "type": "integer", "minimum": 1, "maximum": 1000000 },
+            "monthlySchedule": {
+              "type": "object",
+              "required": [
+                "startMinutes",
+                "minRemainingPercentAtStart",
+                "minRemainingPercentAtEnd"
+              ],
+              "properties": {
+                "startMinutes": { "type": "integer", "minimum": 0, "maximum": 525600 },
+                "minRemainingPercentAtStart": { "type": "number", "minimum": 0, "maximum": 100 },
+                "minRemainingPercentAtEnd": { "type": "number", "minimum": 0, "maximum": 100 }
+              },
+              "additionalProperties": false
+            }
+          },
+          "additionalProperties": false
+        },
+        "claudeUsageGate": {
           "type": "object",
           "required": ["enabled", "monthlyLimit", "monthlySchedule"],
           "properties": {

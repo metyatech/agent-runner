@@ -33,7 +33,8 @@ describe("service-concurrency", () => {
       codex: 1,
       copilot: 1,
       gemini: 1,
-      "amazon-q": 1
+      "amazon-q": 1,
+      claude: 1
     });
   });
 
@@ -44,7 +45,8 @@ describe("service-concurrency", () => {
           codex: 2,
           copilot: 0,
           gemini: 1.9,
-          amazonQ: Number.NaN
+          amazonQ: Number.NaN,
+          claude: 3
         }
       })
     );
@@ -53,7 +55,8 @@ describe("service-concurrency", () => {
       codex: 2,
       copilot: 1,
       gemini: 1,
-      "amazon-q": 1
+      "amazon-q": 1,
+      claude: 3
     });
   });
 
@@ -61,6 +64,7 @@ describe("service-concurrency", () => {
     expect(idleEngineToService("codex")).toBe("codex");
     expect(idleEngineToService("copilot")).toBe("copilot");
     expect(idleEngineToService("amazon-q")).toBe("amazon-q");
+    expect(idleEngineToService("claude")).toBe("claude");
     expect(idleEngineToService("gemini-pro")).toBe("gemini");
     expect(idleEngineToService("gemini-flash")).toBe("gemini");
   });
