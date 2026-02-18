@@ -19,11 +19,13 @@ export interface ClaudeUsageData {
   } | null;
 }
 
-export type ClaudeUsageGateConfig = {
+export interface ClaudeUsageGateConfig {
   enabled: boolean;
-  fiveHourSchedule?: UsageRampSchedule;
+  minRemainingPercent?: {
+    fiveHour: number; // hard floor, e.g. 50
+  };
   weeklySchedule?: UsageRampSchedule;
-};
+}
 
 export type ClaudeUsageGateDecision = {
   allowed: boolean;
@@ -142,35 +144,34 @@ export function evaluateClaudeUsageGate(
     return { allowed: false, reason: "Usage data unavailable." };
   }
 
-  const reasons: string[] = [];
-
-  // Check five-hour window
-  if (gate.fiveHourSchedule && usage.five_hour) {
-    const bucket = usage.five_hour;
-    const remainingPercent = Math.max(0, Math.min(100, 100 - bucket.utilization));
-    const resetAt = new Date(bucket.resets_at);
-    const decision = evaluateUsageRamp(remainingPercent, resetAt, gate.fiveHourSchedule, now);
-    if (decision.allow) {
-      return { allowed: true, reason: `Five-hour window: ${decision.reason}` };
-    }
-    reasons.push(`Five-hour blocked (${decision.reason})`);
-  }
-
-  // Check weekly window
+  // Step 1: Weekly schedule check (ramp, same as Codex)
   if (gate.weeklySchedule && usage.seven_day) {
     const bucket = usage.seven_day;
     const remainingPercent = Math.max(0, Math.min(100, 100 - bucket.utilization));
     const resetAt = new Date(bucket.resets_at);
     const decision = evaluateUsageRamp(remainingPercent, resetAt, gate.weeklySchedule, now);
-    if (decision.allow) {
-      return { allowed: true, reason: `Weekly window: ${decision.reason}` };
+    if (!decision.allow) {
+      return { allowed: false, reason: `Weekly blocked (${decision.reason})` };
     }
-    reasons.push(`Weekly blocked (${decision.reason})`);
+  } else if (gate.weeklySchedule && !usage.seven_day) {
+    return { allowed: false, reason: "Weekly blocked (seven_day usage data unavailable)." };
   }
 
-  if (reasons.length === 0) {
+  // Step 2: 5-hour hard floor check (only if weekly passed or not configured)
+  if (gate.minRemainingPercent?.fiveHour !== undefined && usage.five_hour) {
+    const fiveHourRemaining = Math.max(0, Math.min(100, 100 - usage.five_hour.utilization));
+    const threshold = gate.minRemainingPercent.fiveHour;
+    if (fiveHourRemaining < threshold) {
+      return {
+        allowed: false,
+        reason: `Five-hour floor: ${fiveHourRemaining.toFixed(1)}% remaining (threshold ${threshold}%)`
+      };
+    }
+  }
+
+  if (!gate.weeklySchedule && gate.minRemainingPercent?.fiveHour === undefined) {
     return { allowed: false, reason: "No applicable usage window configured." };
   }
 
-  return { allowed: false, reason: reasons.join("; ") };
+  return { allowed: true, reason: "Claude usage gate passed." };
 }

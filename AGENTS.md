@@ -69,6 +69,13 @@ Source: github:metyatech/agent-rules@HEAD/rules/global/agent-rules-composition.m
 - Use short, action-oriented bullets; avoid numbered lists unless order matters.
 - Prefer the most general applicable rule to avoid duplication.
 
+## Rule placement (global vs domain)
+
+- Decide rule placement based on **where the rule is needed**, not what topic it covers.
+- If the rule could be needed from any workspace or repository, make it global.
+- Only use domain rules when the rule is strictly relevant inside repositories that opt in to that domain.
+- Before choosing domain, verify: "Will this rule ever be needed when working from a workspace that does not include this domain?" If yes, make it global.
+
 Source: github:metyatech/agent-rules@HEAD/rules/global/autonomous-operations.md
 
 # Autonomous operations
@@ -393,17 +400,48 @@ Source: github:metyatech/agent-rules@HEAD/rules/global/quality-testing-and-error
 - Log minimally but with diagnostic context; never log secrets or personal data.
 - Remove temporary debugging/instrumentation before the final patch.
 
-Source: github:metyatech/agent-rules@HEAD/rules/global/superpowers-integration.md
+Source: github:metyatech/agent-rules@HEAD/rules/global/skill-authoring.md
 
-# Superpowers integration
+# Skill authoring standards
 
-- If Superpowers skills are available in the current agent environment, use them to drive *how* you work (design, planning, debugging, TDD, review) instead of inventing an ad-hoc process.
-- Do not duplicate Superpowers installation/usage instructions in this ruleset; follow Superpowers’ own guidance for loading/invoking skills.
-- The hard gates in this ruleset still apply when using Superpowers workflows:
-  - Before any state-changing work: present AC + AC->evidence + a plan, then wait for an explicit “yes”.
-  - After changes: report AC -> evidence outcomes and the exact verification commands executed.
-- When a Superpowers workflow asks for writing docs / commits / pushes, treat those as state-changing steps: include them in the plan and require explicit requester approval before doing them.
-- If Superpowers skills are unavailable, proceed with these rules as the fallback.
+## SKILL.md format (Agent Skills open standard)
+
+- Follow the Agent Skills open standard (agentskills.io/specification).
+- SKILL.md frontmatter must contain only `name` and `description`; do not add platform-specific fields.
+- `name`: lowercase alphanumeric and hyphens only, max 64 characters.
+- `description`: explain when the skill should and should not trigger; this is the only text used for skill selection.
+
+## Platform independence
+
+- SKILL.md body must be platform-agnostic: do not reference platform-specific tool names
+  (e.g., `Task`, `TeamCreate`, `codex exec`, Cursor-specific APIs).
+- Write instructions in terms of intent ("launch a background agent", "track tasks",
+  "create a team") and let each agent use its own tools.
+- Platform-specific invocation examples (`/skill` for Claude Code, `$skill` for Codex)
+  belong in README.md, not in SKILL.md.
+
+## Distribution
+
+- Each skill lives in its own repository.
+- Use clear, descriptive repository names (e.g., `skill-manager`).
+- Keep SKILL.md at the repository root for `npx skills add` compatibility.
+- Install and manage skills via `npx skills add <owner>/<repo>` (vercel-labs/skills);
+  do not build custom installers.
+
+## Publishing
+
+- Default to public repositories so skills are installable by anyone
+  via `npx skills add`.
+- Write SKILL.md and README.md with external users in mind:
+  assume no prior knowledge of internal conventions.
+- Include a LICENSE file (prefer MIT).
+
+## Content guidelines
+
+- Write SKILL.md body and README.md in English (developer-facing).
+- Keep instructions concise, action-oriented, and testable.
+- Do not duplicate rules already covered by AGENTS.md global rules
+  (e.g., TDD, verification, planning gates); reference them instead.
 
 Source: github:metyatech/agent-rules@HEAD/rules/global/user-identity-and-accounts.md
 

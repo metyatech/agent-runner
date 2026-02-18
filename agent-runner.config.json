@@ -83,10 +83,8 @@
     },
     "claudeUsageGate": {
       "enabled": true,
-      "fiveHourSchedule": {
-        "startMinutes": 60,
-        "minRemainingPercentAtStart": 100,
-        "minRemainingPercentAtEnd": 0
+      "minRemainingPercent": {
+        "fiveHour": 50
       },
       "weeklySchedule": {
         "startMinutes": 1440,

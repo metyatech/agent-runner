@@ -173,12 +173,11 @@ describe("fetchClaudeUsage", () => {
 // ---------------------------------------------------------------------------
 
 describe("evaluateClaudeUsageGate", () => {
+  // Base gate mirrors the Codex-equivalent config: weekly ramp + 5-hour hard floor
   const baseGate: ClaudeUsageGateConfig = {
     enabled: true,
-    fiveHourSchedule: {
-      startMinutes: 60,
-      minRemainingPercentAtStart: 100,
-      minRemainingPercentAtEnd: 0
+    minRemainingPercent: {
+      fiveHour: 50
     },
     weeklySchedule: {
       startMinutes: 1440,
@@ -205,84 +204,88 @@ describe("evaluateClaudeUsageGate", () => {
     expect(decision.reason).toContain("disabled");
   });
 
-  it("blocks when reset is too far away for both windows", () => {
-    // now = 2026-02-18T00:00:00Z; resets are both far in the future
+  it("blocks when weekly reset is too far away (regardless of 5-hour)", () => {
+    // now = 2026-02-18T00:00:00Z; seven_day resets in 10 days — far beyond 1440m threshold
     const now = new Date("2026-02-18T00:00:00Z");
     const usage: ClaudeUsageData = {
       five_hour: {
-        utilization: 0,
-        resets_at: "2026-02-18T10:00:00Z" // 600 minutes away — beyond 60m threshold
+        utilization: 0, // 100% remaining — 5-hour would pass its floor
+        resets_at: "2026-02-18T04:00:00Z"
       },
       seven_day: {
         utilization: 0,
-        resets_at: "2026-02-25T09:00:00Z" // days away — beyond 1440m threshold
+        resets_at: "2026-02-28T00:00:00Z" // ~14400 min away — well beyond 1440m threshold
       },
       seven_day_sonnet: null,
       extra_usage: null
     };
     const decision = evaluateClaudeUsageGate(usage, baseGate, now);
     expect(decision.allowed).toBe(false);
+    expect(decision.reason).toContain("Weekly blocked");
   });
 
-  it("allows via five-hour window when close to reset with high remaining", () => {
-    // now = 2026-02-18T13:10:00Z; five_hour resets at 14:00:00 = 50 minutes away (within 60m threshold)
-    const now = new Date("2026-02-18T13:10:00Z");
-    const usage: ClaudeUsageData = {
-      five_hour: {
-        utilization: 0, // 100% remaining
-        resets_at: "2026-02-18T14:00:00Z"
-      },
-      seven_day: {
-        utilization: 97,
-        resets_at: "2026-02-25T09:00:00Z" // far away — weekly blocked
-      },
-      seven_day_sonnet: null,
-      extra_usage: null
-    };
-    const decision = evaluateClaudeUsageGate(usage, baseGate, now);
-    expect(decision.allowed).toBe(true);
-    expect(decision.reason).toContain("Five-hour");
-  });
-
-  it("allows via weekly window when close to reset with high remaining", () => {
-    // now = 2026-02-24T09:00:00Z; seven_day resets at 2026-02-25T09:00:00Z = 1440 min away (at boundary)
+  it("allows when weekly is close and 5-hour remaining >= 50%", () => {
+    // now = 2026-02-24T09:00:00Z; seven_day resets in 1440 min (at boundary of startMinutes)
+    // 5-hour utilization = 40 → 60% remaining → passes 50% floor
     const now = new Date("2026-02-24T09:00:00Z");
     const usage: ClaudeUsageData = {
       five_hour: {
-        utilization: 95, // low remaining — five_hour blocked
-        resets_at: "2026-02-24T10:00:00Z" // 60 min away but too little remaining
+        utilization: 40, // 60% remaining — above 50% floor
+        resets_at: "2026-02-24T13:00:00Z"
       },
       seven_day: {
-        utilization: 0, // 100% remaining
-        resets_at: "2026-02-25T09:00:00Z"
+        utilization: 0, // 100% remaining — well above weekly ramp requirement
+        resets_at: "2026-02-25T09:00:00Z" // exactly 1440 min away
       },
       seven_day_sonnet: null,
       extra_usage: null
     };
     const decision = evaluateClaudeUsageGate(usage, baseGate, now);
     expect(decision.allowed).toBe(true);
-    expect(decision.reason).toContain("Weekly");
+    expect(decision.reason).toContain("passed");
   });
 
-  it("blocks when utilization is too high (low remaining) near reset", () => {
-    // five_hour: 50 minutes to reset, utilization=80 (20% remaining)
-    // gate requires 100% at start=60m, ramps to 0% at end=0m
-    // at 50/60 ratio: required = 0 + (100-0)*(50/60) ≈ 83.3% — 20% < 83.3% → blocked
-    const now = new Date("2026-02-18T13:10:00Z");
+  it("blocks when weekly is close but 5-hour remaining < 50% floor", () => {
+    // Weekly passes ramp, but 5-hour has only 30% remaining (below 50% floor)
+    const now = new Date("2026-02-24T09:00:00Z");
     const usage: ClaudeUsageData = {
       five_hour: {
-        utilization: 80,
-        resets_at: "2026-02-18T14:00:00Z"
+        utilization: 70, // 30% remaining — below 50% floor
+        resets_at: "2026-02-24T13:00:00Z"
       },
       seven_day: {
-        utilization: 80,
-        resets_at: "2026-02-25T09:00:00Z" // far away
+        utilization: 0, // 100% remaining — weekly passes ramp
+        resets_at: "2026-02-25T09:00:00Z" // 1440 min away
       },
       seven_day_sonnet: null,
       extra_usage: null
     };
     const decision = evaluateClaudeUsageGate(usage, baseGate, now);
     expect(decision.allowed).toBe(false);
+    expect(decision.reason).toContain("Five-hour floor");
+    expect(decision.reason).toContain("30.0%");
+    expect(decision.reason).toContain("threshold 50%");
+  });
+
+  it("blocks when weekly ramp fails due to low remaining near reset", () => {
+    // seven_day is 500 min away (within 1440m threshold), but utilization=97 (3% remaining)
+    // at ratio=500/1440: required = 0 + 100*(500/1440) ≈ 34.7% — 3% < 34.7% → weekly blocked
+    const now = new Date("2026-02-24T20:40:00Z");
+    const usage: ClaudeUsageData = {
+      five_hour: {
+        utilization: 0, // 100% remaining — 5-hour would pass
+        resets_at: "2026-02-25T00:00:00Z"
+      },
+      seven_day: {
+        utilization: 97, // only 3% remaining
+        resets_at: "2026-02-25T09:00:00Z" // ~500 min away
+      },
+      seven_day_sonnet: null,
+      extra_usage: null
+    };
+    const decision = evaluateClaudeUsageGate(usage, baseGate, now);
+    expect(decision.allowed).toBe(false);
+    expect(decision.reason).toContain("Weekly blocked");
   });
 
   it("returns allowed=false when no schedules configured", () => {
@@ -296,5 +299,27 @@ describe("evaluateClaudeUsageGate", () => {
     const decision = evaluateClaudeUsageGate(usage, gateNoSchedules, new Date());
     expect(decision.allowed).toBe(false);
     expect(decision.reason).toContain("No applicable");
+  });
+
+  it("allows when only weeklySchedule configured and it passes (no 5-hour floor)", () => {
+    // Gate has only weeklySchedule, no minRemainingPercent
+    const gateWeeklyOnly: ClaudeUsageGateConfig = {
+      enabled: true,
+      weeklySchedule: {
+        startMinutes: 1440,
+        minRemainingPercentAtStart: 100,
+        minRemainingPercentAtEnd: 0
+      }
+    };
+    // Weekly: 1440 min away, 100% remaining — passes ramp (required = 100% at start, exactly at boundary)
+    const now = new Date("2026-02-24T09:00:00Z");
+    const usage: ClaudeUsageData = {
+      five_hour: { utilization: 90, resets_at: "2026-02-24T13:00:00Z" }, // would fail floor if configured
+      seven_day: { utilization: 0, resets_at: "2026-02-25T09:00:00Z" },
+      seven_day_sonnet: null,
+      extra_usage: null
+    };
+    const decision = evaluateClaudeUsageGate(usage, gateWeeklyOnly, now);
+    expect(decision.allowed).toBe(true);
   });
 });

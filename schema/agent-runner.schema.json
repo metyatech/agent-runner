@@ -226,17 +226,10 @@
           "required": ["enabled"],
           "properties": {
             "enabled": { "type": "boolean" },
-            "fiveHourSchedule": {
+            "minRemainingPercent": {
               "type": "object",
-              "required": [
-                "startMinutes",
-                "minRemainingPercentAtStart",
-                "minRemainingPercentAtEnd"
-              ],
               "properties": {
-                "startMinutes": { "type": "integer", "minimum": 0, "maximum": 10080 },
-                "minRemainingPercentAtStart": { "type": "number", "minimum": 0, "maximum": 100 },
-                "minRemainingPercentAtEnd": { "type": "number", "minimum": 0, "maximum": 100 }
+                "fiveHour": { "type": "number", "minimum": 0, "maximum": 100 }
               },
               "additionalProperties": false
             },
