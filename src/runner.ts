@@ -555,6 +555,22 @@ export function hasPattern(value: string, patterns: RegExp[]): boolean {
   return patterns.some((pattern) => pattern.test(cleaned));
 }
 
+export function extractErrorMessage(error: unknown): string {
+  if (error instanceof Error) return error.message;
+  if (typeof error === "string") return error;
+  if (error !== null && typeof error === "object") {
+    const obj = error as Record<string, unknown>;
+    const msg = obj["message"] ?? obj["reason"] ?? obj["detail"];
+    if (msg !== undefined && msg !== null) return String(msg);
+    try {
+      return JSON.stringify(error);
+    } catch {
+      return String(error);
+    }
+  }
+  return String(error);
+}
+
 function extractFailureDetail(value: string): string | null {
   const lines = stripAnsi(value)
     .split(/\r?\n/)

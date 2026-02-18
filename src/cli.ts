@@ -33,7 +33,7 @@ import {
 } from "./amazon-q-usage.js";
 import { commandExists } from "./command-exists.js";
 import { listTargetRepos, listQueuedIssues, pickNextIssues } from "./queue.js";
-import { planIdleTasks, runIdleTask, runIssue, QUOTA_ERROR_PATTERNS, hasPattern } from "./runner.js";
+import { planIdleTasks, runIdleTask, runIssue, QUOTA_ERROR_PATTERNS, hasPattern, extractErrorMessage } from "./runner.js";
 import type { IdleEngine, IdleTaskResult } from "./runner.js";
 import { listLocalRepos } from "./local-repos.js";
 import {
@@ -524,8 +524,20 @@ program
       try {
         await client.removeLabel(issue, label);
       } catch (error) {
+        const status =
+          error !== null && typeof error === "object" && "status" in error
+            ? (error as { status?: unknown }).status
+            : undefined;
+        const message = extractErrorMessage(error).toLowerCase();
+        if (
+          status === 404 ||
+          status === 422 ||
+          message.includes("label does not exist")
+        ) {
+          return;
+        }
         log("warn", `Failed to remove label ${label} from ${issue.url}`, json, {
-          error: error instanceof Error ? error.message : String(error)
+          error: extractErrorMessage(error)
         }, "run");
       }
     };
@@ -810,6 +822,7 @@ program
         const runAfter = result.quotaResumeAt ?? fallback;
         scheduleRetry(scheduledRetryStatePath, issue, runAfter, result.sessionId);
         await client.addLabels(issue, [config.labels.failed]);
+        await tryRemoveLabel(issue, config.labels.done);
         await tryRemoveLabel(issue, config.labels.running);
         await tryRemoveLabel(issue, config.labels.needsUserReply);
         await tryRemoveReviewFollowupLabels(issue);
@@ -852,6 +865,7 @@ program
 
       clearIssueSession(issueSessionStatePath, issue.id);
       await client.addLabels(issue, [config.labels.failed]);
+      await tryRemoveLabel(issue, config.labels.done);
       await tryRemoveLabel(issue, config.labels.running);
       await tryRemoveLabel(issue, config.labels.needsUserReply);
       await tryRemoveReviewFollowupLabels(issue);
@@ -1778,9 +1792,7 @@ program
               await commentCompletion(
                 issue,
                 buildAgentComment(
-                  `Agent runner failed with error: ${
-                    error instanceof Error ? error.message : String(error)
-                  }`
+                  `Agent runner failed with error: ${extractErrorMessage(error)}`
                 )
               );
             } finally {
@@ -1960,7 +1972,7 @@ program
               }
               await handleRunFailure(issue, result, "review-followup");
             } catch (error) {
-              const errorMessage = error instanceof Error ? error.message : String(error);
+              const errorMessage = extractErrorMessage(error);
               if (hasPattern(errorMessage, QUOTA_ERROR_PATTERNS)) {
                 try {
                   const reqPath = resolveReviewQueuePath(config.workdirRoot);
