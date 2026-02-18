@@ -2,153 +2,175 @@ import fs from "node:fs";
 import path from "node:path";
 import { evaluateUsageRamp, type UsageRampSchedule } from "./usage-gate-common.js";
 
+export interface ClaudeUsageBucket {
+  utilization: number; // 0-100
+  resets_at: string; // ISO 8601
+}
+
+export interface ClaudeUsageData {
+  five_hour: ClaudeUsageBucket | null;
+  seven_day: ClaudeUsageBucket | null;
+  seven_day_sonnet: ClaudeUsageBucket | null;
+  extra_usage: {
+    is_enabled: boolean;
+    monthly_limit: number | null;
+    used_credits: number;
+    utilization: number;
+  } | null;
+}
+
 export type ClaudeUsageGateConfig = {
   enabled: boolean;
-  monthlyLimit: number;
-  monthlySchedule: UsageRampSchedule;
-};
-
-export type ClaudeUsageSnapshot = {
-  used: number;
-  limit: number;
-  percentRemaining: number;
-  resetAt: Date;
-  periodKey: string;
+  fiveHourSchedule?: UsageRampSchedule;
+  weeklySchedule?: UsageRampSchedule;
 };
 
 export type ClaudeUsageGateDecision = {
-  allow: boolean;
+  allowed: boolean;
   reason: string;
-  percentRemaining?: number;
-  minutesToReset?: number;
-  resetAt?: Date;
-  used?: number;
-  limit?: number;
 };
 
-type ClaudeUsageState = {
-  periodKey: string;
-  used: number;
-  updatedAt: string;
-};
-
-function resolveMonthlyPeriodKey(now: Date): string {
-  const year = now.getUTCFullYear();
-  const month = now.getUTCMonth() + 1;
-  return `${year}-${String(month).padStart(2, "0")}`;
+function getClaudeConfigDir(): string {
+  const home = process.env.USERPROFILE ?? process.env.HOME ?? "";
+  return path.join(home, ".claude");
 }
 
-function resolveNextMonthlyResetAt(now: Date): Date {
-  return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1, 0, 0, 0, 0));
-}
-
-function normalizeUsed(value: unknown): number | null {
-  if (typeof value !== "number" || !Number.isFinite(value)) {
+function readClaudeCredentials(): { accessToken: string; expiresAt: number } | null {
+  const credsPath = path.join(getClaudeConfigDir(), ".credentials.json");
+  try {
+    if (!fs.existsSync(credsPath)) return null;
+    const raw = fs.readFileSync(credsPath, "utf8");
+    const parsed = JSON.parse(raw) as unknown;
+    if (!parsed || typeof parsed !== "object") return null;
+    const record = parsed as Record<string, unknown>;
+    const oauth = record.claudeAiOauth;
+    if (!oauth || typeof oauth !== "object") return null;
+    const oauthRecord = oauth as Record<string, unknown>;
+    const accessToken =
+      typeof oauthRecord.accessToken === "string" && oauthRecord.accessToken.length > 0
+        ? oauthRecord.accessToken
+        : null;
+    const expiresAt =
+      typeof oauthRecord.expiresAt === "number" && Number.isFinite(oauthRecord.expiresAt)
+        ? oauthRecord.expiresAt
+        : null;
+    if (!accessToken || expiresAt === null) return null;
+    return { accessToken, expiresAt };
+  } catch {
     return null;
   }
-  return Math.max(0, Math.floor(value));
 }
 
-export function resolveClaudeUsageStatePath(workdirRoot: string): string {
-  return path.resolve(workdirRoot, "agent-runner", "state", "claude-usage.json");
-}
+export async function fetchClaudeUsage(timeoutMs: number = 5000): Promise<ClaudeUsageData | null> {
+  try {
+    const creds = readClaudeCredentials();
+    if (!creds) return null;
 
-export function loadClaudeUsageState(statePath: string, now: Date = new Date()): ClaudeUsageState {
-  const currentPeriodKey = resolveMonthlyPeriodKey(now);
-  if (!fs.existsSync(statePath)) {
-    return {
-      periodKey: currentPeriodKey,
-      used: 0,
-      updatedAt: now.toISOString()
+    // Check token expiry with 5-minute buffer
+    if (Date.now() + 300_000 >= creds.expiresAt) return null;
+
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
+
+    let res: Response;
+    try {
+      res = await fetch("https://api.anthropic.com/api/oauth/usage", {
+        method: "GET",
+        headers: {
+          Authorization: `Bearer ${creds.accessToken}`,
+          "Content-Type": "application/json",
+          "anthropic-beta": "oauth-2025-04-20"
+        },
+        signal: controller.signal
+      });
+    } finally {
+      clearTimeout(timer);
+    }
+
+    if (!res.ok) return null;
+
+    const data = (await res.json()) as unknown;
+    if (!data || typeof data !== "object") return null;
+    const record = data as Record<string, unknown>;
+
+    const parseBucket = (val: unknown): ClaudeUsageBucket | null => {
+      if (!val || typeof val !== "object") return null;
+      const b = val as Record<string, unknown>;
+      const utilization =
+        typeof b.utilization === "number" && Number.isFinite(b.utilization) ? b.utilization : null;
+      const resets_at = typeof b.resets_at === "string" ? b.resets_at : null;
+      if (utilization === null || !resets_at) return null;
+      return { utilization, resets_at };
     };
-  }
 
-  const raw = fs.readFileSync(statePath, "utf8");
-  const parsed = JSON.parse(raw) as unknown;
-  if (!parsed || typeof parsed !== "object") {
-    throw new Error(`Invalid Claude usage state at ${statePath}`);
-  }
-  const record = parsed as Record<string, unknown>;
-
-  const periodKey = typeof record.periodKey === "string" ? record.periodKey : null;
-  const used = normalizeUsed(record.used);
-  const updatedAt = typeof record.updatedAt === "string" ? record.updatedAt : null;
-
-  if (!periodKey || used === null || !updatedAt) {
-    throw new Error(`Invalid Claude usage state at ${statePath}`);
-  }
-
-  if (periodKey !== currentPeriodKey) {
-    return {
-      periodKey: currentPeriodKey,
-      used: 0,
-      updatedAt: now.toISOString()
+    const parseExtraUsage = (val: unknown) => {
+      if (!val || typeof val !== "object") return null;
+      const e = val as Record<string, unknown>;
+      const is_enabled = typeof e.is_enabled === "boolean" ? e.is_enabled : false;
+      const monthly_limit =
+        typeof e.monthly_limit === "number" && Number.isFinite(e.monthly_limit)
+          ? e.monthly_limit
+          : null;
+      const used_credits =
+        typeof e.used_credits === "number" && Number.isFinite(e.used_credits) ? e.used_credits : 0;
+      const utilization =
+        typeof e.utilization === "number" && Number.isFinite(e.utilization) ? e.utilization : 0;
+      return { is_enabled, monthly_limit, used_credits, utilization };
     };
+
+    return {
+      five_hour: parseBucket(record.five_hour),
+      seven_day: parseBucket(record.seven_day),
+      seven_day_sonnet: parseBucket(record.seven_day_sonnet),
+      extra_usage: parseExtraUsage(record.extra_usage)
+    };
+  } catch {
+    return null;
   }
-
-  return { periodKey, used, updatedAt };
-}
-
-export function saveClaudeUsageState(statePath: string, state: ClaudeUsageState): void {
-  fs.mkdirSync(path.dirname(statePath), { recursive: true });
-  fs.writeFileSync(statePath, JSON.stringify(state, null, 2));
-}
-
-export function recordClaudeUsage(
-  statePath: string,
-  count: number = 1,
-  now: Date = new Date()
-): ClaudeUsageState {
-  const normalizedCount = Math.max(0, Math.floor(count));
-  const state = loadClaudeUsageState(statePath, now);
-  const updated: ClaudeUsageState = {
-    periodKey: state.periodKey,
-    used: state.used + normalizedCount,
-    updatedAt: now.toISOString()
-  };
-  saveClaudeUsageState(statePath, updated);
-  return updated;
-}
-
-export function getClaudeUsageSnapshot(
-  statePath: string,
-  gate: ClaudeUsageGateConfig,
-  now: Date = new Date()
-): ClaudeUsageSnapshot {
-  const state = loadClaudeUsageState(statePath, now);
-  const limit = gate.monthlyLimit;
-  const used = Math.max(0, state.used);
-  const percentRemaining =
-    limit <= 0 ? 0 : Math.min(100, Math.max(0, ((limit - used) / limit) * 100));
-
-  return {
-    used,
-    limit,
-    percentRemaining,
-    resetAt: resolveNextMonthlyResetAt(now),
-    periodKey: state.periodKey
-  };
 }
 
 export function evaluateClaudeUsageGate(
-  usage: ClaudeUsageSnapshot,
+  usage: ClaudeUsageData | null,
   gate: ClaudeUsageGateConfig,
   now: Date = new Date()
 ): ClaudeUsageGateDecision {
-  const decision = evaluateUsageRamp(
-    usage.percentRemaining,
-    usage.resetAt,
-    gate.monthlySchedule,
-    now
-  );
+  if (!gate.enabled) {
+    return { allowed: false, reason: "Gate disabled." };
+  }
 
-  return {
-    allow: decision.allow,
-    reason: `Monthly ${decision.reason}`,
-    percentRemaining: usage.percentRemaining,
-    minutesToReset: decision.minutesToReset,
-    resetAt: usage.resetAt,
-    used: usage.used,
-    limit: usage.limit
-  };
+  if (!usage) {
+    return { allowed: false, reason: "Usage data unavailable." };
+  }
+
+  const reasons: string[] = [];
+
+  // Check five-hour window
+  if (gate.fiveHourSchedule && usage.five_hour) {
+    const bucket = usage.five_hour;
+    const remainingPercent = Math.max(0, Math.min(100, 100 - bucket.utilization));
+    const resetAt = new Date(bucket.resets_at);
+    const decision = evaluateUsageRamp(remainingPercent, resetAt, gate.fiveHourSchedule, now);
+    if (decision.allow) {
+      return { allowed: true, reason: `Five-hour window: ${decision.reason}` };
+    }
+    reasons.push(`Five-hour blocked (${decision.reason})`);
+  }
+
+  // Check weekly window
+  if (gate.weeklySchedule && usage.seven_day) {
+    const bucket = usage.seven_day;
+    const remainingPercent = Math.max(0, Math.min(100, 100 - bucket.utilization));
+    const resetAt = new Date(bucket.resets_at);
+    const decision = evaluateUsageRamp(remainingPercent, resetAt, gate.weeklySchedule, now);
+    if (decision.allow) {
+      return { allowed: true, reason: `Weekly window: ${decision.reason}` };
+    }
+    reasons.push(`Weekly blocked (${decision.reason})`);
+  }
+
+  if (reasons.length === 0) {
+    return { allowed: false, reason: "No applicable usage window configured." };
+  }
+
+  return { allowed: false, reason: reasons.join("; ") };
 }

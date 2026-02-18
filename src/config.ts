@@ -97,8 +97,12 @@ export type AgentRunnerConfig = {
     };
     claudeUsageGate?: {
       enabled: boolean;
-      monthlyLimit: number;
-      monthlySchedule: {
+      fiveHourSchedule?: {
+        startMinutes: number;
+        minRemainingPercentAtStart: number;
+        minRemainingPercentAtEnd: number;
+      };
+      weeklySchedule?: {
         startMinutes: number;
         minRemainingPercentAtStart: number;
         minRemainingPercentAtEnd: number;

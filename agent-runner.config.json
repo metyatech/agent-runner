@@ -81,6 +81,19 @@
         "minRemainingPercentAtEnd": 0
       }
     },
+    "claudeUsageGate": {
+      "enabled": true,
+      "fiveHourSchedule": {
+        "startMinutes": 60,
+        "minRemainingPercentAtStart": 100,
+        "minRemainingPercentAtEnd": 0
+      },
+      "weeklySchedule": {
+        "startMinutes": 1440,
+        "minRemainingPercentAtStart": 100,
+        "minRemainingPercentAtEnd": 0
+      }
+    },
     "repoScope": "local"
   },
   "labels": {
@@ -133,6 +146,15 @@
       "glob,read_file,read_many_files,list_directory,search_file_content,replace,write_file,run_shell_command,save_memory",
       "-p"
     ]
+  },
+  "claude": {
+    "enabled": true,
+    "command": "claude",
+    "args": [
+      "--dangerously-skip-permissions",
+      "-p"
+    ],
+    "promptMode": "arg"
   }
 }
 

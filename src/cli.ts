@@ -31,11 +31,7 @@ import {
   getAmazonQUsageSnapshot,
   resolveAmazonQUsageStatePath
 } from "./amazon-q-usage.js";
-import {
-  evaluateClaudeUsageGate,
-  getClaudeUsageSnapshot,
-  resolveClaudeUsageStatePath
-} from "./claude-usage.js";
+import { evaluateClaudeUsageGate, fetchClaudeUsage } from "./claude-usage.js";
 import { commandExists } from "./command-exists.js";
 import { listTargetRepos, listQueuedIssues, pickNextIssues } from "./queue.js";
 import { planIdleTasks, runIdleTask, runIssue, QUOTA_ERROR_PATTERNS, hasPattern, extractErrorMessage } from "./runner.js";
@@ -1468,29 +1464,14 @@ program
           } else {
             const claudeGate = config.idle?.claudeUsageGate;
             if (claudeGate?.enabled) {
-              try {
-                const now = new Date();
-                const usage = getClaudeUsageSnapshot(
-                  resolveClaudeUsageStatePath(config.workdirRoot),
-                  claudeGate,
-                  now
-                );
-                const decision = evaluateClaudeUsageGate(usage, claudeGate, now);
-                if (!decision.allow) {
-                  log("info", `Idle Claude usage gate blocked. ${decision.reason}`, json, "idle");
-                } else {
-                  claudeAllowed = true;
-                  log("info", `Idle Claude usage gate allowed. ${decision.reason}`, json, {
-                    percentRemaining: decision.percentRemaining,
-                    minutesToReset: decision.minutesToReset,
-                    used: decision.used,
-                    limit: decision.limit
-                  }, "idle");
-                }
-              } catch (error) {
-                log("warn", "Idle Claude usage gate failed. Claude idle disabled.", json, {
-                  error: error instanceof Error ? error.message : String(error)
-                }, "idle");
+              const now = new Date();
+              const usage = await fetchClaudeUsage(5000);
+              const decision = evaluateClaudeUsageGate(usage, claudeGate, now);
+              if (!decision.allowed) {
+                log("info", `Idle Claude usage gate blocked. ${decision.reason}`, json, "idle");
+              } else {
+                claudeAllowed = true;
+                log("info", `Idle Claude usage gate allowed. ${decision.reason}`, json, "idle");
               }
             } else {
               claudeAllowed = true;

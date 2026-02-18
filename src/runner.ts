@@ -11,7 +11,6 @@ import {
 } from "./github.js";
 import { resolveCodexCommand } from "./codex-command.js";
 import { recordAmazonQUsage, resolveAmazonQUsageStatePath } from "./amazon-q-usage.js";
-import { recordClaudeUsage, resolveClaudeUsageStatePath } from "./claude-usage.js";
 import {
   buildIdleDuplicateWorkGuard,
   buildIdleOpenPrContext,
@@ -1225,17 +1224,7 @@ export async function runIdleTask(
       }
     }
   }
-  if (engine === "claude") {
-    const shouldRecordUsage = exitCode === 0 || summary !== null;
-    if (shouldRecordUsage) {
-      try {
-        recordClaudeUsage(resolveClaudeUsageStatePath(config.workdirRoot), 1, new Date());
-      } catch (error) {
-        const message = error instanceof Error ? error.message : String(error);
-        process.stderr.write(`[WARN] Failed to record Claude usage: ${message}\n`);
-      }
-    }
-  }
+
   const reportPath = resolveIdleReportPath(config.workdirRoot, repo);
   writeIdleReport(reportPath, repo, task, engine, exitCode === 0, summary, logPath);
   if (activityRecorded) {
