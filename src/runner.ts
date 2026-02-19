@@ -644,10 +644,8 @@ function resolveQuotaRunAfter(statusRaw: ReturnType<typeof rateLimitSnapshotToSt
 
 async function resolveQuotaResumeAt(config: AgentRunnerConfig): Promise<string | null> {
   const gate = config.idle?.usageGate;
-  const command = gate?.command ?? config.codex.command;
-  const args = gate?.args ?? [];
   const timeoutSeconds = gate?.timeoutSeconds ?? 20;
-  const snapshot = await fetchCodexRateLimits(command, args, timeoutSeconds, config.workdirRoot);
+  const snapshot = await fetchCodexRateLimits({ codexHome: gate?.codexHome, timeoutSeconds });
   const status = snapshot ? rateLimitSnapshotToStatus(snapshot, new Date()) : null;
   const runAfter = resolveQuotaRunAfter(status);
   return runAfter ? runAfter.toISOString() : null;

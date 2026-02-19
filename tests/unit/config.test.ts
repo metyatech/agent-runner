@@ -29,8 +29,6 @@ describe("loadConfig", () => {
             promptTemplate: "Idle {{repo}} {{task}}",
             usageGate: {
               enabled: true,
-              command: "codex",
-              args: [],
               timeoutSeconds: 20,
               minRemainingPercent: {
                 fiveHour: 50

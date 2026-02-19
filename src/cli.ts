@@ -1248,16 +1248,14 @@ program
                 timingEvents.push({ phase, durationMs });
               }
             : undefined;
-          const rateLimits = await fetchCodexRateLimits(
-            usageGate.command,
-            usageGate.args,
-            usageGate.timeoutSeconds,
-            config.workdirRoot,
+          const rateLimits = await fetchCodexRateLimits({
+            codexHome: usageGate.codexHome,
+            timeoutSeconds: usageGate.timeoutSeconds,
             timingSink
-          );
+          });
           const status = rateLimits ? rateLimitSnapshotToStatus(rateLimits, new Date()) : null;
           if (!status) {
-            log("warn", "Idle Codex usage gate: unable to read rate limits from app-server.", json, "idle");
+            log("warn", "Idle Codex usage gate: unable to read rate limits.", json, "idle");
             return false;
           }
 

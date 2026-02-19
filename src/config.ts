@@ -52,8 +52,7 @@ export type AgentRunnerConfig = {
     repoScope?: "all" | "local";
     usageGate?: {
       enabled: boolean;
-      command: string;
-      args: string[];
+      codexHome?: string;
       timeoutSeconds: number;
       minRemainingPercent: {
         fiveHour: number;

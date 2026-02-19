@@ -108,19 +108,13 @@
           "type": "object",
           "required": [
             "enabled",
-            "command",
-            "args",
             "timeoutSeconds",
             "minRemainingPercent",
             "weeklySchedule"
           ],
           "properties": {
             "enabled": { "type": "boolean" },
-            "command": { "type": "string", "minLength": 1 },
-            "args": {
-              "type": "array",
-              "items": { "type": "string" }
-            },
+            "codexHome": { "type": "string", "minLength": 1 },
             "timeoutSeconds": { "type": "integer", "minimum": 1, "maximum": 120 },
             "minRemainingPercent": {
               "type": "object",
