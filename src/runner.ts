@@ -76,6 +76,9 @@ export type IdleTaskResult = {
   summary: string | null;
   reportPath: string;
   headBranch: string;
+  failureKind: RunFailureKind | null;
+  failureDetail: string | null;
+  quotaResumeAt: string | null;
 };
 
 export type EngineInvocation = {
@@ -549,6 +552,7 @@ export const QUOTA_ERROR_PATTERNS = [
   /quota[^.\n]*(exceeded|reached|exhausted)/i,
   /rate limit/i,
   /too many requests/i,
+  /no capacity available/i,
   /insufficient credits/i,
   /credits?[^.\n]*(depleted|exhausted)/i
 ];
@@ -597,6 +601,39 @@ export function extractErrorMessage(error: unknown): string {
     }
   }
   return String(error);
+}
+
+function readLogTail(logPath: string, maxBytes: number = 512 * 1024): string {
+  if (!fs.existsSync(logPath)) {
+    return "";
+  }
+
+  try {
+    const stat = fs.statSync(logPath);
+    const size = stat.size;
+    if (size <= maxBytes) {
+      return fs.readFileSync(logPath, "utf8");
+    }
+
+    const fd = fs.openSync(logPath, "r");
+    try {
+      const buffer = Buffer.allocUnsafe(maxBytes);
+      const offset = Math.max(0, size - maxBytes);
+      const bytesRead = fs.readSync(fd, buffer, 0, maxBytes, offset);
+      return buffer.subarray(0, bytesRead).toString("utf8");
+    } finally {
+      fs.closeSync(fd);
+    }
+  } catch {
+    return "";
+  }
+}
+
+export function classifyNonZeroExit(outputTail: string): { failureKind: RunFailureKind; failureDetail: string | null } {
+  const cleaned = keepTail(outputTail);
+  const failureDetail = extractFailureDetail(cleaned);
+  const failureKind: RunFailureKind = hasPattern(cleaned, QUOTA_ERROR_PATTERNS) ? "quota" : "execution_error";
+  return { failureKind, failureDetail };
 }
 
 function extractFailureDetail(value: string): string | null {
@@ -1211,6 +1248,18 @@ export async function runIdleTask(
   }
 
   const summary = extractFinalResponseFromLog(logPath);
+  const outputTail = keepTail(readLogTail(logPath));
+  const failure = exitCode === 0 ? null : classifyNonZeroExit(outputTail);
+  const failureKind = failure?.failureKind ?? null;
+  const failureDetail = failure?.failureDetail ?? null;
+  let quotaResumeAt: string | null = null;
+  if (failureKind === "quota" && engine === "codex") {
+    try {
+      quotaResumeAt = await resolveQuotaResumeAt(config);
+    } catch {
+      quotaResumeAt = null;
+    }
+  }
   if (engine === "amazon-q") {
     const shouldRecordUsage = exitCode === 0 || summary !== null;
     if (shouldRecordUsage) {
@@ -1237,7 +1286,10 @@ export async function runIdleTask(
     engine,
     summary,
     reportPath,
-    headBranch: newBranch
+    headBranch: newBranch,
+    failureKind,
+    failureDetail,
+    quotaResumeAt
   };
   } finally {
     if (created) {

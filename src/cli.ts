@@ -10,7 +10,7 @@ import type { AgentRunnerConfig } from "./config.js";
 import { GitHubClient, type IssueInfo, type LabelInfo, type RepoInfo } from "./github.js";
 import { buildAgentLabels } from "./labels.js";
 import { log } from "./logger.js";
-import { acquireLock, releaseLock } from "./lock.js";
+import { acquireLock, acquireLockWithRetry, releaseLock } from "./lock.js";
 import { buildAgentComment, hasUserReplySince, NEEDS_USER_MARKER } from "./notifications.js";
 import { createGitHubNotifyClient } from "./github-notify-client.js";
 import {
@@ -27,6 +27,12 @@ import {
   resolveGeminiWarmupStatePath
 } from "./gemini-warmup.js";
 import {
+  isGeminiModelBlockedByCapacity,
+  loadGeminiCapacityBackoffState,
+  recordGeminiCapacityBackoff,
+  resolveGeminiCapacityBackoffStatePath
+} from "./gemini-capacity-backoff.js";
+import {
   evaluateAmazonQUsageGate,
   getAmazonQUsageSnapshot,
   resolveAmazonQUsageStatePath
@@ -36,6 +42,7 @@ import { commandExists } from "./command-exists.js";
 import { listTargetRepos, listQueuedIssues, pickNextIssues } from "./queue.js";
 import { planIdleTasks, runIdleTask, runIssue, QUOTA_ERROR_PATTERNS, hasPattern, extractErrorMessage } from "./runner.js";
 import type { IdleEngine, IdleTaskResult } from "./runner.js";
+import { loadIdleHistory, resolveIdleHistoryPath, saveIdleHistory } from "./idle.js";
 import { listLocalRepos } from "./local-repos.js";
 import {
   evaluateRunningIssues,
@@ -1416,6 +1423,27 @@ program
           }
         }
 
+        if (geminiProAllowed || geminiFlashAllowed) {
+          try {
+            const now = new Date();
+            const statePath = resolveGeminiCapacityBackoffStatePath(config.workdirRoot);
+            const state = loadGeminiCapacityBackoffState(statePath);
+
+            if (geminiProAllowed && isGeminiModelBlockedByCapacity(state, "gemini-3-pro-preview", now)) {
+              geminiProAllowed = false;
+              log("info", "Idle Gemini Pro blocked by recent model capacity exhaustion. Skipping Gemini Pro.", json, "idle");
+            }
+            if (geminiFlashAllowed && isGeminiModelBlockedByCapacity(state, "gemini-3-flash-preview", now)) {
+              geminiFlashAllowed = false;
+              log("info", "Idle Gemini Flash blocked by recent model capacity exhaustion. Skipping Gemini Flash.", json, "idle");
+            }
+          } catch (error) {
+            log("warn", "Idle Gemini capacity backoff check failed; proceeding without it.", json, {
+              error: error instanceof Error ? error.message : String(error)
+            }, "idle");
+          }
+        }
+
         let amazonQAllowed = false;
         if (config.amazonQ?.enabled) {
           const exists = await commandExists(config.amazonQ.command);
@@ -1696,6 +1724,56 @@ program
           }
         }
 
+        const idleQuotaRetryMinutes = 60;
+        const rescheduleIdleRepoAfterQuotaFailure = async (result: IdleTaskResult): Promise<void> => {
+          if (!config.idle) {
+            return;
+          }
+
+          const cooldownMinutes = config.idle.cooldownMinutes;
+          const retryDelayMinutes = Math.min(cooldownMinutes, idleQuotaRetryMinutes);
+          const now = new Date();
+          const cooldownMs = cooldownMinutes * 60 * 1000;
+          const delayMs = retryDelayMinutes * 60 * 1000;
+
+          const adjustedLastRunAt = new Date(now.getTime() - cooldownMs + delayMs).toISOString();
+          const historyPath = resolveIdleHistoryPath(config.workdirRoot);
+          const lockPath = path.resolve(config.workdirRoot, "agent-runner", "state", "idle-history.lock");
+          const lock = await acquireLockWithRetry(lockPath, { timeoutMs: 30_000, retryMs: 100 });
+          try {
+            const history = loadIdleHistory(historyPath);
+            const key = `${result.repo.owner}/${result.repo.repo}`;
+            history.repos[key] = { lastRunAt: adjustedLastRunAt, lastTask: result.task };
+            saveIdleHistory(historyPath, history);
+          } finally {
+            releaseLock(lock);
+          }
+
+          log("info", "Idle quota/capacity failure: repo rescheduled for earlier retry.", json, {
+            repo: `${result.repo.owner}/${result.repo.repo}`,
+            retryDelayMinutes,
+            adjustedLastRunAt
+          }, "idle");
+        };
+
+        const recordGeminiCapacityBackoffFromIdleFailure = (result: IdleTaskResult): void => {
+          if (result.engine !== "gemini-pro" && result.engine !== "gemini-flash") {
+            return;
+          }
+
+          const cooldownMinutes = config.idle?.cooldownMinutes ?? 240;
+          const retryDelayMinutes = Math.min(cooldownMinutes, idleQuotaRetryMinutes);
+          const blockedUntil = new Date(Date.now() + retryDelayMinutes * 60 * 1000);
+          const statePath = resolveGeminiCapacityBackoffStatePath(config.workdirRoot);
+          recordGeminiCapacityBackoff(statePath, "gemini-3-pro-preview", blockedUntil);
+          recordGeminiCapacityBackoff(statePath, "gemini-3-flash-preview", blockedUntil);
+
+          log("info", "Recorded Gemini capacity backoff after idle quota/capacity failure.", json, {
+            blockedUntil: blockedUntil.toISOString(),
+            repo: `${result.repo.owner}/${result.repo.repo}`
+          }, "idle");
+        };
+
         const idleLimit = pLimit(config.concurrency);
         await Promise.all(
           scheduled.map((task) =>
@@ -1713,6 +1791,10 @@ program
                   log: result.logPath
                 }, "idle");
                 return;
+              }
+              if (result.failureKind === "quota") {
+                recordGeminiCapacityBackoffFromIdleFailure(result);
+                await rescheduleIdleRepoAfterQuotaFailure(result);
               }
               log("warn", "Idle task failed.", json, {
                 repo: `${result.repo.owner}/${result.repo.repo}`,
