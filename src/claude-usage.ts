@@ -3,7 +3,7 @@
  * Gate/ramp evaluation stays here.
  */
 export type { ClaudeUsageData, ClaudeUsageBucket } from "@metyatech/ai-quota";
-export { fetchClaudeRateLimits as fetchClaudeUsage } from "@metyatech/ai-quota";
+import { fetchClaudeRateLimits } from "@metyatech/ai-quota";
 
 import { evaluateUsageRamp, type UsageRampSchedule } from "./usage-gate-common.js";
 import type { ClaudeUsageData } from "@metyatech/ai-quota";
@@ -20,6 +20,15 @@ export type ClaudeUsageGateDecision = {
   allowed: boolean;
   reason: string;
 };
+
+export async function fetchClaudeUsage(timeoutMs?: number): Promise<ClaudeUsageData | null> {
+  try {
+    const data = await fetchClaudeRateLimits(timeoutMs);
+    return data ?? null;
+  } catch {
+    return null;
+  }
+}
 
 export function evaluateClaudeUsageGate(
   usage: ClaudeUsageData | null,

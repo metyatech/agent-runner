@@ -20,7 +20,7 @@
     "prepare": "simple-git-hooks"
   },
   "dependencies": {
-    "@metyatech/ai-quota": "^0.2.1",
+    "@metyatech/ai-quota": "^1.0.1",
     "@octokit/auth-app": "^7.2.2",
     "@octokit/rest": "^21.0.0",
     "ajv": "^8.12.0",

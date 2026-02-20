@@ -162,15 +162,14 @@ Config file: `agent-runner.config.json`
   - `idle.maxRunsPerCycle`: Max idle tasks per cycle
   - `idle.cooldownMinutes`: Per-repo cooldown between idle runs
   - `idle.tasks`: List of task prompts to rotate through
-  - `idle.promptTemplate`: Prompt template for idle runs; supports `{{repo}}`, `{{task}}`, `{{openPrCount}}`, and `{{openPrContext}}`
+- `idle.promptTemplate`: Prompt template for idle runs; supports `{{repo}}`, `{{task}}`, `{{openPrCount}}`, and `{{openPrContext}}`
     - `{{openPrCount}}` is the repository's current open-PR total when available (`unknown` if count lookup fails).
     - `{{openPrContext}}` is injected as an untrusted context block wrapped by `AGENT_RUNNER_OPEN_PR_CONTEXT_START/END`.
-  - `idle.repoScope`: `"all"` (default) or `"local"` to restrict idle tasks to repos under the workspace root
-  - `idle.usageGate`: Optional Codex usage guard (reads `account/rateLimits/read` via Codex app-server)
-  - `idle.usageGate.enabled`: Turn usage gating on/off
-  - `idle.usageGate.command`: Command used to launch Codex app-server
-  - `idle.usageGate.args`: Additional arguments passed to `codex app-server`
-  - `idle.usageGate.timeoutSeconds`: Timeout for app-server rate limit lookup
+- `idle.repoScope`: `"all"` (default) or `"local"` to restrict idle tasks to repos under the workspace root
+- `idle.usageGate`: Optional Codex usage guard (reads local session JSONL when available; otherwise queries the backend usage API via `auth.json` in the Codex home directory)
+- `idle.usageGate.enabled`: Turn usage gating on/off
+- `idle.usageGate.codexHome`: Optional override for Codex home directory (used for credential discovery)
+- `idle.usageGate.timeoutSeconds`: Timeout for backend usage lookup
     - `idle.usageGate.minRemainingPercent`: Minimum remaining percent for the 5h window
     - `idle.usageGate.weeklySchedule`: Weekly ramp for remaining percent
       - `idle.usageGate.weeklySchedule.startMinutes`: When to begin idle runs (minutes before weekly reset)
@@ -344,9 +343,9 @@ If `idle.repoScope` is set to `"local"`, idle runs only target repositories unde
 If `idle.usageGate.enabled` is true, idle runs only execute when the weekly reset
 window is near and unused weekly capacity remains. The weekly threshold ramps
 down as the reset approaches. The 5h window is used only to confirm that some
-short-term capacity remains (5h reset timing is ignored). The runner queries
-Codex app-server (`account/rateLimits/read`) over JSON-RPC (JSONL over stdio) to
-fetch rate limits.
+short-term capacity remains (5h reset timing is ignored). The runner reads
+rate limits from local Codex session JSONL when available, and falls back to a
+backend usage API lookup using `auth.json` in the Codex home directory.
 If `idle.copilotUsageGate.enabled` is true, idle runs also require Copilot monthly
 usage to be within the configured reset window and above the remaining-percent
 threshold for that window.
