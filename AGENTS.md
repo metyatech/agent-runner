@@ -3,44 +3,13 @@
 - Before starting any work, run `compose-agentsmd` from the project root.
 - `compose-agentsmd` intentionally regenerates `AGENTS.md`; any resulting `AGENTS.md` diff is expected and must not be treated as an unexpected external change.
 - If `compose-agentsmd` is not available, install it via npm: `npm install -g compose-agentsmd`.
-- To update shared rules, run `compose-agentsmd edit-rules`, edit the workspace rules, then run `compose-agentsmd apply-rules`.
+- To update shared/global rules, use `compose-agentsmd edit-rules` to locate the writable rules workspace, make changes only in that workspace, then run `compose-agentsmd apply-rules` (do not manually clone or edit the rules source repo outside this workflow).
+- If you find an existing clone of the rules source repo elsewhere, do not assume it is the correct rules workspace; always treat `compose-agentsmd edit-rules` output as the source of truth.
 - `compose-agentsmd apply-rules` pushes the rules workspace when `source` is GitHub (if the workspace is clean), then regenerates `AGENTS.md` with refreshed rules.
 - Do not edit `AGENTS.md` directly; update the source rules and regenerate.
 - `tools/tool-rules.md` is the shared rule source for all repositories that use compose-agentsmd.
-- Before applying any rule updates, present the planned changes first (prefer a colorized diff-style preview), ask for explicit approval, then make the edits.
-- These tool rules live in tools/tool-rules.md in the compose-agentsmd repository; do not duplicate them in global rule modules.
-- When updating rules, include a colorized diff-style summary in the final response. Use `git diff --stat` first, then include the raw ANSI-colored output of `git diff --color=always` (no sanitizing or reformatting), and limit the output to the rule files that changed.
-- Also provide a short, copy-pasteable command the user can run to view the diff in the same format. Use absolute paths so it works regardless of the current working directory, and scope it to the changed rule files.
-- If a diff is provided, a separate detailed summary is not required. If a diff is not possible, include a detailed summary of what changed (added/removed/modified items).
-
-Source: github:metyatech/agent-rules@HEAD/rules/global/00-delivery-hard-gates.md
-
-# Delivery hard gates
-
-These are non-negotiable completion gates for any state-changing work and for any response that claims "done", "fixed", "working", or "passing".
-
-## Acceptance criteria (AC)
-
-- Before state-changing work, list Acceptance Criteria (AC) as binary, testable statements.
-- For read-only tasks, AC may be deliverables/questions answered; keep them checkable.
-- If AC are ambiguous or not testable, ask blocking questions before proceeding.
-
-## Evidence and verification
-
-- For each AC, define verification evidence (automated test preferred; otherwise a deterministic manual procedure).
-- Maintain an explicit mapping: `AC -> evidence (tests/commands/manual steps)`.
-- For code or runtime-behavior changes, automated tests are required unless the requester explicitly approves skipping.
-- Bugfixes MUST include a regression test that fails before the fix and passes after.
-- Run the repo's full verification suite (lint/format/typecheck/test/build) using a single repo-standard `verify` command when available; if missing, add it.
-- Enforce verification locally via commit-time hooks (pre-commit or repo-native) and in CI; skipping requires explicit requester approval.
-- For non-code changes, run the relevant subset and justify.
-- If required checks cannot be run, stop and ask for explicit approval to proceed with partial verification, and provide an exact manual verification plan.
-
-## Final response (MUST include)
-
-- AC list.
-- `AC -> evidence` mapping with outcomes (PASS/FAIL/NOT RUN/N/A) and brief notes where needed.
-- The exact verification commands executed and their outcomes.
+- Before applying any rule updates, present the planned changes first with an ANSI-colored diff-style preview, ask for explicit approval, then make the edits.
+- These tool rules live in tools/tool-rules.md in the compose-agentsmd repository; do not duplicate them in other rule modules.
 
 Source: github:metyatech/agent-rules@HEAD/rules/global/agent-rules-composition.md
 
@@ -61,13 +30,14 @@ Source: github:metyatech/agent-rules@HEAD/rules/global/agent-rules-composition.m
 - When creating a new repository, set up rule files (e.g., agent-ruleset.json and any local rules) so compose-agentsmd can run.
 - When updating rules, infer the core intent; if it is a global policy, record it in global rules rather than project-local rules.
 - If a task requires domain rules not listed in agent-ruleset.json, update the ruleset to include them and regenerate AGENTS.md before proceeding.
-- When rule changes produce a diff, include it in the final response unless the user explicitly asks to omit it.
+- Do not include composed `AGENTS.md` diffs in the final response unless the user explicitly asks for them.
 
 ## Editing standards
 
 - Keep rules MECE, concise, and non-redundant.
 - Use short, action-oriented bullets; avoid numbered lists unless order matters.
 - Prefer the most general applicable rule to avoid duplication.
+- Do not use numeric filename prefixes (e.g., `00-...`) to impose ordering; treat rule modules as a flat set. If ordering matters, encode it explicitly in composition/tooling rather than filenames.
 
 ## Rule placement (global vs domain)
 
@@ -90,6 +60,12 @@ Source: github:metyatech/agent-rules@HEAD/rules/global/autonomous-operations.md
 - If you state a persistent workflow change (e.g., `from now on`, `I'll always`), immediately propose the corresponding rule update and request approval in the same task; do not leave it as an unrecorded promise. When operating under a multi-agent-delegation model, follow that rule module's guidance on restricted operations before proposing changes.
 - Because session memory resets between tasks, treat rule files as persistent memory; when any issue or avoidable mistake occurs, update rules in the same task to prevent recurrence.
 - Treat these rules as the source of truth; do not override them with repository conventions. If a repo conflicts, update the repo to comply or update the rules to encode the exception; do not make undocumented exceptions.
+
+## Skill role persistence
+
+- When the `manager` skill is invoked in a session, treat its role as session-scoped and continue operating as a manager/orchestrator for the remainder of the session.
+- Do not revert to a direct-implementation posture mid-session unless the user explicitly asks to stop using the manager role/skill or selects a different role.
+
 - When something is unclear, investigate to resolve it; do not proceed with unresolved material uncertainty. If still unclear, ask and include what you checked.
 - Do not proceed based on assumptions or guesses without explicit user approval; hypotheses may be discussed but must not drive action.
 - Make decisions explicit when they affect scope, risk, cost, or irreversibility.
@@ -122,6 +98,7 @@ Source: github:metyatech/agent-rules@HEAD/rules/global/command-execution.md
 - Keep changes scoped to affected repositories; when shared modules change, update consumers and verify at least one.
 - If no branch is specified, work on the current branch; direct commits to main/master are allowed.
 - After addressing PR review feedback, resolve the corresponding review thread(s) before concluding; if you lack permission, state it explicitly.
+- Before re-requesting review after addressing feedback, run the relevant verification suite and summarize results (commands + outcomes) in the PR comment/description.
 - After pushing fixes for PR review feedback, re-request review only from reviewer(s) who posted the addressed feedback in the current round.
 - Do not re-request review from reviewers (including AI reviewers) who did not post addressed feedback, or who already indicated no actionable issues.
 - If no applicable reviewer remains, ask who should review next.
@@ -133,6 +110,37 @@ Source: github:metyatech/agent-rules@HEAD/rules/global/command-execution.md
 - After completing a PR, merge it, sync the target branch, and delete the PR branch locally and remotely.
 - Agent platforms have different execution capabilities (sandboxing, network access, push permissions). Do not assume capabilities beyond what the current platform provides; fail explicitly when a required capability is unavailable.
 - When handling GitHub notifications, use `DELETE /notifications/threads/{id}` (HTTP 204) to mark them as **done** (removes from inbox/moves to Done tab). Do NOT use `PATCH /notifications/threads/{id}` (marks as read but leaves in inbox). After processing notifications, bulk-delete any remaining read-but-not-done notifications with the same DELETE API.
+
+Source: github:metyatech/agent-rules@HEAD/rules/global/delivery-hard-gates.md
+
+# Delivery hard gates
+
+These are non-negotiable completion gates for any state-changing work and for any response that claims "done", "fixed", "working", or "passing".
+
+## Acceptance criteria (AC)
+
+- Before state-changing work, list Acceptance Criteria (AC) as binary, testable statements.
+- For read-only tasks, AC may be deliverables/questions answered; keep them checkable.
+- If AC are ambiguous or not testable, ask blocking questions before proceeding.
+- Keep AC compact by default (aim: 1-3 items). Expand only when risk/complexity demands it or when the requester asks.
+
+## Evidence and verification
+
+- For each AC, define verification evidence (automated test preferred; otherwise a deterministic manual procedure).
+- Maintain an explicit mapping: `AC -> evidence (tests/commands/manual steps)`.
+- The mapping may be presented in a compact per-item form (one line per AC including evidence + outcome) to reduce verbosity.
+- For code or runtime-behavior changes, automated tests are required unless the requester explicitly approves skipping.
+- Bugfixes MUST include a regression test that fails before the fix and passes after.
+- Run the repo's full verification suite (lint/format/typecheck/test/build) using a single repo-standard `verify` command when available; if missing, add it.
+- Enforce verification locally via commit-time hooks (pre-commit or repo-native) and in CI; skipping requires explicit requester approval.
+- For non-code changes, run the relevant subset and justify.
+- If required checks cannot be run, stop and ask for explicit approval to proceed with partial verification, and provide an exact manual verification plan.
+
+## Final response (MUST include)
+
+- A compact goal+verification report. Labels may be `Goal`/`Verification` instead of `AC` as long as it is equivalent.
+- `AC -> evidence` mapping with outcomes (PASS/FAIL/NOT RUN/N/A), possibly in compact per-item form.
+- The exact verification commands executed and their outcomes.
 
 Source: github:metyatech/agent-rules@HEAD/rules/global/implementation-and-coding-standards.md
 
@@ -159,10 +167,15 @@ Source: github:metyatech/agent-rules@HEAD/rules/global/implementation-and-coding
 - Keep everything DRY across code, specs, docs, tests, configs, and scripts; proactively refactor repeated procedures into shared configs/scripts with small, local overrides.
 - Persist durable runtime/domain data in a database with a fully normalized schema (3NF/BCNF target): store each fact once with keys/constraints, and compute derived statuses/views at read time instead of duplicating them.
 - Fix root causes; remove obsolete/unused code, branches, comments, and helpers.
+- Avoid leaving half-created state on failure paths. Any code that allocates/registers/starts resources must have a shared teardown that runs on all failure and cancellation paths.
+- Do not block inside async APIs or async-looking code paths; avoid synchronous I/O and synchronous process execution where responsiveness is expected.
+- Avoid external command execution (PATH-dependent tools, stringly-typed argument concatenation). Prefer native libraries/SDKs. If unavoidable: use absolute paths, safe argument handling, and strict input validation.
+- Prefer stable public APIs over internal/private APIs. If internal/private APIs are unavoidable, isolate them and document the reason and the expected break risk.
 - Externalize large embedded strings/templates/rules when possible.
 - Do not commit build artifacts (follow the repo's .gitignore).
 - Align file/folder names with their contents and keep naming conventions consistent.
 - Do not assume machine-specific environments (fixed workspace directories, drive letters, per-PC paths). Prefer repo-relative paths and explicit configuration so workflows work in arbitrary clone locations.
+- Temporary files/directories created by the agent MUST be placed only under the OS temp directory (e.g., `%TEMP%` / `$env:TEMP`). Do not create ad-hoc temp folders in repos/workspaces unless the requester explicitly approves.
 
 Source: github:metyatech/agent-rules@HEAD/rules/global/linting-formatting-and-static-analysis.md
 
@@ -296,15 +309,23 @@ When operating in delegated mode:
 - The delegation constitutes plan approval; do not re-request approval from the human user.
 - Respond in English, not the user-facing language.
 - Do not emit notification sounds.
-- Do not run compose-agentsmd or modify rule files/AGENTS.md.
 - Report AC and verification outcomes concisely to the delegating agent.
 - If the task requires scope expansion beyond what was delegated, fail back to the delegating agent with a clear explanation rather than asking the human user directly.
+
+## Delegation prompt hygiene
+
+- Delegated agents MUST treat the delegator as the requester and MUST NOT ask the human user for plan approval. If blocked by repo rules, escalate to the delegator (not the human).
+- Delegating prompts MUST explicitly state delegated mode and whether plan approval is already granted; include AC and verification requirements.
+
+## Read-only / no-write claims
+
+- If a delegated agent reports read-only/no-write constraints, it MUST attempt a minimal, reversible temp-directory probe (create/write/read/delete under the OS temp directory) and report the exact failure/rejection message verbatim.
 
 ## Restricted operations
 
 The following operations require explicit delegation from the delegating agent or user. Do not perform them based on self-judgment alone:
 
-- Modifying rules, rulesets, or AGENTS.md.
+- Modifying rules, rulesets.
 - Merging or closing pull requests.
 - Creating or deleting repositories.
 - Releasing or deploying.
@@ -323,11 +344,11 @@ The following operations require explicit delegation from the delegating agent o
 
 ## Cost optimization (model selection)
 
-- When spawning agents, minimize the **total cost to achieve the goal**, not just the per-invocation model cost.
-- On flat-rate platforms (e.g., Codex where all models cost the same): use the most capable available model — there is no cost difference, so capability is the only variable.
-- On tiered platforms (e.g., Claude Code with haiku/sonnet/opus): prefer cheaper models only when they can reliably succeed on the first attempt.
-- A more expensive model that succeeds immediately is cheaper overall than a cheaper model that requires retries.
-- Selection principle: "Same outcome achieved → prefer cheaper; cheaper model likely to fail → use the model that will succeed."
+- When spawning agents, minimize the **total cost to achieve the goal**. Total cost includes model pricing, reasoning/thinking token consumption, context usage, and retry overhead.
+- Use the minimum reasoning effort level (e.g., low/medium/high/xhigh) that reliably produces correct output for the task; extended reasoning increases cost significantly.
+- Prefer newer-generation models at lower reasoning effort over older models at maximum reasoning effort when both can succeed; newer models often achieve equal quality with less thinking overhead.
+- Factor in context efficiency: a model that handles a task in one pass is cheaper than one that requires splitting.
+- A model that succeeds on the first attempt at slightly higher unit cost is cheaper overall than one that requires retries.
 
 ## Parallel execution safety
 
@@ -339,6 +360,20 @@ The following operations require explicit delegation from the delegating agent o
 Source: github:metyatech/agent-rules@HEAD/rules/global/planning-and-approval-gate.md
 
 # Planning and approval gate
+
+## Approval waiver (trivial tasks)
+
+- In direct mode, you MAY proceed without asking for explicit approval when the user request is a trivial operational check and the action is low-risk and reversible.
+- Allowed under this waiver:
+  - Read-only inspection and verification (including running linters/tests/builds) that does not modify repo files.
+  - Spawning a sub-agent for a read-only smoke check (no repo writes; temp-only and cleaned up).
+  - Creating temporary files only under the OS temp directory (and deleting them during the task).
+- Not allowed under this waiver (approval is still required):
+  - Any manual edit of repository files, configuration files, or rule files.
+  - Installing/uninstalling dependencies or changing tool versions.
+  - Git operations beyond status/diff/log (commit/push/merge/release).
+  - Any external side effects (deployments, publishing, API writes, account/permission changes).
+- If there is any meaningful uncertainty about impact, request approval as usual.
 
 - Default to a two-phase workflow: clarify goal + plan first, execute after explicit requester approval.
 - In delegated mode (see Multi-agent delegation), the delegation itself constitutes plan approval. Do not re-request approval from the human user. If scope expansion is needed, fail back to the delegating agent.
@@ -352,11 +387,18 @@ Source: github:metyatech/agent-rules@HEAD/rules/global/planning-and-approval-gat
     - Running code generation/build steps that are deterministic and repo-scoped.
     - Running these from clean → dirty → clean is acceptable; publishing/deploying/migrating is not.
 - Before any other state-changing execution (e.g., writing or modifying files by hand, changing runtime behavior, or running git commands beyond status/diff/log), do all of the following:
-  - Restate the request as Acceptance Criteria (AC) and verification methods, following "Delivery hard gates".
-  - Produce a written plan (use your planning tool when available) focused on the goal, approach, and verification checkpoints (do not enumerate per-file implementation details or exact commands unless the requester asks).
+  - Restate the request as Acceptance Criteria (AC) and verification methods, following "Delivery hard gates" (keep concise by default).
+  - Produce a written plan (use your planning tool when available) focused on the goal, approach, and verification checkpoints (keep concise by default; do not enumerate per-file implementation details or exact commands unless the requester asks).
   - Confirm the plan with the requester, ask for approval explicitly, and wait for a clear "yes" before executing.
   - Once the requester has approved a plan, proceed within that plan without re-requesting approval; re-request approval only when you change or expand the plan.
   - Do not treat the original task request as plan approval; approval must be an explicit response to the presented plan.
+  - Include a compact approval-request block at the end of the plan proposal message so the requester can approve with a single short reply.
+    - Template:
+      ```text
+      Approval request
+      - Reply "yes" to approve this plan and proceed.
+      - Reply with changes to revise before executing.
+      ```
 - If state-changing execution starts without the required post-plan "yes", stop immediately, report the gate miss, add/update a prevention rule, regenerate AGENTS.md, and then restart from the approval gate.
 - No other exceptions: even if the user requests immediate execution (e.g., "skip planning", "just do it"), treat that as a request to move quickly through this gate, not to bypass it.
 
@@ -438,7 +480,16 @@ Source: github:metyatech/agent-rules@HEAD/rules/global/release-and-publication.m
 - Before publishing, run required prep commands (e.g., npm install, npm test, npm pack --dry-run) and only proceed when ready.
 - If authentication fails during publish, ask the user to complete the publish step.
 - Run dependency security checks before release, address critical issues, and report results.
-- After publishing, update any locally installed copy to the latest release.
+- After publishing, update any locally installed copy to the newly published release and verify the resolved version.
+  - Completion gate: do not report “done” until this verification is completed (or the user explicitly declines).
+  - Must be expressed as explicit Acceptance Criteria and reported with outcomes (PASS/FAIL/N/A) + evidence in the final report:
+    - AC1 (registry): verify the published version exists in the registry (e.g., `npm view <pkg> version`).
+    - AC2 (fresh install): verify the latest package resolves and runs (e.g., `npx <pkg>@latest --version`).
+    - AC3 (global update, if applicable): if the package is installed globally, update it to the published version and verify (e.g., `npm ls -g <pkg> --depth=0`, `npm i -g <pkg>@latest`, then `<cmd> --version`).
+    - If AC3 is not applicable (not installed globally) or cannot be performed, mark it N/A and state the reason explicitly.
+  - For npm CLIs:
+    - If installed globally: check `npm ls -g <pkg> --depth=0`, update via `npm i -g <pkg>@latest` (or the published dist-tag), then verify with `<pkg> --version`.
+    - If not installed globally: skip the global update, and verify availability via `npx <pkg>@latest --version` (or the ecosystem-equivalent).
 
 ## Published artifact requirements
 
@@ -507,7 +558,9 @@ Source: github:metyatech/agent-rules@HEAD/rules/global/writing-and-documentation
 
 - Respond in Japanese unless the user requests otherwise.
 - Always report whether you committed and whether you pushed; include repo(s), branch(es), and commit hash(es) when applicable.
-- After completing a response, emit the Windows SystemSounds.Asterisk sound via PowerShell when possible.
+- After completing a response, emit the Windows SystemSounds.Asterisk sound via PowerShell only when operating in direct mode (top-level agent).
+- If operating in delegated mode (spawned by another agent / sub-agent), do not emit notification sounds.
+- If operating as a manager/orchestrator, do not ask delegated sub-agents to emit sounds; emit at most once when the overall task is complete (direct mode only).
 
 ## Developer-facing writing
 
