@@ -107,6 +107,8 @@
     "args": [
       "exec",
       "--dangerously-bypass-approvals-and-sandbox",
+      "-c",
+      "model_reasoning_effort=\"medium\"",
       "--model",
       "gpt-5.2"
     ],
@@ -153,4 +155,3 @@
     "promptMode": "arg"
   }
 }
-

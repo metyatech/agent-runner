@@ -84,6 +84,7 @@ import {
   takeReviewTasksWhere,
   type ReviewQueueEntry
 } from "./review-queue.js";
+import { planDryRunReviewFollowupQueue } from "./review-followup-dry-run.js";
 import { scheduleReviewFollowups } from "./review-scheduler.js";
 import type { ScheduledReviewFollowup } from "./review-scheduler.js";
 import {
@@ -1557,8 +1558,14 @@ program
           let queue: ReviewQueueEntry[] = [];
           let allowedEngines: IdleEngine[] = [];
           if (dryRun) {
-            queue = backlog.slice(0, maxEntries);
-            allowedEngines = ["codex"];
+            const gate = await resolveAllowedIdleEngines({ allowGeminiWarmup: false });
+            allowedEngines = gate.engines;
+            queue = planDryRunReviewFollowupQueue({
+              mergeOnlyBacklog,
+              engineBacklog,
+              maxEntries,
+              allowedEngines
+            });
           } else {
             const mergeOnly = await takeReviewTasksWhere(reviewQueuePath, maxEntries, (entry) => !entry.requiresEngine);
             queue.push(...mergeOnly);

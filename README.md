@@ -8,7 +8,7 @@ Local agent runner that queues and executes GitHub Agent requests using Codex.
 - Queues requests, runs up to the configured concurrency, and posts results back to GitHub.
 - Runs each request in an isolated git worktree under `workdirRoot/agent-runner/work/` to avoid mixing changes across concurrent runs.
 - Runs idle maintenance tasks when no queued issues are available.
-- Can optionally run idle tasks through Copilot/Gemini/Amazon Q when configured usage gates allow.
+- Can optionally run idle tasks through Copilot/Gemini/Amazon Q/Claude when configured usage gates allow.
 - Designed for a self-hosted Windows machine running Codex CLI.
 
 ## Setup
@@ -124,6 +124,7 @@ Config file: `agent-runner.config.json`
   - `serviceConcurrency.copilot`: Max concurrent Copilot executions
   - `serviceConcurrency.gemini`: Max concurrent Gemini executions (pro/flash combined)
   - `serviceConcurrency.amazonQ`: Max concurrent Amazon Q executions
+  - `serviceConcurrency.claude`: Max concurrent Claude executions
 - `repos`: If `"all"`, the runner caches the repository list and refreshes periodically to avoid GitHub rate limits. When rate-limited and no cache is available, it will fall back to local workspace repositories (directories with a `.git` folder).
 - `logMaintenance`: Optional log pruning settings (applied automatically on startup and via `agent-runner logs prune`)
 - `reportMaintenance`: Optional report pruning settings (applied automatically on startup and via `agent-runner reports prune`)
@@ -134,9 +135,10 @@ Config file: `agent-runner.config.json`
 - `labels.reviewFollowupWaiting`: Optional label for follow-ups waiting on idle engine gates (default: `<reviewFollowup>:waiting`)
 - `labels.reviewFollowupActionRequired`: Optional label for follow-ups that need manual action (default: `<reviewFollowup>:action-required`)
 - `codex`: Codex CLI command and prompt template
-- `codex.args`: Default config runs with full access (`--dangerously-bypass-approvals-and-sandbox`); change this if you want approvals or sandboxing.
+- `codex.args`: Default config runs with full access (`--dangerously-bypass-approvals-and-sandbox`) and pins a model (`--model gpt-5.2`); change this if you want approvals/sandboxing or a different model.
 - `codex.promptTemplate`: The runner expects a final response block (`AGENT_RUNNER_STATUS: ...` + message body) and posts that final message to the issue thread.
   - The default template allows GitHub operations (issues/PRs/commits/pushes) but forbids sending/posting outside GitHub unless the user explicitly approves in the issue.
+  - For Codex engine runs, agent-runner prepends a `$manager` line to the rendered prompt to activate the local `manager` skill in Codex CLI (delegation/orchestration mode).
 - `webhooks`: Optional GitHub webhook listener configuration (recommended to avoid repo-wide polling)
   - `webhooks.enabled`: Turn webhook mode on/off
   - `webhooks.host`: Host to bind for the local webhook server
@@ -157,6 +159,8 @@ Config file: `agent-runner.config.json`
   - Note: when spawning Gemini CLI, agent-runner sets `GEMINI_CLI_SYSTEM_DEFAULTS_PATH` to disable `tools.shell.enableInteractiveShell` (avoids Windows node-pty/ConPTY noise like `AttachConsole failed`).
 - `amazonQ`: Optional Amazon Q CLI command and args for idle runs.
   - `amazonQ.promptMode`: Use `"arg"` when the prompt is passed as the last argument (recommended for WSL wrapper scripts).
+- `claude`: Optional Claude CLI command and args for idle runs (and engine-required managed PR review follow-ups).
+  - `claude.args`: Ensure `-p` is included so the prompt is passed as the final argument value.
 - `idle`: Optional idle task settings (runs when no queued issues exist)
   - `idle.enabled`: Turn idle tasks on/off
   - `idle.maxRunsPerCycle`: Max idle tasks per cycle
@@ -196,6 +200,7 @@ Config file: `agent-runner.config.json`
   - `idle.amazonQUsageGate.enabled`: Turn Amazon Q usage gating on/off
   - `idle.amazonQUsageGate.monthlyLimit`: Monthly request limit to enforce for runner-driven usage
   - `idle.amazonQUsageGate.monthlySchedule`: Monthly ramp for remaining percent (same semantics as Copilot)
+  - `idle.claudeUsageGate`: Optional Claude usage guard (delegated to `@metyatech/ai-quota`)
 
 ## Logs (Grafana + Loki)
 

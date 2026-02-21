@@ -348,6 +348,22 @@ export async function loadIdleOpenPrData(
   };
 }
 
+export function ensureCodexManagerPrefix(prompt: string, engine: IdleEngine): string {
+  if (engine !== "codex") {
+    return prompt;
+  }
+
+  const trimmedStart = prompt.trimStart();
+  if (trimmedStart.startsWith("$manager")) {
+    return prompt;
+  }
+
+  const delegatedNote =
+    "Delegated mode: this run was invoked by agent-runner and the execution plan is approved. " +
+    "Do not request additional approval; proceed.";
+  return `$manager\n${delegatedNote}\n\n${prompt}`;
+}
+
 function renderPrompt(
   template: string,
   repos: RepoInfo[],
@@ -868,8 +884,10 @@ export async function runIssue(
       throw new Error(`Missing primary worktree for ${primaryRepo.owner}/${primaryRepo.repo}`);
     }
 
-    const prompt = renderPrompt(config.codex.promptTemplate, repos, issue, comments, reviewComments);
-    const resumePrompt = options.resumePrompt?.trim() ? options.resumePrompt : prompt;
+    let prompt = renderPrompt(config.codex.promptTemplate, repos, issue, comments, reviewComments);
+    prompt = ensureCodexManagerPrefix(prompt, engine);
+    let resumePrompt = options.resumePrompt?.trim() ? options.resumePrompt : prompt;
+    resumePrompt = ensureCodexManagerPrefix(resumePrompt, engine);
 
     const logDir = path.resolve(config.workdirRoot, "agent-runner", "logs");
     fs.mkdirSync(logDir, { recursive: true });
@@ -1159,11 +1177,12 @@ export async function runIdleTask(
       warn: (message) => process.stderr.write(`${message}\n`)
     });
 
-    const prompt = renderIdlePrompt(config.idle?.promptTemplate ?? "", repo, task, {
+    let prompt = renderIdlePrompt(config.idle?.promptTemplate ?? "", repo, task, {
       openPrCount,
       openPrContext,
       openPrContextAvailable
     });
+    prompt = ensureCodexManagerPrefix(prompt, engine);
 
   const logDir = path.resolve(config.workdirRoot, "agent-runner", "logs");
   fs.mkdirSync(logDir, { recursive: true });
