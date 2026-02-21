@@ -108,14 +108,26 @@ export class GitHubClient {
     perPage: number;
     page: number;
   }): Promise<SearchResponse> {
-    const response = await this.octokit.request("GET /search/issues", {
-      q: options.query,
-      sort: options.sort,
-      order: options.order,
-      per_page: options.perPage,
-      page: options.page
-    });
-    return response as unknown as SearchResponse;
+    try {
+      const response = await this.octokit.request("GET /search/issues", {
+        q: options.query,
+        sort: options.sort,
+        order: options.order,
+        per_page: options.perPage,
+        page: options.page
+      });
+      return response as unknown as SearchResponse;
+    } catch (error: unknown) {
+      const e = error as { status?: number; message?: string };
+      if (e.status === 403 || e.status === 429) {
+        const rateLimitError = new Error(
+          `GitHub Search API rate limited (HTTP ${e.status}): ${e.message ?? "unknown"}`
+        );
+        (rateLimitError as { isRateLimit?: boolean }).isRateLimit = true;
+        throw rateLimitError;
+      }
+      throw error;
+    }
   }
 
   async listRepos(owner: string): Promise<RepoInfo[]> {
