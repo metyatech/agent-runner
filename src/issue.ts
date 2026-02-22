@@ -79,14 +79,7 @@ export function parseRepoList(value: string): string[] {
   return Array.from(new Set(normalized));
 }
 
-const placeholderRepoEntries = new Set([
-  "no response",
-  "_no response_",
-  "n/a",
-  "na",
-  "none",
-  "-"
-]);
+const placeholderRepoEntries = new Set(["no response", "_no response_", "n/a", "na", "none", "-"]);
 
 function isPlaceholderRepoEntry(entry: string): boolean {
   const normalized = entry.toLowerCase();

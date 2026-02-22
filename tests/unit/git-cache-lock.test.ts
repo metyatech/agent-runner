@@ -2,7 +2,11 @@ import { describe, expect, it } from "vitest";
 import os from "node:os";
 import fs from "node:fs";
 import path from "node:path";
-import { acquireGitCacheLock, releaseGitCacheLock, resolveGitCacheLockPath } from "../../src/git-cache-lock.js";
+import {
+  acquireGitCacheLock,
+  releaseGitCacheLock,
+  resolveGitCacheLockPath
+} from "../../src/git-cache-lock.js";
 
 describe("git-cache-lock", () => {
   it("creates lock path under workdir state", () => {
@@ -30,4 +34,3 @@ describe("git-cache-lock", () => {
     }
   });
 });
-

@@ -15,7 +15,13 @@ function safeWrite(line: string): void {
 }
 
 export function log(level: LogLevel, message: string, json: boolean, tag?: string): void;
-export function log(level: LogLevel, message: string, json: boolean, data?: Record<string, unknown>, tag?: string): void;
+export function log(
+  level: LogLevel,
+  message: string,
+  json: boolean,
+  data?: Record<string, unknown>,
+  tag?: string
+): void;
 export function log(
   level: LogLevel,
   message: string,

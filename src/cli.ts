@@ -40,7 +40,14 @@ import {
 import { evaluateClaudeUsageGate, fetchClaudeUsage } from "./claude-usage.js";
 import { commandExists } from "./command-exists.js";
 import { listTargetRepos, listQueuedIssues, pickNextIssues } from "./queue.js";
-import { planIdleTasks, runIdleTask, runIssue, QUOTA_ERROR_PATTERNS, hasPattern, extractErrorMessage } from "./runner.js";
+import {
+  planIdleTasks,
+  runIdleTask,
+  runIssue,
+  QUOTA_ERROR_PATTERNS,
+  hasPattern,
+  extractErrorMessage
+} from "./runner.js";
 import type { IdleEngine, IdleTaskResult } from "./runner.js";
 import { loadIdleHistory, resolveIdleHistoryPath, saveIdleHistory } from "./idle.js";
 import { listLocalRepos } from "./local-repos.js";
@@ -53,7 +60,11 @@ import {
 } from "./runner-state.js";
 import { startStatusServer } from "./status-server.js";
 import { buildStatusSnapshot } from "./status-snapshot.js";
-import { pruneDeadActivityRecords, removeActivity, resolveActivityStatePath } from "./activity-state.js";
+import {
+  pruneDeadActivityRecords,
+  removeActivity,
+  resolveActivityStatePath
+} from "./activity-state.js";
 import { clearStopRequest, isStopRequested, requestStop } from "./stop-flag.js";
 import { handleWebhookEvent } from "./webhook-handler.js";
 import { startWebhookServer } from "./webhook-server.js";
@@ -125,7 +136,10 @@ import {
   isManualActionRequiredForAutoMergeSkip,
   shouldPostReviewFollowupMarkerComment
 } from "./review-followup-status.js";
-import { labelsForReviewFollowupState, listReviewFollowupLabels } from "./review-followup-labels.js";
+import {
+  labelsForReviewFollowupState,
+  listReviewFollowupLabels
+} from "./review-followup-labels.js";
 import {
   clearUiServerState,
   isUiServerProcessAlive,
@@ -167,7 +181,12 @@ function resolveCliEntryScriptPath(): string {
   return path.resolve(entry);
 }
 
-async function waitForUiServer(host: string, port: number, attempts: number, intervalMs: number): Promise<boolean> {
+async function waitForUiServer(
+  host: string,
+  port: number,
+  attempts: number,
+  intervalMs: number
+): Promise<boolean> {
   for (let i = 0; i < attempts; i += 1) {
     if (await probeUiServer(host, port, Math.max(200, intervalMs))) {
       return true;
@@ -211,10 +230,16 @@ async function maybeRunWebhookCatchup(options: {
     config.labels.needsUserReply
   ];
 
-  log("info", "Webhook catch-up scan: searching for missed /agent run comment requests.", json, {
-    intervalMinutes: catchup.intervalMinutes,
-    maxIssuesPerRun: maxIssues
-  }, "catch-up");
+  log(
+    "info",
+    "Webhook catch-up scan: searching for missed /agent run comment requests.",
+    json,
+    {
+      intervalMinutes: catchup.intervalMinutes,
+      maxIssuesPerRun: maxIssues
+    },
+    "catch-up"
+  );
 
   const parsedLastRunAt = state.lastRunAt ? Date.parse(state.lastRunAt) : Number.NaN;
   const lastRunAt = Number.isNaN(parsedLastRunAt) ? now.getTime() - intervalMs : parsedLastRunAt;
@@ -222,16 +247,26 @@ async function maybeRunWebhookCatchup(options: {
   const managedStatePath = resolveManagedPullRequestsStatePath(config.workdirRoot);
   let found: IssueInfo[] = [];
   try {
-    const byCommand = await client.searchOpenItemsByCommentPhraseAcrossOwner(config.owner, "/agent run", {
-      excludeLabels,
-      perPage: 100,
-      maxPages: 1
-    });
+    const byCommand = await client.searchOpenItemsByCommentPhraseAcrossOwner(
+      config.owner,
+      "/agent run",
+      {
+        excludeLabels,
+        perPage: 100,
+        maxPages: 1
+      }
+    );
     found = byCommand;
   } catch (error) {
-    log("warn", "Webhook catch-up scan failed.", json, {
-      error: error instanceof Error ? error.message : String(error)
-    }, "catch-up");
+    log(
+      "warn",
+      "Webhook catch-up scan failed.",
+      json,
+      {
+        error: error instanceof Error ? error.message : String(error)
+      },
+      "catch-up"
+    );
     return;
   }
 
@@ -241,9 +276,15 @@ async function maybeRunWebhookCatchup(options: {
   }
 
   const limited = found.slice(0, maxIssues);
-  log("info", `Webhook catch-up scan found ${found.length} issue(s).`, json, {
-    queued: limited.length
-  }, "catch-up");
+  log(
+    "info",
+    `Webhook catch-up scan found ${found.length} issue(s).`,
+    json,
+    {
+      queued: limited.length
+    },
+    "catch-up"
+  );
 
   let hadErrors = false;
   for (const issue of limited) {
@@ -280,30 +321,48 @@ async function maybeRunWebhookCatchup(options: {
         await markManagedPullRequest(managedStatePath, issue.repo, issue.number);
       } catch (error) {
         hadErrors = true;
-        log("warn", "Failed to record managed PR during webhook catch-up scan.", json, {
-          issue: issue.url,
-          error: error instanceof Error ? error.message : String(error)
-        }, "catch-up");
+        log(
+          "warn",
+          "Failed to record managed PR during webhook catch-up scan.",
+          json,
+          {
+            issue: issue.url,
+            error: error instanceof Error ? error.message : String(error)
+          },
+          "catch-up"
+        );
       }
     }
     try {
       await client.addLabels(issue, [config.labels.queued]);
     } catch (error) {
       hadErrors = true;
-      log("warn", "Failed to add queued label during catch-up.", json, {
-        issue: issue.url,
-        error: error instanceof Error ? error.message : String(error)
-      }, "catch-up");
+      log(
+        "warn",
+        "Failed to add queued label during catch-up.",
+        json,
+        {
+          issue: issue.url,
+          error: error instanceof Error ? error.message : String(error)
+        },
+        "catch-up"
+      );
       continue;
     }
     try {
       await enqueueWebhookIssue(queuePath, issue);
     } catch (error) {
       hadErrors = true;
-      log("warn", "Failed to enqueue catch-up issue.", json, {
-        issue: issue.url,
-        error: error instanceof Error ? error.message : String(error)
-      }, "catch-up");
+      log(
+        "warn",
+        "Failed to enqueue catch-up issue.",
+        json,
+        {
+          issue: issue.url,
+          error: error instanceof Error ? error.message : String(error)
+        },
+        "catch-up"
+      );
       continue;
     }
 
@@ -335,9 +394,15 @@ async function maybeEnqueueManagedPullRequestReviewFollowups(options: {
       log("info", `Managed PR catch-up scan enqueued ${enqueued} follow-up(s).`, json, "review");
     }
   } catch (error) {
-    log("warn", "Managed PR catch-up scan failed.", json, {
-      error: error instanceof Error ? error.message : String(error)
-    }, "review");
+    log(
+      "warn",
+      "Managed PR catch-up scan failed.",
+      json,
+      {
+        error: error instanceof Error ? error.message : String(error)
+      },
+      "review"
+    );
   }
 }
 
@@ -368,10 +433,16 @@ async function resolveWebhookQueuedIssues(
     try {
       issue = await client.getIssue(entry.repo, entry.issueNumber);
     } catch (error) {
-      log("warn", "Failed to resolve webhook queued issue; will retry.", json, {
-        issue: `${entry.repo.owner}/${entry.repo.repo}#${entry.issueNumber}`,
-        error: error instanceof Error ? error.message : String(error)
-      }, "queue");
+      log(
+        "warn",
+        "Failed to resolve webhook queued issue; will retry.",
+        json,
+        {
+          issue: `${entry.repo.owner}/${entry.repo.repo}#${entry.issueNumber}`,
+          error: error instanceof Error ? error.message : String(error)
+        },
+        "queue"
+      );
       continue;
     }
     if (!issue) {
@@ -399,10 +470,16 @@ async function resolveWebhookQueuedIssues(
           await client.addLabels(issue, [config.labels.queued]);
           issue.labels = [...issue.labels, config.labels.queued];
         } catch (error) {
-          log("warn", "Failed to add queued label to webhook issue.", json, {
-            issue: issue.url,
-            error: error instanceof Error ? error.message : String(error)
-          }, "queue");
+          log(
+            "warn",
+            "Failed to add queued label to webhook issue.",
+            json,
+            {
+              issue: issue.url,
+              error: error instanceof Error ? error.message : String(error)
+            },
+            "queue"
+          );
           continue;
         }
       }
@@ -458,9 +535,7 @@ program
     const serviceLimiters = createServiceLimiters(config);
 
     const token =
-      process.env.AGENT_GITHUB_TOKEN ||
-      process.env.GITHUB_TOKEN ||
-      process.env.GH_TOKEN;
+      process.env.AGENT_GITHUB_TOKEN || process.env.GITHUB_TOKEN || process.env.GH_TOKEN;
 
     if (!token) {
       throw new Error("Missing GitHub token. Set AGENT_GITHUB_TOKEN or GITHUB_TOKEN.");
@@ -473,14 +548,20 @@ program
       dryRun
     });
     if (logDecision.enabled) {
-      log("info", pruneResult.dryRun ? "Dry-run: would prune logs." : "Pruned logs.", json, {
-        dir: pruneResult.dir,
-        scanned: pruneResult.scanned,
-        deleted: pruneResult.deleted,
-        deletedMB: Math.round((pruneResult.deletedBytes / (1024 * 1024)) * 100) / 100,
-        skipped: pruneResult.skipped,
-        kept: pruneResult.kept
-      }, "maint");
+      log(
+        "info",
+        pruneResult.dryRun ? "Dry-run: would prune logs." : "Pruned logs.",
+        json,
+        {
+          dir: pruneResult.dir,
+          scanned: pruneResult.scanned,
+          deleted: pruneResult.deleted,
+          deletedMB: Math.round((pruneResult.deletedBytes / (1024 * 1024)) * 100) / 100,
+          skipped: pruneResult.skipped,
+          kept: pruneResult.kept
+        },
+        "maint"
+      );
     }
 
     const reportDecision = resolveReportMaintenance(config);
@@ -490,14 +571,20 @@ program
       dryRun
     });
     if (reportDecision.enabled) {
-      log("info", pruneReportsResult.dryRun ? "Dry-run: would prune reports." : "Pruned reports.", json, {
-        dir: pruneReportsResult.dir,
-        scanned: pruneReportsResult.scanned,
-        deleted: pruneReportsResult.deleted,
-        deletedMB: Math.round((pruneReportsResult.deletedBytes / (1024 * 1024)) * 100) / 100,
-        skipped: pruneReportsResult.skipped,
-        kept: pruneReportsResult.kept
-      }, "maint");
+      log(
+        "info",
+        pruneReportsResult.dryRun ? "Dry-run: would prune reports." : "Pruned reports.",
+        json,
+        {
+          dir: pruneReportsResult.dir,
+          scanned: pruneReportsResult.scanned,
+          deleted: pruneReportsResult.deleted,
+          deletedMB: Math.round((pruneReportsResult.deletedBytes / (1024 * 1024)) * 100) / 100,
+          skipped: pruneReportsResult.skipped,
+          kept: pruneReportsResult.kept
+        },
+        "maint"
+      );
     }
 
     let lock: ReturnType<typeof acquireLock>;
@@ -538,16 +625,18 @@ program
             ? (error as { status?: unknown }).status
             : undefined;
         const message = extractErrorMessage(error).toLowerCase();
-        if (
-          status === 404 ||
-          status === 422 ||
-          message.includes("label does not exist")
-        ) {
+        if (status === 404 || status === 422 || message.includes("label does not exist")) {
           return;
         }
-        log("warn", `Failed to remove label ${label} from ${issue.url}`, json, {
-          error: extractErrorMessage(error)
-        }, "run");
+        log(
+          "warn",
+          `Failed to remove label ${label} from ${issue.url}`,
+          json,
+          {
+            error: extractErrorMessage(error)
+          },
+          "run"
+        );
       }
     };
     const tryRemoveReviewFollowupLabels = async (issue: IssueInfo): Promise<void> => {
@@ -567,11 +656,17 @@ program
           await client.addLabels(issue, toAdd);
           issue.labels = Array.from(new Set([...issue.labels, ...toAdd]));
         } catch (error) {
-          log("warn", "Failed to add review follow-up labels.", json, {
-            issue: issue.url,
-            labels: toAdd,
-            error: error instanceof Error ? error.message : String(error)
-          }, "review");
+          log(
+            "warn",
+            "Failed to add review follow-up labels.",
+            json,
+            {
+              issue: issue.url,
+              labels: toAdd,
+              error: error instanceof Error ? error.message : String(error)
+            },
+            "review"
+          );
         }
       }
       for (const label of reviewFollowupLabels) {
@@ -579,7 +674,9 @@ program
           await tryRemoveLabel(issue, label);
         }
       }
-      issue.labels = issue.labels.filter((label) => !reviewFollowupLabelSet.has(label) || desired.has(label));
+      issue.labels = issue.labels.filter(
+        (label) => !reviewFollowupLabelSet.has(label) || desired.has(label)
+      );
     };
 
     const commentCompletion = async (issue: IssueInfo, body: string): Promise<void> => {
@@ -588,10 +685,16 @@ program
           await notifyClient.commentIssue(issue.repo, issue.number, body);
           return;
         } catch (error) {
-          log("warn", "Failed to post completion comment with notify token; falling back.", json, {
-            issue: issue.url,
-            error: error instanceof Error ? error.message : String(error)
-          }, "run");
+          log(
+            "warn",
+            "Failed to post completion comment with notify token; falling back.",
+            json,
+            {
+              issue: issue.url,
+              error: error instanceof Error ? error.message : String(error)
+            },
+            "run"
+          );
         }
       }
       await client.comment(issue, body);
@@ -622,10 +725,16 @@ program
       try {
         await tryApplyReviewFollowupLabelState(options.issue, options.state);
       } catch (error) {
-        log("warn", "Failed to add review follow-up label while posting state.", json, {
-          issue: options.issue.url,
-          error: error instanceof Error ? error.message : String(error)
-        }, "review");
+        log(
+          "warn",
+          "Failed to add review follow-up label while posting state.",
+          json,
+          {
+            issue: options.issue.url,
+            error: error instanceof Error ? error.message : String(error)
+          },
+          "review"
+        );
       }
 
       try {
@@ -648,12 +757,18 @@ program
         await commentCompletion(options.issue, body);
         postedReviewFollowupStateMarkers.add(key);
       } catch (error) {
-        log("warn", "Failed to post review follow-up state comment.", json, {
-          issue: options.issue.url,
-          state: options.state,
-          reason: options.reason,
-          error: error instanceof Error ? error.message : String(error)
-        }, "review");
+        log(
+          "warn",
+          "Failed to post review follow-up state comment.",
+          json,
+          {
+            issue: options.issue.url,
+            state: options.state,
+            reason: options.reason,
+            error: error instanceof Error ? error.message : String(error)
+          },
+          "review"
+        );
       }
     };
 
@@ -674,10 +789,16 @@ program
           }
         });
       } catch (error) {
-        log("warn", "Failed to notify idle PR.", json, {
-          repo: `${result.repo.owner}/${result.repo.repo}`,
-          error: error instanceof Error ? error.message : String(error)
-        }, "idle");
+        log(
+          "warn",
+          "Failed to notify idle PR.",
+          json,
+          {
+            repo: `${result.repo.owner}/${result.repo.repo}`,
+            error: error instanceof Error ? error.message : String(error)
+          },
+          "idle"
+        );
       }
     };
 
@@ -725,10 +846,16 @@ program
           try {
             await enqueueWebhookIssue(webhookQueuePath, issue);
           } catch (error) {
-            log("warn", "Failed to enqueue scheduled retry in webhook queue.", json, {
-              issue: issue.url,
-              error: error instanceof Error ? error.message : String(error)
-            }, "resume");
+            log(
+              "warn",
+              "Failed to enqueue scheduled retry in webhook queue.",
+              json,
+              {
+                issue: issue.url,
+                error: error instanceof Error ? error.message : String(error)
+              },
+              "resume"
+            );
           }
         }
         resumed += 1;
@@ -771,10 +898,16 @@ program
             try {
               await enqueueWebhookIssue(webhookQueuePath, issue);
             } catch (error) {
-              log("warn", "Failed to enqueue resumed issue in webhook queue.", json, {
-                issue: issue.url,
-                error: error instanceof Error ? error.message : String(error)
-              }, "resume");
+              log(
+                "warn",
+                "Failed to enqueue resumed issue in webhook queue.",
+                json,
+                {
+                  issue: issue.url,
+                  error: error instanceof Error ? error.message : String(error)
+                },
+                "resume"
+              );
             }
           }
           resumed += 1;
@@ -791,10 +924,9 @@ program
         return runIssue(client, config, issue, { engine });
       }
       let resumeSessionId = getIssueSession(issueSessionStatePath, issue);
-      let resumePrompt: string | null =
-        resumeSessionId
-          ? "Continue from the previous Codex session and complete the pending task with the latest issue comments."
-          : null;
+      let resumePrompt: string | null = resumeSessionId
+        ? "Continue from the previous Codex session and complete the pending task with the latest issue comments."
+        : null;
       while (true) {
         const result = await runIssue(client, config, issue, {
           resumeSessionId,
@@ -823,7 +955,10 @@ program
       result: Awaited<ReturnType<typeof runIssue>>,
       contextLabel: "issue" | "review-followup"
     ): Promise<void> => {
-      const title = contextLabel === "review-followup" ? "Agent runner failed review follow-up." : "Agent runner failed.";
+      const title =
+        contextLabel === "review-followup"
+          ? "Agent runner failed review follow-up."
+          : "Agent runner failed.";
       const detailLine = result.failureDetail ? `\n\nDetail: ${result.failureDetail}` : "";
 
       if (result.failureKind === "quota") {
@@ -859,10 +994,7 @@ program
           `${contextLabel === "review-followup" ? "Agent runner paused review follow-up." : "Agent runner paused."}` +
             `${detailLine}` +
             `\n\nPlease reply on this thread. The runner will resume from the same Codex session after your reply.`;
-        await commentCompletion(
-          issue,
-          buildAgentComment(userReplyBody, [NEEDS_USER_MARKER])
-        );
+        await commentCompletion(issue, buildAgentComment(userReplyBody, [NEEDS_USER_MARKER]));
         return;
       }
 
@@ -899,7 +1031,9 @@ program
       ];
       const commandStatePath = resolveAgentCommandStatePath(config.workdirRoot);
       const managedStatePath = resolveManagedPullRequestsStatePath(config.workdirRoot);
-      const allowedRepos = new Set(repos.map((repo) => `${repo.owner.toLowerCase()}/${repo.repo.toLowerCase()}`));
+      const allowedRepos = new Set(
+        repos.map((repo) => `${repo.owner.toLowerCase()}/${repo.repo.toLowerCase()}`)
+      );
 
       let found: IssueInfo[] = [];
       try {
@@ -909,9 +1043,15 @@ program
           maxPages: 1
         });
       } catch (error) {
-        log("warn", "Failed to search for /agent run comment requests.", json, {
-          error: error instanceof Error ? error.message : String(error)
-        }, "queue");
+        log(
+          "warn",
+          "Failed to search for /agent run comment requests.",
+          json,
+          {
+            error: error instanceof Error ? error.message : String(error)
+          },
+          "queue"
+        );
         return [];
       }
 
@@ -939,10 +1079,16 @@ program
             break;
           }
         } catch (error) {
-          log("warn", "Failed to inspect /agent run comments; will retry.", json, {
-            issue: issue.url,
-            error: error instanceof Error ? error.message : String(error)
-          }, "queue");
+          log(
+            "warn",
+            "Failed to inspect /agent run comments; will retry.",
+            json,
+            {
+              issue: issue.url,
+              error: error instanceof Error ? error.message : String(error)
+            },
+            "queue"
+          );
           continue;
         }
 
@@ -960,10 +1106,16 @@ program
           try {
             await markManagedPullRequest(managedStatePath, issue.repo, issue.number);
           } catch (error) {
-            log("warn", "Failed to record managed PR for /agent run catch-up.", json, {
-              issue: issue.url,
-              error: error instanceof Error ? error.message : String(error)
-            }, "queue");
+            log(
+              "warn",
+              "Failed to record managed PR for /agent run catch-up.",
+              json,
+              {
+                issue: issue.url,
+                error: error instanceof Error ? error.message : String(error)
+              },
+              "queue"
+            );
           }
         }
 
@@ -972,21 +1124,33 @@ program
           clearRetry(scheduledRetryStatePath, issue.id);
           queued.push(issue);
         } catch (error) {
-          log("warn", "Failed to add queued label for /agent run request.", json, {
-            issue: issue.url,
-            error: error instanceof Error ? error.message : String(error)
-          }, "queue");
+          log(
+            "warn",
+            "Failed to add queued label for /agent run request.",
+            json,
+            {
+              issue: issue.url,
+              error: error instanceof Error ? error.message : String(error)
+            },
+            "queue"
+          );
           continue;
         }
 
         try {
           await markAgentCommandCommentProcessed(commandStatePath, triggerCommentId);
         } catch (error) {
-          log("warn", "Failed to mark /agent run comment as processed.", json, {
-            issue: issue.url,
-            commentId: triggerCommentId,
-            error: error instanceof Error ? error.message : String(error)
-          }, "queue");
+          log(
+            "warn",
+            "Failed to mark /agent run comment as processed.",
+            json,
+            {
+              issue: issue.url,
+              commentId: triggerCommentId,
+              error: error instanceof Error ? error.message : String(error)
+            },
+            "queue"
+          );
         }
       }
 
@@ -1005,7 +1169,13 @@ program
       let rateLimitedUntil: string | null = null;
       const prunedActivityCount = pruneDeadActivityRecords(activityPath, isProcessAlive, ["idle"]);
       if (prunedActivityCount > 0) {
-        log("info", "Pruned stale activity records.", json, { removed: prunedActivityCount }, "maint");
+        log(
+          "info",
+          "Pruned stale activity records.",
+          json,
+          { removed: prunedActivityCount },
+          "maint"
+        );
       }
       if (shouldListRepos) {
         const repoResult = await listTargetRepos(client, config, config.workdirRoot);
@@ -1044,9 +1214,15 @@ program
       try {
         state = loadRunnerState(statePath);
       } catch (error) {
-        log("warn", "Failed to read runner state; skipping running issue checks.", json, {
-          error: error instanceof Error ? error.message : String(error)
-        }, "init");
+        log(
+          "warn",
+          "Failed to read runner state; skipping running issue checks.",
+          json,
+          {
+            error: error instanceof Error ? error.message : String(error)
+          },
+          "init"
+        );
       }
 
       if (state) {
@@ -1100,10 +1276,14 @@ program
         } else if (webhooksEnabled) {
           let runningIssues: IssueInfo[] | null = null;
           try {
-            runningIssues = await client.searchOpenItemsByLabelAcrossOwner(config.owner, config.labels.running, {
-              perPage: 100,
-              maxPages: 1
-            });
+            runningIssues = await client.searchOpenItemsByLabelAcrossOwner(
+              config.owner,
+              config.labels.running,
+              {
+                perPage: 100,
+                maxPages: 1
+              }
+            );
           } catch (error) {
             log(
               "warn",
@@ -1171,15 +1351,19 @@ program
         }
       }
 
-      const resumed =
-        shouldPollIssues && !rateLimitedUntil ? await resumeAwaitingUser(repos) : 0;
+      const resumed = shouldPollIssues && !rateLimitedUntil ? await resumeAwaitingUser(repos) : 0;
       if (resumed > 0) {
         log("info", `Re-queued ${resumed} request(s) after user reply.`, json, "resume");
       }
 
       const resumedBySchedule = await enqueueDueScheduledRetries();
       if (resumedBySchedule > 0) {
-        log("info", `Re-queued ${resumedBySchedule} request(s) after scheduled retry time.`, json, "resume");
+        log(
+          "info",
+          `Re-queued ${resumedBySchedule} request(s) after scheduled retry time.`,
+          json,
+          "resume"
+        );
       }
 
       if (webhooksEnabled && webhookQueuePath && webhookConfig) {
@@ -1273,10 +1457,16 @@ program
             return false;
           }
 
-          log("info", `Idle Codex usage gate allowed. ${decision.reason}`, json, {
-            window: decision.window?.label,
-            minutesToReset: decision.minutesToReset
-          }, "idle");
+          log(
+            "info",
+            `Idle Codex usage gate allowed. ${decision.reason}`,
+            json,
+            {
+              window: decision.window?.label,
+              minutesToReset: decision.minutesToReset
+            },
+            "idle"
+          );
 
           if (timingEnabled && timingEvents.length > 0) {
             log(
@@ -1289,9 +1479,15 @@ program
 
           return true;
         } catch (error) {
-          log("warn", "Idle Codex usage gate failed. Codex idle disabled.", json, {
-            error: error instanceof Error ? error.message : String(error)
-          }, "idle");
+          log(
+            "warn",
+            "Idle Codex usage gate failed. Codex idle disabled.",
+            json,
+            {
+              error: error instanceof Error ? error.message : String(error)
+            },
+            "idle"
+          );
           return false;
         }
       };
@@ -1311,37 +1507,69 @@ program
             const copilotStart = Date.now();
             const usage = await fetchCopilotUsage(token, copilotGate);
             if (timingEnabled) {
-              log("info", `${timingPrefix} (Copilot): rateLimits=${Date.now() - copilotStart}ms`, json, "idle");
+              log(
+                "info",
+                `${timingPrefix} (Copilot): rateLimits=${Date.now() - copilotStart}ms`,
+                json,
+                "idle"
+              );
             }
             if (!usage) {
-              log("warn", "Idle Copilot usage gate: unable to parse Copilot quota info.", json, "idle");
+              log(
+                "warn",
+                "Idle Copilot usage gate: unable to parse Copilot quota info.",
+                json,
+                "idle"
+              );
             } else {
               const decision = evaluateCopilotUsageGate(usage, copilotGate);
               if (!decision.allow) {
                 log("info", `Idle Copilot usage gate blocked. ${decision.reason}`, json, "idle");
               } else {
                 copilotAllowed = true;
-                log("info", `Idle Copilot usage gate allowed. ${decision.reason}`, json, {
-                  percentRemaining: decision.percentRemaining,
-                  minutesToReset: decision.minutesToReset
-                }, "idle");
+                log(
+                  "info",
+                  `Idle Copilot usage gate allowed. ${decision.reason}`,
+                  json,
+                  {
+                    percentRemaining: decision.percentRemaining,
+                    minutesToReset: decision.minutesToReset
+                  },
+                  "idle"
+                );
               }
             }
           } catch (error) {
-            log("warn", "Idle Copilot usage gate failed. Copilot idle disabled.", json, {
-              error: error instanceof Error ? error.message : String(error)
-            }, "idle");
+            log(
+              "warn",
+              "Idle Copilot usage gate failed. Copilot idle disabled.",
+              json,
+              {
+                error: error instanceof Error ? error.message : String(error)
+              },
+              "idle"
+            );
           }
         }
 
         if (copilotAllowed) {
           if (!config.copilot) {
-            log("warn", "Idle Copilot enabled but no copilot command configured. Skipping Copilot idle.", json, "idle");
+            log(
+              "warn",
+              "Idle Copilot enabled but no copilot command configured. Skipping Copilot idle.",
+              json,
+              "idle"
+            );
             copilotAllowed = false;
           } else {
             const exists = await commandExists(config.copilot.command);
             if (!exists) {
-              log("warn", `Idle Copilot command not found (${config.copilot.command}). Skipping Copilot idle.`, json, "idle");
+              log(
+                "warn",
+                `Idle Copilot command not found (${config.copilot.command}). Skipping Copilot idle.`,
+                json,
+                "idle"
+              );
               copilotAllowed = false;
             }
           }
@@ -1358,10 +1586,20 @@ program
             const geminiStart = Date.now();
             const usage = await fetchGeminiUsage();
             if (timingEnabled) {
-              log("info", `${timingPrefix} (Gemini): rateLimits=${Date.now() - geminiStart}ms`, json, "idle");
+              log(
+                "info",
+                `${timingPrefix} (Gemini): rateLimits=${Date.now() - geminiStart}ms`,
+                json,
+                "idle"
+              );
             }
             if (!usage) {
-              log("warn", "Idle Gemini usage gate: unable to parse Gemini quota info.", json, "idle");
+              log(
+                "warn",
+                "Idle Gemini usage gate: unable to parse Gemini quota info.",
+                json,
+                "idle"
+              );
             } else {
               const now = new Date();
               const decision = evaluateGeminiUsageGate(usage, geminiGate, now);
@@ -1369,11 +1607,19 @@ program
                 if (options.allowGeminiWarmup) {
                   let warmupState = { models: {} };
                   try {
-                    warmupState = loadGeminiWarmupState(resolveGeminiWarmupStatePath(config.workdirRoot));
+                    warmupState = loadGeminiWarmupState(
+                      resolveGeminiWarmupStatePath(config.workdirRoot)
+                    );
                   } catch (error) {
-                    log("warn", "Idle Gemini warmup: unable to read warmup state. Proceeding without cooldown.", json, {
-                      error: error instanceof Error ? error.message : String(error)
-                    }, "idle");
+                    log(
+                      "warn",
+                      "Idle Gemini warmup: unable to read warmup state. Proceeding without cooldown.",
+                      json,
+                      {
+                        error: error instanceof Error ? error.message : String(error)
+                      },
+                      "idle"
+                    );
                   }
 
                   const warmupDecision = evaluateGeminiWarmup(usage, geminiGate, warmupState, now);
@@ -1383,7 +1629,12 @@ program
                     geminiWarmupReason = warmupDecision.reason;
                     if (geminiWarmupPro) geminiProAllowed = true;
                     if (geminiWarmupFlash) geminiFlashAllowed = true;
-                    log("info", `Idle Gemini warmup allowed. ${warmupDecision.reason}`, json, "idle");
+                    log(
+                      "info",
+                      `Idle Gemini warmup allowed. ${warmupDecision.reason}`,
+                      json,
+                      "idle"
+                    );
                   } else {
                     log("info", `Idle Gemini usage gate blocked. ${decision.reason}`, json, "idle");
                   }
@@ -1397,15 +1648,26 @@ program
               }
             }
           } catch (error) {
-            log("warn", "Idle Gemini usage gate failed. Gemini idle disabled.", json, {
-              error: error instanceof Error ? error.message : String(error)
-            }, "idle");
+            log(
+              "warn",
+              "Idle Gemini usage gate failed. Gemini idle disabled.",
+              json,
+              {
+                error: error instanceof Error ? error.message : String(error)
+              },
+              "idle"
+            );
           }
         }
 
         if (geminiProAllowed || geminiFlashAllowed) {
           if (!config.gemini) {
-            log("warn", "Idle Gemini enabled but no gemini command configured. Skipping Gemini idle.", json, "idle");
+            log(
+              "warn",
+              "Idle Gemini enabled but no gemini command configured. Skipping Gemini idle.",
+              json,
+              "idle"
+            );
             geminiProAllowed = false;
             geminiFlashAllowed = false;
             geminiWarmupPro = false;
@@ -1414,7 +1676,12 @@ program
           } else {
             const exists = await commandExists(config.gemini.command);
             if (!exists) {
-              log("warn", `Idle Gemini command not found (${config.gemini.command}).`, json, "idle");
+              log(
+                "warn",
+                `Idle Gemini command not found (${config.gemini.command}).`,
+                json,
+                "idle"
+              );
               geminiProAllowed = false;
               geminiFlashAllowed = false;
               geminiWarmupPro = false;
@@ -1430,18 +1697,40 @@ program
             const statePath = resolveGeminiCapacityBackoffStatePath(config.workdirRoot);
             const state = loadGeminiCapacityBackoffState(statePath);
 
-            if (geminiProAllowed && isGeminiModelBlockedByCapacity(state, "gemini-3-pro-preview", now)) {
+            if (
+              geminiProAllowed &&
+              isGeminiModelBlockedByCapacity(state, "gemini-3-pro-preview", now)
+            ) {
               geminiProAllowed = false;
-              log("info", "Idle Gemini Pro blocked by recent model capacity exhaustion. Skipping Gemini Pro.", json, "idle");
+              log(
+                "info",
+                "Idle Gemini Pro blocked by recent model capacity exhaustion. Skipping Gemini Pro.",
+                json,
+                "idle"
+              );
             }
-            if (geminiFlashAllowed && isGeminiModelBlockedByCapacity(state, "gemini-3-flash-preview", now)) {
+            if (
+              geminiFlashAllowed &&
+              isGeminiModelBlockedByCapacity(state, "gemini-3-flash-preview", now)
+            ) {
               geminiFlashAllowed = false;
-              log("info", "Idle Gemini Flash blocked by recent model capacity exhaustion. Skipping Gemini Flash.", json, "idle");
+              log(
+                "info",
+                "Idle Gemini Flash blocked by recent model capacity exhaustion. Skipping Gemini Flash.",
+                json,
+                "idle"
+              );
             }
           } catch (error) {
-            log("warn", "Idle Gemini capacity backoff check failed; proceeding without it.", json, {
-              error: error instanceof Error ? error.message : String(error)
-            }, "idle");
+            log(
+              "warn",
+              "Idle Gemini capacity backoff check failed; proceeding without it.",
+              json,
+              {
+                error: error instanceof Error ? error.message : String(error)
+              },
+              "idle"
+            );
           }
         }
 
@@ -1449,7 +1738,12 @@ program
         if (config.amazonQ?.enabled) {
           const exists = await commandExists(config.amazonQ.command);
           if (!exists) {
-            log("warn", `Idle Amazon Q command not found (${config.amazonQ.command}).`, json, "idle");
+            log(
+              "warn",
+              `Idle Amazon Q command not found (${config.amazonQ.command}).`,
+              json,
+              "idle"
+            );
           } else {
             const amazonQGate = config.idle?.amazonQUsageGate;
             if (amazonQGate?.enabled) {
@@ -1465,17 +1759,29 @@ program
                   log("info", `Idle Amazon Q usage gate blocked. ${decision.reason}`, json, "idle");
                 } else {
                   amazonQAllowed = true;
-                  log("info", `Idle Amazon Q usage gate allowed. ${decision.reason}`, json, {
-                    percentRemaining: decision.percentRemaining,
-                    minutesToReset: decision.minutesToReset,
-                    used: decision.used,
-                    limit: decision.limit
-                  }, "idle");
+                  log(
+                    "info",
+                    `Idle Amazon Q usage gate allowed. ${decision.reason}`,
+                    json,
+                    {
+                      percentRemaining: decision.percentRemaining,
+                      minutesToReset: decision.minutesToReset,
+                      used: decision.used,
+                      limit: decision.limit
+                    },
+                    "idle"
+                  );
                 }
               } catch (error) {
-                log("warn", "Idle Amazon Q usage gate failed. Amazon Q idle disabled.", json, {
-                  error: error instanceof Error ? error.message : String(error)
-                }, "idle");
+                log(
+                  "warn",
+                  "Idle Amazon Q usage gate failed. Amazon Q idle disabled.",
+                  json,
+                  {
+                    error: error instanceof Error ? error.message : String(error)
+                  },
+                  "idle"
+                );
               }
             } else {
               amazonQAllowed = true;
@@ -1567,7 +1873,11 @@ program
               allowedEngines
             });
           } else {
-            const mergeOnly = await takeReviewTasksWhere(reviewQueuePath, maxEntries, (entry) => !entry.requiresEngine);
+            const mergeOnly = await takeReviewTasksWhere(
+              reviewQueuePath,
+              maxEntries,
+              (entry) => !entry.requiresEngine
+            );
             queue.push(...mergeOnly);
             const remaining = maxEntries - mergeOnly.length;
             if (remaining > 0 && engineBacklog.length > 0) {
@@ -1594,7 +1904,11 @@ program
                   });
                 }
               } else {
-                const engineTasks = await takeReviewTasksWhere(reviewQueuePath, remaining, (entry) => entry.requiresEngine);
+                const engineTasks = await takeReviewTasksWhere(
+                  reviewQueuePath,
+                  remaining,
+                  (entry) => entry.requiresEngine
+                );
                 queue.push(...engineTasks);
               }
             }
@@ -1602,13 +1916,25 @@ program
 
           if (queue.length === 0) {
             if (mergeOnlyBacklog.length > 0) {
-              log("info", "Review follow-up merge-only backlog detected but nothing was scheduled.", json, {
-                queued: mergeOnlyBacklog.length
-              }, "review");
+              log(
+                "info",
+                "Review follow-up merge-only backlog detected but nothing was scheduled.",
+                json,
+                {
+                  queued: mergeOnlyBacklog.length
+                },
+                "review"
+              );
             } else if (engineBacklog.length > 0) {
-              log("info", "Review follow-up backlog detected but nothing was scheduled.", json, {
-                queued: engineBacklog.length
-              }, "review");
+              log(
+                "info",
+                "Review follow-up backlog detected but nothing was scheduled.",
+                json,
+                {
+                  queued: engineBacklog.length
+                },
+                "review"
+              );
             }
           } else {
             scheduledReviewFollowups = scheduleReviewFollowups({
@@ -1664,7 +1990,12 @@ program
           now: new Date()
         });
         if (idleTasks.length === 0) {
-          log("info", "No queued requests. Idle cooldown active or no eligible repos.", json, "idle");
+          log(
+            "info",
+            "No queued requests. Idle cooldown active or no eligible repos.",
+            json,
+            "idle"
+          );
           return;
         }
 
@@ -1697,13 +2028,19 @@ program
         );
 
         if (dryRun) {
-          log("info", "Dry-run: would execute idle tasks.", json, {
-            tasks: scheduled.map((task) => ({
-              repo: `${task.repo.owner}/${task.repo.repo}`,
-              engine: task.engine,
-              task: task.task
-            }))
-          }, "idle");
+          log(
+            "info",
+            "Dry-run: would execute idle tasks.",
+            json,
+            {
+              tasks: scheduled.map((task) => ({
+                repo: `${task.repo.owner}/${task.repo.repo}`,
+                engine: task.engine,
+                task: task.task
+              }))
+            },
+            "idle"
+          );
           return;
         }
 
@@ -1718,21 +2055,35 @@ program
             if (geminiWarmupFlash && scheduledEngines.has("gemini-flash")) {
               recordGeminiWarmupAttempt(warmupStatePath, "gemini-3-flash-preview", warmupNow);
             }
-            log("info", "Idle Gemini warmup attempt recorded.", json, {
-              warmupPro: geminiWarmupPro && scheduledEngines.has("gemini-pro"),
-              warmupFlash: geminiWarmupFlash && scheduledEngines.has("gemini-flash"),
-              reason: geminiWarmupReason
-            }, "idle");
+            log(
+              "info",
+              "Idle Gemini warmup attempt recorded.",
+              json,
+              {
+                warmupPro: geminiWarmupPro && scheduledEngines.has("gemini-pro"),
+                warmupFlash: geminiWarmupFlash && scheduledEngines.has("gemini-flash"),
+                reason: geminiWarmupReason
+              },
+              "idle"
+            );
           } catch (error) {
-            log("warn", "Idle Gemini warmup: unable to record warmup attempt.", json, {
-              error: error instanceof Error ? error.message : String(error),
-              reason: geminiWarmupReason
-            }, "idle");
+            log(
+              "warn",
+              "Idle Gemini warmup: unable to record warmup attempt.",
+              json,
+              {
+                error: error instanceof Error ? error.message : String(error),
+                reason: geminiWarmupReason
+              },
+              "idle"
+            );
           }
         }
 
         const idleQuotaRetryMinutes = 60;
-        const rescheduleIdleRepoAfterQuotaFailure = async (result: IdleTaskResult): Promise<void> => {
+        const rescheduleIdleRepoAfterQuotaFailure = async (
+          result: IdleTaskResult
+        ): Promise<void> => {
           if (!config.idle) {
             return;
           }
@@ -1745,7 +2096,12 @@ program
 
           const adjustedLastRunAt = new Date(now.getTime() - cooldownMs + delayMs).toISOString();
           const historyPath = resolveIdleHistoryPath(config.workdirRoot);
-          const lockPath = path.resolve(config.workdirRoot, "agent-runner", "state", "idle-history.lock");
+          const lockPath = path.resolve(
+            config.workdirRoot,
+            "agent-runner",
+            "state",
+            "idle-history.lock"
+          );
           const lock = await acquireLockWithRetry(lockPath, { timeoutMs: 30_000, retryMs: 100 });
           try {
             const history = loadIdleHistory(historyPath);
@@ -1756,11 +2112,17 @@ program
             releaseLock(lock);
           }
 
-          log("info", "Idle quota/capacity failure: repo rescheduled for earlier retry.", json, {
-            repo: `${result.repo.owner}/${result.repo.repo}`,
-            retryDelayMinutes,
-            adjustedLastRunAt
-          }, "idle");
+          log(
+            "info",
+            "Idle quota/capacity failure: repo rescheduled for earlier retry.",
+            json,
+            {
+              repo: `${result.repo.owner}/${result.repo.repo}`,
+              retryDelayMinutes,
+              adjustedLastRunAt
+            },
+            "idle"
+          );
         };
 
         const recordGeminiCapacityBackoffFromIdleFailure = (result: IdleTaskResult): void => {
@@ -1775,10 +2137,16 @@ program
           recordGeminiCapacityBackoff(statePath, "gemini-3-pro-preview", blockedUntil);
           recordGeminiCapacityBackoff(statePath, "gemini-3-flash-preview", blockedUntil);
 
-          log("info", "Recorded Gemini capacity backoff after idle quota/capacity failure.", json, {
-            blockedUntil: blockedUntil.toISOString(),
-            repo: `${result.repo.owner}/${result.repo.repo}`
-          }, "idle");
+          log(
+            "info",
+            "Recorded Gemini capacity backoff after idle quota/capacity failure.",
+            json,
+            {
+              blockedUntil: blockedUntil.toISOString(),
+              repo: `${result.repo.owner}/${result.repo.repo}`
+            },
+            "idle"
+          );
         };
 
         const idleLimit = pLimit(config.concurrency);
@@ -1791,24 +2159,36 @@ program
               );
               await maybeNotifyIdlePullRequest(result);
               if (result.success) {
-                log("info", "Idle task completed.", json, {
-                  repo: `${result.repo.owner}/${result.repo.repo}`,
-                  engine: result.engine,
-                  report: result.reportPath,
-                  log: result.logPath
-                }, "idle");
+                log(
+                  "info",
+                  "Idle task completed.",
+                  json,
+                  {
+                    repo: `${result.repo.owner}/${result.repo.repo}`,
+                    engine: result.engine,
+                    report: result.reportPath,
+                    log: result.logPath
+                  },
+                  "idle"
+                );
                 return;
               }
               if (result.failureKind === "quota") {
                 recordGeminiCapacityBackoffFromIdleFailure(result);
                 await rescheduleIdleRepoAfterQuotaFailure(result);
               }
-              log("warn", "Idle task failed.", json, {
-                repo: `${result.repo.owner}/${result.repo.repo}`,
-                engine: result.engine,
-                report: result.reportPath,
-                log: result.logPath
-              }, "idle");
+              log(
+                "warn",
+                "Idle task failed.",
+                json,
+                {
+                  repo: `${result.repo.owner}/${result.repo.repo}`,
+                  engine: result.engine,
+                  report: result.reportPath,
+                  log: result.logPath
+                },
+                "idle"
+              );
             })
           )
         );
@@ -1817,17 +2197,29 @@ program
       }
 
       if (dryRun) {
-        log("info", `Dry-run: would process ${picked.length} request(s).`, json, {
-          issues: picked.map((issue) => issue.url)
-        }, "run");
+        log(
+          "info",
+          `Dry-run: would process ${picked.length} request(s).`,
+          json,
+          {
+            issues: picked.map((issue) => issue.url)
+          },
+          "run"
+        );
         if (scheduledReviewFollowups.length > 0) {
-          log("info", `Dry-run: would process ${scheduledReviewFollowups.length} review follow-up(s).`, json, {
-            followups: scheduledReviewFollowups.map((followup) => ({
-              url: followup.url,
-              reason: followup.reason,
-              requiresEngine: followup.requiresEngine
-            }))
-          }, "review");
+          log(
+            "info",
+            `Dry-run: would process ${scheduledReviewFollowups.length} review follow-up(s).`,
+            json,
+            {
+              followups: scheduledReviewFollowups.map((followup) => ({
+                url: followup.url,
+                reason: followup.reason,
+                requiresEngine: followup.requiresEngine
+              }))
+            },
+            "review"
+          );
         }
         return;
       }
@@ -1875,11 +2267,17 @@ program
                         await ensureManagedPullRequestRecorded(prIssue, config);
                       }
                     } catch (error) {
-                      log("warn", "Failed to record managed PR from run summary.", json, {
-                        issue: issue.url,
-                        pr: pr.url,
-                        error: error instanceof Error ? error.message : String(error)
-                      }, "run");
+                      log(
+                        "warn",
+                        "Failed to record managed PR from run summary.",
+                        json,
+                        {
+                          issue: issue.url,
+                          pr: pr.url,
+                          error: error instanceof Error ? error.message : String(error)
+                        },
+                        "run"
+                      );
                     }
                   }
                 }
@@ -1890,7 +2288,9 @@ program
                 await tryRemoveReviewFollowupLabels(issue);
                 await commentCompletion(
                   issue,
-                  buildAgentComment(result.summary?.trim() || "Agent runner completed successfully.")
+                  buildAgentComment(
+                    result.summary?.trim() || "Agent runner completed successfully."
+                  )
                 );
                 return;
               }
@@ -1905,9 +2305,7 @@ program
               await tryRemoveReviewFollowupLabels(issue);
               await commentCompletion(
                 issue,
-                buildAgentComment(
-                  `Agent runner failed with error: ${extractErrorMessage(error)}`
-                )
+                buildAgentComment(`Agent runner failed with error: ${extractErrorMessage(error)}`)
               );
             } finally {
               if (activityId) {
@@ -1920,7 +2318,13 @@ program
           limit(async () => {
             const issue = await client.getIssue(followup.repo, followup.prNumber);
             if (!issue) {
-              log("warn", "Review follow-up skipped: unable to resolve PR.", json, { url: followup.url }, "review");
+              log(
+                "warn",
+                "Review follow-up skipped: unable to resolve PR.",
+                json,
+                { url: followup.url },
+                "review"
+              );
               return;
             }
             await tryRemoveReviewFollowupLabels(issue);
@@ -1958,15 +2362,27 @@ program
                     requiresEngine
                   });
                   await tryApplyReviewFollowupLabelState(issue, "queued");
-                  log("info", "Auto-merge not ready yet; re-queued approval follow-up.", json, {
-                    url: followup.url,
-                    reason: merge.reason,
-                    requiresEngine
-                  }, "review");
+                  log(
+                    "info",
+                    "Auto-merge not ready yet; re-queued approval follow-up.",
+                    json,
+                    {
+                      url: followup.url,
+                      reason: merge.reason,
+                      requiresEngine
+                    },
+                    "review"
+                  );
                   return;
                 }
 
-                log("info", "Auto-merge skipped.", json, { url: followup.url, reason: merge.reason }, "review");
+                log(
+                  "info",
+                  "Auto-merge skipped.",
+                  json,
+                  { url: followup.url, reason: merge.reason },
+                  "review"
+                );
                 if (isManualActionRequiredForAutoMergeSkip(merge.reason)) {
                   await maybePostReviewFollowupStateComment({
                     issue,
@@ -1975,10 +2391,16 @@ program
                   });
                 }
               } catch (error) {
-                log("warn", "Auto-merge failed.", json, {
-                  url: followup.url,
-                  error: error instanceof Error ? error.message : String(error)
-                }, "review");
+                log(
+                  "warn",
+                  "Auto-merge failed.",
+                  json,
+                  {
+                    url: followup.url,
+                    error: error instanceof Error ? error.message : String(error)
+                  },
+                  "review"
+                );
               }
               return;
             }
@@ -2012,18 +2434,30 @@ program
                     pullNumber: followup.prNumber
                   });
                   if (resolved.resolved > 0) {
-                    log("info", "Resolved PR review threads after follow-up run.", json, {
-                      url: followup.url,
-                      resolved: resolved.resolved,
-                      unresolvedBefore: resolved.unresolvedBefore,
-                      total: resolved.total
-                    }, "review");
+                    log(
+                      "info",
+                      "Resolved PR review threads after follow-up run.",
+                      json,
+                      {
+                        url: followup.url,
+                        resolved: resolved.resolved,
+                        unresolvedBefore: resolved.unresolvedBefore,
+                        total: resolved.total
+                      },
+                      "review"
+                    );
                   }
                 } catch (error) {
-                  log("warn", "Failed to resolve PR review threads after follow-up run.", json, {
-                    url: followup.url,
-                    error: error instanceof Error ? error.message : String(error)
-                  }, "review");
+                  log(
+                    "warn",
+                    "Failed to resolve PR review threads after follow-up run.",
+                    json,
+                    {
+                      url: followup.url,
+                      error: error instanceof Error ? error.message : String(error)
+                    },
+                    "review"
+                  );
                 }
                 try {
                   const requested = await reRequestAllReviewers({
@@ -2032,17 +2466,29 @@ program
                     pullNumber: followup.prNumber,
                     issue
                   });
-                  log("info", "Re-requested reviewers after follow-up run.", json, {
-                    url: followup.url,
-                    humanReviewers: requested.requestedHumanReviewers,
-                    copilot: requested.requestedCopilot,
-                    codex: requested.requestedCodex
-                  }, "review");
+                  log(
+                    "info",
+                    "Re-requested reviewers after follow-up run.",
+                    json,
+                    {
+                      url: followup.url,
+                      humanReviewers: requested.requestedHumanReviewers,
+                      copilot: requested.requestedCopilot,
+                      codex: requested.requestedCodex
+                    },
+                    "review"
+                  );
                 } catch (error) {
-                  log("warn", "Failed to re-request reviewers after follow-up run.", json, {
-                    url: followup.url,
-                    error: error instanceof Error ? error.message : String(error)
-                  }, "review");
+                  log(
+                    "warn",
+                    "Failed to re-request reviewers after follow-up run.",
+                    json,
+                    {
+                      url: followup.url,
+                      error: error instanceof Error ? error.message : String(error)
+                    },
+                    "review"
+                  );
                 }
 
                 await client.addLabels(issue, [config.labels.done]);
@@ -2052,7 +2498,10 @@ program
                 await tryRemoveReviewFollowupLabels(issue);
                 await commentCompletion(
                   issue,
-                  buildAgentComment(result.summary?.trim() || "Agent runner completed review follow-up successfully.")
+                  buildAgentComment(
+                    result.summary?.trim() ||
+                      "Agent runner completed review follow-up successfully."
+                  )
                 );
                 return;
               }
@@ -2078,10 +2527,16 @@ program
                       `${result.logPath ? `\n\nLog: ${result.logPath}` : ""}`
                   )
                 );
-                log("info", "Review follow-up re-queued after quota/capacity failure.", json, {
-                  url: followup.url,
-                  engine: engineName
-                }, "review");
+                log(
+                  "info",
+                  "Review follow-up re-queued after quota/capacity failure.",
+                  json,
+                  {
+                    url: followup.url,
+                    engine: engineName
+                  },
+                  "review"
+                );
                 return;
               }
               await handleRunFailure(issue, result, "review-followup");
@@ -2108,17 +2563,30 @@ program
                         `\n\nThe task has been re-queued and will retry when engine capacity is available.`
                     )
                   );
-                  log("info", "Review follow-up re-queued after exception with quota pattern.", json, {
-                    url: followup.url,
-                    engine: engineName,
-                    error: errorMessage
-                  }, "review");
+                  log(
+                    "info",
+                    "Review follow-up re-queued after exception with quota pattern.",
+                    json,
+                    {
+                      url: followup.url,
+                      engine: engineName,
+                      error: errorMessage
+                    },
+                    "review"
+                  );
                   return;
                 } catch (requeueError) {
-                  log("warn", "Failed to re-queue review follow-up after quota exception.", json, {
-                    url: followup.url,
-                    error: requeueError instanceof Error ? requeueError.message : String(requeueError)
-                  }, "review");
+                  log(
+                    "warn",
+                    "Failed to re-queue review follow-up after quota exception.",
+                    json,
+                    {
+                      url: followup.url,
+                      error:
+                        requeueError instanceof Error ? requeueError.message : String(requeueError)
+                    },
+                    "review"
+                  );
                 }
               }
               clearRetry(scheduledRetryStatePath, issue.id);
@@ -2195,9 +2663,7 @@ program
     const config = loadConfig(configPath);
 
     const token =
-      process.env.AGENT_GITHUB_TOKEN ||
-      process.env.GITHUB_TOKEN ||
-      process.env.GH_TOKEN;
+      process.env.AGENT_GITHUB_TOKEN || process.env.GITHUB_TOKEN || process.env.GH_TOKEN;
 
     if (!token) {
       throw new Error("Missing GitHub token. Set AGENT_GITHUB_TOKEN or GITHUB_TOKEN.");
@@ -2269,14 +2735,20 @@ program
         const config = loadConfig(configPath);
         const decision = resolveLogMaintenance(config);
         const result = pruneLogs({ dir: resolveLogsDir(config.workdirRoot), decision, dryRun });
-        log("info", result.dryRun ? "Dry-run: would prune logs." : "Pruned logs.", json, {
-          dir: result.dir,
-          scanned: result.scanned,
-          deleted: result.deleted,
-          deletedMB: Math.round((result.deletedBytes / (1024 * 1024)) * 100) / 100,
-          skipped: result.skipped,
-          kept: result.kept
-        }, "maint");
+        log(
+          "info",
+          result.dryRun ? "Dry-run: would prune logs." : "Pruned logs.",
+          json,
+          {
+            dir: result.dir,
+            scanned: result.scanned,
+            deleted: result.deleted,
+            deletedMB: Math.round((result.deletedBytes / (1024 * 1024)) * 100) / 100,
+            skipped: result.skipped,
+            kept: result.kept
+          },
+          "maint"
+        );
       })
   );
 
@@ -2301,15 +2773,25 @@ program
         const configPath = path.resolve(process.cwd(), options.config);
         const config = loadConfig(configPath);
         const decision = resolveReportMaintenance(config);
-        const result = pruneReports({ dir: resolveReportsDir(config.workdirRoot), decision, dryRun });
-        log("info", result.dryRun ? "Dry-run: would prune reports." : "Pruned reports.", json, {
-          dir: result.dir,
-          scanned: result.scanned,
-          deleted: result.deleted,
-          deletedMB: Math.round((result.deletedBytes / (1024 * 1024)) * 100) / 100,
-          skipped: result.skipped,
-          kept: result.kept
-        }, "maint");
+        const result = pruneReports({
+          dir: resolveReportsDir(config.workdirRoot),
+          decision,
+          dryRun
+        });
+        log(
+          "info",
+          result.dryRun ? "Dry-run: would prune reports." : "Pruned reports.",
+          json,
+          {
+            dir: result.dir,
+            scanned: result.scanned,
+            deleted: result.deleted,
+            deletedMB: Math.round((result.deletedBytes / (1024 * 1024)) * 100) / 100,
+            skipped: result.skipped,
+            kept: result.kept
+          },
+          "maint"
+        );
       })
   );
 
@@ -2370,9 +2852,7 @@ program
     console.log("Stop request cleared.");
   });
 
-const uiCommand = program
-  .command("ui")
-  .description("Manage the local status UI server.");
+const uiCommand = program.command("ui").description("Manage the local status UI server.");
 
 uiCommand
   .command("start")
@@ -2391,7 +2871,9 @@ uiCommand
       const alive = isUiServerProcessAlive(existing);
       const listening = alive ? await probeUiServer(existing.host, existing.port, 500) : false;
       if (alive && listening) {
-        console.log(`Status UI already running on http://${existing.host}:${existing.port}/ (pid ${existing.pid}).`);
+        console.log(
+          `Status UI already running on http://${existing.host}:${existing.port}/ (pid ${existing.pid}).`
+        );
         return;
       }
       clearUiServerState(statePath);
@@ -2400,17 +2882,7 @@ uiCommand
     const entryScript = resolveCliEntryScriptPath();
     const child = spawn(
       process.execPath,
-      [
-        entryScript,
-        "ui",
-        "serve",
-        "--config",
-        configPath,
-        "--host",
-        host,
-        "--port",
-        String(port)
-      ],
+      [entryScript, "ui", "serve", "--config", configPath, "--host", host, "--port", String(port)],
       {
         cwd: process.cwd(),
         detached: true,
@@ -2466,7 +2938,8 @@ uiCommand
     try {
       process.kill(state.pid);
     } catch (error) {
-      const code = typeof error === "object" && error ? (error as NodeJS.ErrnoException).code : null;
+      const code =
+        typeof error === "object" && error ? (error as NodeJS.ErrnoException).code : null;
       if (code !== "ESRCH") {
         throw error;
       }
@@ -2613,9 +3086,7 @@ program
     }
 
     const token =
-      process.env.AGENT_GITHUB_TOKEN ||
-      process.env.GITHUB_TOKEN ||
-      process.env.GH_TOKEN;
+      process.env.AGENT_GITHUB_TOKEN || process.env.GITHUB_TOKEN || process.env.GH_TOKEN;
 
     if (!token) {
       throw new Error("Missing GitHub token. Set AGENT_GITHUB_TOKEN or GITHUB_TOKEN.");

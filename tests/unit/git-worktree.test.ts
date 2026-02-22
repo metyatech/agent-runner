@@ -68,7 +68,13 @@ describe("git-worktree", () => {
   it("removes stale conflicting worktree before forcing branch update", async () => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), "agent-runner-git-worktree-"));
     const repo: RepoInfo = { owner: "metyatech", repo: "demo" };
-    const worktreePath = path.join(root, "agent-runner", "work", "issue-200-222", "metyatech--demo");
+    const worktreePath = path.join(
+      root,
+      "agent-runner",
+      "work",
+      "issue-200-222",
+      "metyatech--demo"
+    );
     const stalePath = path.join(root, "agent-runner", "work", "issue-100-111", "metyatech--demo");
     fs.mkdirSync(stalePath, { recursive: true });
     const cachePath = path.join(root, "agent-runner", "git-cache", repo.owner, `${repo.repo}.git`);
@@ -127,10 +133,12 @@ describe("git-worktree", () => {
       });
 
       const removeIndex = runCommandMock.mock.calls.findIndex(
-        (call) => call[1][2] === "worktree" && call[1][3] === "remove" && call[1][5] === stalePathGit
+        (call) =>
+          call[1][2] === "worktree" && call[1][3] === "remove" && call[1][5] === stalePathGit
       );
       const branchForceIndex = runCommandMock.mock.calls.findIndex(
-        (call) => call[1][2] === "branch" && call[1][3] === "-f" && call[1][4] === "fix/compliance-gaps"
+        (call) =>
+          call[1][2] === "branch" && call[1][3] === "-f" && call[1][4] === "fix/compliance-gaps"
       );
 
       expect(removeIndex).toBeGreaterThanOrEqual(0);
@@ -146,7 +154,13 @@ describe("git-worktree", () => {
   it("fails with an actionable error when the conflicting worktree is still active", async () => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), "agent-runner-git-worktree-"));
     const repo: RepoInfo = { owner: "metyatech", repo: "demo" };
-    const worktreePath = path.join(root, "agent-runner", "work", "issue-200-222", "metyatech--demo");
+    const worktreePath = path.join(
+      root,
+      "agent-runner",
+      "work",
+      "issue-200-222",
+      "metyatech--demo"
+    );
     const activePath = path.join(root, "agent-runner", "work", "issue-100-111", "metyatech--demo");
     fs.mkdirSync(activePath, { recursive: true });
     const cachePath = path.join(root, "agent-runner", "git-cache", repo.owner, `${repo.repo}.git`);
@@ -201,7 +215,9 @@ describe("git-worktree", () => {
       ).rejects.toThrow(`already checked out by an active worktree: ${activePathGit}`);
 
       expect(
-        runCommandMock.mock.calls.some((call) => call[1][2] === "worktree" && call[1][3] === "remove")
+        runCommandMock.mock.calls.some(
+          (call) => call[1][2] === "worktree" && call[1][3] === "remove"
+        )
       ).toBe(false);
     } finally {
       fs.rmSync(root, { recursive: true, force: true });

@@ -2,7 +2,11 @@ import { describe, expect, it } from "vitest";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { enqueueReviewTask, loadReviewQueue, takeReviewTasksWhere } from "../../src/review-queue.js";
+import {
+  enqueueReviewTask,
+  loadReviewQueue,
+  takeReviewTasksWhere
+} from "../../src/review-queue.js";
 
 describe("review-queue (filter)", () => {
   it("takes entries matching predicate and preserves others", async () => {
@@ -44,4 +48,3 @@ describe("review-queue (filter)", () => {
     fs.rmSync(root, { recursive: true, force: true });
   });
 });
-

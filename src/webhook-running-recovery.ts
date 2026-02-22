@@ -53,11 +53,13 @@ export function planWebhookRunningRecoveries(options: {
   );
 
   const evaluation = evaluateRunningIssues(scopedRunningIssues, options.state, options.aliveCheck);
-  const deadProcessPlans: WebhookRunningRecoveryPlan[] = evaluation.deadProcess.map(({ issue, record }) => ({
-    issue,
-    reason: "dead_process",
-    pid: record.pid
-  }));
+  const deadProcessPlans: WebhookRunningRecoveryPlan[] = evaluation.deadProcess.map(
+    ({ issue, record }) => ({
+      issue,
+      reason: "dead_process",
+      pid: record.pid
+    })
+  );
   const missingStatePlans: WebhookRunningRecoveryPlan[] = evaluation.missingRecord.map((issue) => ({
     issue,
     reason: "missing_state"

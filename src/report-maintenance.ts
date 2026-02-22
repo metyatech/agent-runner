@@ -89,7 +89,10 @@ function listReportFiles(dir: string): ReportFileInfo[] {
   return files;
 }
 
-function deleteFiles(files: ReportFileInfo[], dryRun: boolean): Omit<PruneReportsResult, "dir" | "scanned" | "dryRun"> {
+function deleteFiles(
+  files: ReportFileInfo[],
+  dryRun: boolean
+): Omit<PruneReportsResult, "dir" | "scanned" | "dryRun"> {
   let deleted = 0;
   let deletedBytes = 0;
   let skipped = 0;
@@ -188,12 +191,22 @@ export function pruneReports(options: {
 
   const selected = new Set<string>();
 
-  for (const filePath of selectByMaxAge(sorted, options.decision.maxAgeDays, options.decision.keepLatest, nowMs)) {
+  for (const filePath of selectByMaxAge(
+    sorted,
+    options.decision.maxAgeDays,
+    options.decision.keepLatest,
+    nowMs
+  )) {
     selected.add(filePath);
   }
 
   if (options.decision.maxTotalBytes !== null) {
-    selectByTotalSize(sorted, options.decision.keepLatest, options.decision.maxTotalBytes, selected);
+    selectByTotalSize(
+      sorted,
+      options.decision.keepLatest,
+      options.decision.maxTotalBytes,
+      selected
+    );
   }
 
   const toDelete = sorted.filter((file) => selected.has(file.fullPath));
@@ -211,4 +224,3 @@ export function pruneReports(options: {
     dryRun: options.dryRun
   };
 }
-

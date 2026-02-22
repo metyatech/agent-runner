@@ -58,10 +58,7 @@ export async function fetchCodexRateLimits(
   }
 
   const apiStart = Date.now();
-  const apiSnapshot = await fetchCodexRateLimitsFromApi(
-    codexHome,
-    options?.timeoutSeconds ?? 20
-  );
+  const apiSnapshot = await fetchCodexRateLimitsFromApi(codexHome, options?.timeoutSeconds ?? 20);
   if (options?.timingSink) {
     options.timingSink("api", Date.now() - apiStart);
   }
@@ -277,10 +274,7 @@ function readLatestTokenCountRateLimitsFromJsonl(
   return null;
 }
 
-function sessionRateLimitsToSnapshot(
-  rateLimits: any,
-  now: Date
-): RateLimitSnapshot | null {
+function sessionRateLimitsToSnapshot(rateLimits: any, now: Date): RateLimitSnapshot | null {
   if (!rateLimits || typeof rateLimits !== "object") return null;
   const nowSecs = Math.floor(now.getTime() / 1000);
 
@@ -380,8 +374,7 @@ function apiUsageToSnapshot(payload: any, now: Date): RateLimitSnapshot | null {
     const resetAt = candidate.reset_at;
     return {
       used_percent: used,
-      windowDurationMins:
-        typeof limitWindowSeconds === "number" ? limitWindowSeconds / 60 : null,
+      windowDurationMins: typeof limitWindowSeconds === "number" ? limitWindowSeconds / 60 : null,
       resetsAt:
         typeof resetAt === "number"
           ? resetAt

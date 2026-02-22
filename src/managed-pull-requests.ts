@@ -58,7 +58,9 @@ function readState(statePath: string): ManagedPullRequestState {
   const raw = fs.readFileSync(statePath, "utf8");
   const parsed = JSON.parse(raw) as Partial<ManagedPullRequestState>;
   const entries = Array.isArray(parsed.managedPullRequests)
-    ? parsed.managedPullRequests.filter((value): value is string => typeof value === "string" && value.length > 0)
+    ? parsed.managedPullRequests.filter(
+        (value): value is string => typeof value === "string" && value.length > 0
+      )
     : [];
   return {
     managedPullRequests: entries,
@@ -127,7 +129,11 @@ async function withLock<T>(statePath: string, action: () => T | Promise<T>): Pro
   }
 }
 
-export async function isManagedPullRequest(statePath: string, repo: RepoInfo, prNumber: number): Promise<boolean> {
+export async function isManagedPullRequest(
+  statePath: string,
+  repo: RepoInfo,
+  prNumber: number
+): Promise<boolean> {
   if (!prNumber || prNumber <= 0) {
     return false;
   }
@@ -138,7 +144,11 @@ export async function isManagedPullRequest(statePath: string, repo: RepoInfo, pr
   });
 }
 
-export async function markManagedPullRequest(statePath: string, repo: RepoInfo, prNumber: number): Promise<void> {
+export async function markManagedPullRequest(
+  statePath: string,
+  repo: RepoInfo,
+  prNumber: number
+): Promise<void> {
   if (!prNumber || prNumber <= 0) {
     return;
   }
@@ -163,7 +173,9 @@ export async function listManagedPullRequests(
     const state = readState(statePath);
     const parsed = state.managedPullRequests
       .map((value) => parseKey(value))
-      .filter((value): value is { repo: RepoInfo; prNumber: number; key: string } => Boolean(value));
+      .filter((value): value is { repo: RepoInfo; prNumber: number; key: string } =>
+        Boolean(value)
+      );
     if (!limit || limit <= 0 || parsed.length <= limit) {
       return parsed;
     }

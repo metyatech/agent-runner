@@ -26,7 +26,9 @@ export type RecoverStalledIssueOptions = {
   log: Logger;
 };
 
-function buildRecoveryMessage(options: Pick<RecoverStalledIssueOptions, "issue" | "reason" | "pid">): string {
+function buildRecoveryMessage(
+  options: Pick<RecoverStalledIssueOptions, "issue" | "reason" | "pid">
+): string {
   const reasonLine =
     options.reason === "dead_process"
       ? `- Runner state referenced process PID ${options.pid ?? "unknown"}, but the process was no longer alive.`

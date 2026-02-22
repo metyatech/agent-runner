@@ -27,4 +27,3 @@ export function saveWebhookCatchupState(statePath: string, state: WebhookCatchup
   fs.mkdirSync(path.dirname(statePath), { recursive: true });
   fs.writeFileSync(statePath, JSON.stringify(state, null, 2));
 }
-

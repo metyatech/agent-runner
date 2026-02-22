@@ -163,7 +163,10 @@ describe("notifyIdlePullRequest", () => {
       commentIssue: async (repo: any, issueNumber: number, body: string) => {
         calls.commentIssue.push({ repo, issueNumber, body });
       },
-      findOpenPullRequestByHead: async () => ({ number: 42, url: "https://github.com/metyatech/demo/pull/42" })
+      findOpenPullRequestByHead: async () => ({
+        number: 42,
+        url: "https://github.com/metyatech/demo/pull/42"
+      })
     };
 
     const logPath = path.join(os.tmpdir(), "agent-runner-missing.log");
@@ -259,7 +262,10 @@ describe("notifyIdlePullRequest", () => {
       commentIssue: async (repo: any, issueNumber: number, body: string) => {
         calls.commentIssue.push({ repo, issueNumber, body });
       },
-      findOpenPullRequestByHead: async () => ({ number: 77, url: "https://github.com/metyatech/demo/pull/77" })
+      findOpenPullRequestByHead: async () => ({
+        number: 77,
+        url: "https://github.com/metyatech/demo/pull/77"
+      })
     };
 
     const logPath = createTempLog("no pr url here");

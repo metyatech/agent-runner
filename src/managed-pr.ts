@@ -17,7 +17,10 @@ export function isAgentRunnerBotLogin(login: string | null): boolean {
   return normalized === "agent-runner-bot";
 }
 
-export async function isManagedPullRequestIssue(issue: IssueInfo, config: AgentRunnerConfig): Promise<boolean> {
+export async function isManagedPullRequestIssue(
+  issue: IssueInfo,
+  config: AgentRunnerConfig
+): Promise<boolean> {
   if (!issue.isPullRequest) {
     return false;
   }
@@ -28,7 +31,10 @@ export async function isManagedPullRequestIssue(issue: IssueInfo, config: AgentR
   return isManagedPullRequestState(statePath, issue.repo, issue.number);
 }
 
-export async function ensureManagedPullRequestRecorded(issue: IssueInfo, config: AgentRunnerConfig): Promise<boolean> {
+export async function ensureManagedPullRequestRecorded(
+  issue: IssueInfo,
+  config: AgentRunnerConfig
+): Promise<boolean> {
   if (!issue.isPullRequest) {
     return false;
   }

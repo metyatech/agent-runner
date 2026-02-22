@@ -13,7 +13,10 @@ export async function resolveAllUnresolvedReviewThreads(options: {
   repo: RepoInfo;
   pullNumber: number;
 }): Promise<ResolveThreadsResult> {
-  const threads = await options.client.listPullRequestReviewThreads(options.repo, options.pullNumber);
+  const threads = await options.client.listPullRequestReviewThreads(
+    options.repo,
+    options.pullNumber
+  );
   const unresolved = threads.filter((thread) => !thread.isResolved);
   let resolved = 0;
   for (const thread of unresolved) {
@@ -108,7 +111,10 @@ export async function attemptAutoMergeApprovedPullRequest(options: {
   }
 
   try {
-    const threads = await options.client.listPullRequestReviewThreads(options.repo, options.pullNumber);
+    const threads = await options.client.listPullRequestReviewThreads(
+      options.repo,
+      options.pullNumber
+    );
     const unresolved = threads.filter((thread) => !thread.isResolved);
     if (unresolved.length > 0) {
       return { merged: false, retry: true, reason: "unresolved_review_threads" };
@@ -179,11 +185,7 @@ export async function attemptAutoMergeApprovedPullRequest(options: {
       });
     } catch (error) {
       const message =
-        error instanceof Error
-          ? error.message
-          : typeof error === "string"
-            ? error
-            : null;
+        error instanceof Error ? error.message : typeof error === "string" ? error : null;
       return { merged: false, message };
     }
   };
@@ -297,17 +299,25 @@ export async function reRequestAllReviewers(options: {
 
   const requestedHumanReviewers = Array.from(new Set(humans));
   if (requestedHumanReviewers.length > 0) {
-    await options.client.requestPullRequestReviewers(options.repo, options.pullNumber, requestedHumanReviewers);
+    await options.client.requestPullRequestReviewers(
+      options.repo,
+      options.pullNumber,
+      requestedHumanReviewers
+    );
   }
 
   if (requestedCopilot) {
     const copilotBot = "copilot-pull-request-reviewer[bot]";
     try {
-      await options.client.removeRequestedPullRequestReviewers(options.repo, options.pullNumber, [copilotBot]);
+      await options.client.removeRequestedPullRequestReviewers(options.repo, options.pullNumber, [
+        copilotBot
+      ]);
     } catch {
       // ignore best-effort remove
     }
-    await options.client.requestPullRequestReviewers(options.repo, options.pullNumber, [copilotBot]);
+    await options.client.requestPullRequestReviewers(options.repo, options.pullNumber, [
+      copilotBot
+    ]);
   }
 
   if (requestedCodex) {

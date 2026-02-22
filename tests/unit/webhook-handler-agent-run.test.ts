@@ -107,7 +107,9 @@ describe("webhook-handler /agent run", () => {
     expect(loadWebhookQueue(queuePath)).toHaveLength(1);
 
     const managedPath = path.join(root, "agent-runner", "state", "managed-pull-requests.json");
-    const managed = JSON.parse(fs.readFileSync(managedPath, "utf8")) as { managedPullRequests?: string[] };
+    const managed = JSON.parse(fs.readFileSync(managedPath, "utf8")) as {
+      managedPullRequests?: string[];
+    };
     expect(managed.managedPullRequests ?? []).toContain("metyatech/demo#5");
   });
 
@@ -115,7 +117,11 @@ describe("webhook-handler /agent run", () => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), "agent-runner-webhook-agent-run-review-"));
     const config = makeConfig(root);
     const repo = makeRepo();
-    const issue = { ...makeIssueInfo(repo), isPullRequest: true, url: "https://github.com/metyatech/demo/pull/5" };
+    const issue = {
+      ...makeIssueInfo(repo),
+      isPullRequest: true,
+      url: "https://github.com/metyatech/demo/pull/5"
+    };
     const queuePath = path.join(root, "agent-runner", "state", "webhook-queue.json");
 
     const calls: { comments: string[] } = { comments: [] };
@@ -154,8 +160,9 @@ describe("webhook-handler /agent run", () => {
     expect(loadWebhookQueue(queuePath)).toHaveLength(1);
 
     const managedPath = path.join(root, "agent-runner", "state", "managed-pull-requests.json");
-    const managed = JSON.parse(fs.readFileSync(managedPath, "utf8")) as { managedPullRequests?: string[] };
+    const managed = JSON.parse(fs.readFileSync(managedPath, "utf8")) as {
+      managedPullRequests?: string[];
+    };
     expect(managed.managedPullRequests ?? []).toContain("metyatech/demo#5");
   });
 });
-

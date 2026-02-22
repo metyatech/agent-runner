@@ -106,12 +106,7 @@
         "repoScope": { "type": "string", "enum": ["all", "local"] },
         "usageGate": {
           "type": "object",
-          "required": [
-            "enabled",
-            "timeoutSeconds",
-            "minRemainingPercent",
-            "weeklySchedule"
-          ],
+          "required": ["enabled", "timeoutSeconds", "minRemainingPercent", "weeklySchedule"],
           "properties": {
             "enabled": { "type": "boolean" },
             "codexHome": { "type": "string", "minLength": 1 },
@@ -327,4 +322,3 @@
   },
   "additionalProperties": false
 }
-

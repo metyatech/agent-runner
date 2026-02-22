@@ -76,7 +76,10 @@ export function selectIdleRepos(
     .map((item) => item.repo);
 }
 
-export function chooseIdleTask(tasks: string[], history: IdleHistory): { task: string; nextCursor: number } {
+export function chooseIdleTask(
+  tasks: string[],
+  history: IdleHistory
+): { task: string; nextCursor: number } {
   if (tasks.length === 0) {
     throw new Error("Idle tasks list is empty.");
   }

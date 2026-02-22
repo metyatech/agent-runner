@@ -38,4 +38,3 @@ compactor:
 
 limits_config:
   retention_period: 720h
-

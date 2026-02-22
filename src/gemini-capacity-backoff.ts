@@ -39,7 +39,10 @@ export function loadGeminiCapacityBackoffState(statePath: string): GeminiCapacit
   return { models };
 }
 
-export function saveGeminiCapacityBackoffState(statePath: string, state: GeminiCapacityBackoffState): void {
+export function saveGeminiCapacityBackoffState(
+  statePath: string,
+  state: GeminiCapacityBackoffState
+): void {
   fs.mkdirSync(path.dirname(statePath), { recursive: true });
   fs.writeFileSync(statePath, JSON.stringify(state, null, 2));
 }
@@ -80,4 +83,3 @@ export function isGeminiModelBlockedByCapacity(
   if (!until) return false;
   return until.getTime() > now.getTime();
 }
-

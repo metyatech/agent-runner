@@ -11,7 +11,10 @@ function normalizeOptionalLabel(value: string | undefined): string | null {
 }
 
 export function resolveReviewFollowupWaitingLabel(config: AgentRunnerConfig): string {
-  return normalizeOptionalLabel(config.labels.reviewFollowupWaiting) ?? `${config.labels.reviewFollowup}:waiting`;
+  return (
+    normalizeOptionalLabel(config.labels.reviewFollowupWaiting) ??
+    `${config.labels.reviewFollowup}:waiting`
+  );
 }
 
 export function resolveReviewFollowupActionRequiredLabel(config: AgentRunnerConfig): string {

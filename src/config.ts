@@ -146,9 +146,7 @@ export type AgentRunnerConfig = {
   };
 };
 
-const schemaPath = fileURLToPath(
-  new URL("../schema/agent-runner.schema.json", import.meta.url)
-);
+const schemaPath = fileURLToPath(new URL("../schema/agent-runner.schema.json", import.meta.url));
 
 export function loadConfig(configPath: string): AgentRunnerConfig {
   const raw = fs.readFileSync(configPath, "utf8");
@@ -170,6 +168,3 @@ export function loadConfig(configPath: string): AgentRunnerConfig {
 
   return json as AgentRunnerConfig;
 }
-
-
-

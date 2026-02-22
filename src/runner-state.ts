@@ -21,7 +21,8 @@ export function resolveRunnerStatePath(workdirRoot: string): string {
 export function loadRunnerState(statePath: string): RunnerState {
   return withStateDb(statePath, (db) => {
     const rows = db
-      .prepare(`
+      .prepare(
+        `
         SELECT
           a.issue_id AS issueId,
           a.issue_number AS issueNumber,
@@ -33,7 +34,8 @@ export function loadRunnerState(statePath: string): RunnerState {
         FROM activities a
         JOIN repos r ON r.id = a.repo_id
         WHERE a.kind = 'issue'
-      `)
+      `
+      )
       .all() as Array<{
       issueId: number;
       issueNumber: number;
@@ -67,7 +69,15 @@ export function saveRunnerState(statePath: string, state: RunnerState): void {
     `);
     for (const record of state.running) {
       const repoId = upsertRepo(db, record.repo);
-      insert.run(`issue:${record.issueId}`, repoId, record.startedAt, record.pid, record.logPath, record.issueId, record.issueNumber);
+      insert.run(
+        `issue:${record.issueId}`,
+        repoId,
+        record.startedAt,
+        record.pid,
+        record.logPath,
+        record.issueId,
+        record.issueNumber
+      );
     }
   });
 }
@@ -75,8 +85,12 @@ export function saveRunnerState(statePath: string, state: RunnerState): void {
 export function recordRunningIssue(statePath: string, record: RunningIssueRecord): void {
   withStateDb(statePath, (db) => {
     const repoId = upsertRepo(db, record.repo);
-    db.prepare("DELETE FROM activities WHERE issue_id = ? AND id <> ?").run(record.issueId, `issue:${record.issueId}`);
-    db.prepare(`
+    db.prepare("DELETE FROM activities WHERE issue_id = ? AND id <> ?").run(
+      record.issueId,
+      `issue:${record.issueId}`
+    );
+    db.prepare(
+      `
       INSERT INTO activities (
         id, kind, engine, repo_id, started_at, pid, log_path, issue_id, issue_number, task
       ) VALUES (?, 'issue', 'codex', ?, ?, ?, ?, ?, ?, NULL)
@@ -87,7 +101,8 @@ export function recordRunningIssue(statePath: string, record: RunningIssueRecord
         pid = excluded.pid,
         log_path = excluded.log_path,
         issue_number = excluded.issue_number
-    `).run(
+    `
+    ).run(
       `issue:${record.issueId}`,
       repoId,
       record.startedAt,

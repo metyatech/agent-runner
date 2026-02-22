@@ -10,10 +10,7 @@ const cliPath = path.resolve("src", "cli.ts");
 const dummyCodexPath = path.resolve("tests", "e2e", "fixtures", "dummy-codex.js");
 const titlePrefix = "E2E agent-runner";
 
-const token =
-  process.env.AGENT_GITHUB_TOKEN ||
-  process.env.GITHUB_TOKEN ||
-  process.env.GH_TOKEN;
+const token = process.env.AGENT_GITHUB_TOKEN || process.env.GITHUB_TOKEN || process.env.GH_TOKEN;
 const owner = process.env.E2E_GH_OWNER;
 const repo = process.env.E2E_GH_REPO;
 const workdirRoot = process.env.E2E_WORKDIR_ROOT ?? path.resolve("..");
@@ -41,7 +38,7 @@ async function fetchLabelNames(octokit: Octokit, issueNumber: number): Promise<s
     issue_number: issueNumber
   });
   return response.data.labels.map((label) =>
-    typeof label === "string" ? label : label.name ?? ""
+    typeof label === "string" ? label : (label.name ?? "")
   );
 }
 
@@ -115,10 +112,7 @@ async function closeOpenE2EIssues(
   }
 }
 
-async function hasSufficientRateLimit(
-  octokit: Octokit,
-  minimumRemaining = 20
-): Promise<boolean> {
+async function hasSufficientRateLimit(octokit: Octokit, minimumRemaining = 20): Promise<boolean> {
   try {
     const response = await octokit.rateLimit.get();
     return response.data.resources.core.remaining >= minimumRemaining;
@@ -224,10 +218,9 @@ describe("github flow", () => {
           (labels) =>
             labels.includes(config.labels.needsUserReply) && labels.includes(config.labels.failed),
           () => {
-            const failRun = runCli(
-              ["run", "--once", "--yes", "--config", configPath],
-              { E2E_CODEX_EXIT: "1" }
-            );
+            const failRun = runCli(["run", "--once", "--yes", "--config", configPath], {
+              E2E_CODEX_EXIT: "1"
+            });
             expect(failRun.status).toBe(0);
           },
           3
@@ -258,10 +251,9 @@ describe("github flow", () => {
           (labels) =>
             labels.includes(config.labels.done) && !labels.includes(config.labels.needsUserReply),
           () => {
-            const successRun = runCli(
-              ["run", "--once", "--yes", "--config", configPath],
-              { E2E_CODEX_EXIT: "0" }
-            );
+            const successRun = runCli(["run", "--once", "--yes", "--config", configPath], {
+              E2E_CODEX_EXIT: "0"
+            });
             expect(successRun.status).toBe(0);
           },
           3
@@ -300,4 +292,3 @@ describe("github flow", () => {
     { timeout: 240_000 }
   );
 });
-

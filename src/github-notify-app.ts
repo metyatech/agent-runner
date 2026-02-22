@@ -28,7 +28,9 @@ function readTrimmedFile(filePath: string): string | null {
   }
 }
 
-function readStateAppJson(workdirRoot: string): { appId?: string; installationId?: number; apiBaseUrl?: string } | null {
+function readStateAppJson(
+  workdirRoot: string
+): { appId?: string; installationId?: number; apiBaseUrl?: string } | null {
   const filePath = resolveStateFile(workdirRoot, "github-notify-app.json");
   if (!fs.existsSync(filePath)) return null;
   try {
@@ -36,13 +38,20 @@ function readStateAppJson(workdirRoot: string): { appId?: string; installationId
     const parsed = JSON.parse(raw) as any;
     if (!parsed || typeof parsed !== "object") return null;
 
-    const appId = typeof parsed.appId === "string" && parsed.appId.trim().length > 0 ? parsed.appId.trim() : undefined;
+    const appId =
+      typeof parsed.appId === "string" && parsed.appId.trim().length > 0
+        ? parsed.appId.trim()
+        : undefined;
     const installationId =
-      typeof parsed.installationId === "number" && Number.isFinite(parsed.installationId) && parsed.installationId > 0
+      typeof parsed.installationId === "number" &&
+      Number.isFinite(parsed.installationId) &&
+      parsed.installationId > 0
         ? parsed.installationId
         : undefined;
     const apiBaseUrl =
-      typeof parsed.apiBaseUrl === "string" && parsed.apiBaseUrl.trim().length > 0 ? parsed.apiBaseUrl.trim() : undefined;
+      typeof parsed.apiBaseUrl === "string" && parsed.apiBaseUrl.trim().length > 0
+        ? parsed.apiBaseUrl.trim()
+        : undefined;
     return { appId, installationId, apiBaseUrl };
   } catch {
     return null;
@@ -59,7 +68,8 @@ function parsePositiveInt(value: string | undefined): number | null {
 export function resolveGitHubNotifyAppConfig(workdirRoot: string): GitHubNotifyAppConfig | null {
   const envAppId = process.env[ENV_APP_ID];
   const envInstallationId = parsePositiveInt(process.env[ENV_INSTALLATION_ID]);
-  const envPrivateKey = typeof process.env[ENV_PRIVATE_KEY] === "string" ? process.env[ENV_PRIVATE_KEY]!.trim() : "";
+  const envPrivateKey =
+    typeof process.env[ENV_PRIVATE_KEY] === "string" ? process.env[ENV_PRIVATE_KEY]!.trim() : "";
   const envApiBaseUrl = process.env[ENV_API_BASE_URL];
 
   if (typeof envAppId === "string" && envAppId.trim().length > 0 && envInstallationId) {
@@ -68,7 +78,10 @@ export function resolveGitHubNotifyAppConfig(workdirRoot: string): GitHubNotifyA
         appId: envAppId.trim(),
         installationId: envInstallationId,
         privateKey: envPrivateKey,
-        apiBaseUrl: typeof envApiBaseUrl === "string" && envApiBaseUrl.trim().length > 0 ? envApiBaseUrl.trim() : undefined
+        apiBaseUrl:
+          typeof envApiBaseUrl === "string" && envApiBaseUrl.trim().length > 0
+            ? envApiBaseUrl.trim()
+            : undefined
       };
     }
     const keyPath = resolveStateFile(workdirRoot, "github-notify-app-private-key.pem");
@@ -78,7 +91,10 @@ export function resolveGitHubNotifyAppConfig(workdirRoot: string): GitHubNotifyA
         appId: envAppId.trim(),
         installationId: envInstallationId,
         privateKey: keyFromFile,
-        apiBaseUrl: typeof envApiBaseUrl === "string" && envApiBaseUrl.trim().length > 0 ? envApiBaseUrl.trim() : undefined
+        apiBaseUrl:
+          typeof envApiBaseUrl === "string" && envApiBaseUrl.trim().length > 0
+            ? envApiBaseUrl.trim()
+            : undefined
       };
     }
   }
@@ -100,4 +116,3 @@ export function resolveGitHubNotifyAppConfig(workdirRoot: string): GitHubNotifyA
     apiBaseUrl: state.apiBaseUrl
   };
 }
-

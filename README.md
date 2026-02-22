@@ -167,18 +167,18 @@ Config file: `agent-runner.config.json`
   - `idle.cooldownMinutes`: Per-repo cooldown between idle runs
   - `idle.tasks`: List of task prompts to rotate through
 - `idle.promptTemplate`: Prompt template for idle runs; supports `{{repo}}`, `{{task}}`, `{{openPrCount}}`, and `{{openPrContext}}`
-    - `{{openPrCount}}` is the repository's current open-PR total when available (`unknown` if count lookup fails).
-    - `{{openPrContext}}` is injected as an untrusted context block wrapped by `AGENT_RUNNER_OPEN_PR_CONTEXT_START/END`.
+  - `{{openPrCount}}` is the repository's current open-PR total when available (`unknown` if count lookup fails).
+  - `{{openPrContext}}` is injected as an untrusted context block wrapped by `AGENT_RUNNER_OPEN_PR_CONTEXT_START/END`.
 - `idle.repoScope`: `"all"` (default) or `"local"` to restrict idle tasks to repos under the workspace root
 - `idle.usageGate`: Optional Codex usage guard (reads local session JSONL when available; otherwise queries the backend usage API via `auth.json` in the Codex home directory)
 - `idle.usageGate.enabled`: Turn usage gating on/off
 - `idle.usageGate.codexHome`: Optional override for Codex home directory (used for credential discovery)
 - `idle.usageGate.timeoutSeconds`: Timeout for backend usage lookup
-    - `idle.usageGate.minRemainingPercent`: Minimum remaining percent for the 5h window
-    - `idle.usageGate.weeklySchedule`: Weekly ramp for remaining percent
-      - `idle.usageGate.weeklySchedule.startMinutes`: When to begin idle runs (minutes before weekly reset)
-      - `idle.usageGate.weeklySchedule.minRemainingPercentAtStart`: Required weekly percent left at startMinutes
-      - `idle.usageGate.weeklySchedule.minRemainingPercentAtEnd`: Required weekly percent left at reset time
+  - `idle.usageGate.minRemainingPercent`: Minimum remaining percent for the 5h window
+  - `idle.usageGate.weeklySchedule`: Weekly ramp for remaining percent
+    - `idle.usageGate.weeklySchedule.startMinutes`: When to begin idle runs (minutes before weekly reset)
+    - `idle.usageGate.weeklySchedule.minRemainingPercentAtStart`: Required weekly percent left at startMinutes
+    - `idle.usageGate.weeklySchedule.minRemainingPercentAtEnd`: Required weekly percent left at reset time
   - `idle.copilotUsageGate`: Optional Copilot monthly usage guard (reads `copilot_internal/user`)
   - `idle.copilotUsageGate.enabled`: Turn Copilot usage gating on/off
   - `idle.copilotUsageGate.timeoutSeconds`: Timeout for Copilot usage lookup
@@ -462,10 +462,12 @@ node dist/cli.js labels sync --yes
 - `needsUserReply`: execution paused because the agent explicitly needs user input
 
 Quota handling:
+
 - If Codex usage limit is hit, the runner marks the issue as `failed`, posts the next retry time, and automatically re-queues at or after that time.
 - Retry scheduling is persisted on disk, so it still resumes correctly after host restart/offline periods.
 
 User-reply handling:
+
 - When a run pauses for user input, the runner applies `needsUserReply`.
 - After the user replies, the runner re-queues and resumes from the previous Codex session when available.
 
@@ -533,6 +535,7 @@ flowchart TD
 ```
 
 When this happens:
+
 - Immediate: webhook review events enqueue follow-ups right away.
 - Every cycle: catch-up can enqueue missed follow-ups, then queue scheduling and execution run.
 - `requiresEngine` is decided when enqueued, then used during scheduling and execution branching.
@@ -541,6 +544,7 @@ When this happens:
   - `<!-- agent-runner:review-followup:action-required -->`: auto-merge stopped with non-retry reason (`Action required` with next step guidance).
 
 `requiresEngine` rules:
+
 - `true`: actionable review follow-up is required (for example `changes_requested`, actionable review comments).
 - `false`: approval-style handling only (for example `approved`, `no new comments`, `usage limit`, `unable to review`).
 
@@ -626,7 +630,7 @@ The agent runner can use Amazon Q for command line as an idle engine via WSL2.
 
 ### Setup (Windows + WSL2)
 
-1) Install the CLI inside WSL (Ubuntu example):
+1. Install the CLI inside WSL (Ubuntu example):
 
 ```bash
 mkdir -p /tmp/amazon-q-install
@@ -637,7 +641,7 @@ chmod +x q/install.sh
 ./q/install.sh --no-confirm
 ```
 
-2) Login (free Builder ID):
+2. Login (free Builder ID):
 
 ```bash
 q login --license free --use-device-flow
@@ -658,7 +662,15 @@ Set `amazonQ` in the config (ships disabled by default):
   "amazonQ": {
     "enabled": true,
     "command": "wsl.exe",
-    "args": ["-d", "Ubuntu", "--", "bash", "-lc", "q chat --no-interactive --trust-all-tools --wrap never \"$1\"", "--"],
+    "args": [
+      "-d",
+      "Ubuntu",
+      "--",
+      "bash",
+      "-lc",
+      "q chat --no-interactive --trust-all-tools --wrap never \"$1\"",
+      "--"
+    ],
     "promptMode": "arg"
   }
 }
@@ -787,5 +799,3 @@ is running in the background.
 ## Release / deploy
 
 Not applicable. This repository is intended to run locally.
-
-

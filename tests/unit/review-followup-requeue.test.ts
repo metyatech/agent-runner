@@ -33,7 +33,9 @@ describe("extractErrorMessage", () => {
   });
 
   it("does not produce [object Object] for plain quota error objects", () => {
-    const geminiErr = { message: "RetryableQuotaError: No capacity available for model gemini-3-flash-preview" };
+    const geminiErr = {
+      message: "RetryableQuotaError: No capacity available for model gemini-3-flash-preview"
+    };
     const result = extractErrorMessage(geminiErr);
     expect(result).not.toBe("[object Object]");
     expect(result).toContain("RetryableQuotaError");
@@ -52,9 +54,9 @@ describe("QUOTA_ERROR_PATTERNS", () => {
   it("matches Gemini MODEL_CAPACITY_EXHAUSTED output", () => {
     const geminiOutput = [
       "Attempt 3 failed: No capacity available for model gemini-3-flash-preview on the server. Max attempts reached",
-      'RetryableQuotaError: No capacity available for model gemini-3-flash-preview on the server',
+      "RetryableQuotaError: No capacity available for model gemini-3-flash-preview on the server",
       '"reason": "rateLimitExceeded"',
-      '429 Too Many Requests'
+      "429 Too Many Requests"
     ].join("\n");
     expect(hasPattern(geminiOutput, QUOTA_ERROR_PATTERNS)).toBe(true);
   });

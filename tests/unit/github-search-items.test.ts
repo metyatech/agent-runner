@@ -9,7 +9,11 @@ describe("GitHubClient.searchOpenItemsByLabelAcrossOwner", () => {
       request: async (route: string, { q }: { q: string }) => {
         expect(route).toBe("GET /search/issues");
         seenQueries.push(q);
-        const qualifier = q.includes("is:pull-request") ? "pr" : q.includes("is:issue") ? "issue" : "unknown";
+        const qualifier = q.includes("is:pull-request")
+          ? "pr"
+          : q.includes("is:issue")
+            ? "issue"
+            : "unknown";
         return {
           data: {
             items:
@@ -27,20 +31,22 @@ describe("GitHubClient.searchOpenItemsByLabelAcrossOwner", () => {
                     }
                   ]
                 : qualifier === "pr"
-                ? [
-                    {
-                      id: 2,
-                      number: 456,
-                      title: "PR",
-                      body: "Body",
-                      html_url: "https://github.com/metyatech/demo/pull/456",
-                      repository_url: "https://api.github.com/repos/metyatech/demo",
-                      user: { login: "metyatech" },
-                      labels: [{ name: "agent:queued" }],
-                      pull_request: { url: "https://api.github.com/repos/metyatech/demo/pulls/456" }
-                    }
-                  ]
-                : []
+                  ? [
+                      {
+                        id: 2,
+                        number: 456,
+                        title: "PR",
+                        body: "Body",
+                        html_url: "https://github.com/metyatech/demo/pull/456",
+                        repository_url: "https://api.github.com/repos/metyatech/demo",
+                        user: { login: "metyatech" },
+                        labels: [{ name: "agent:queued" }],
+                        pull_request: {
+                          url: "https://api.github.com/repos/metyatech/demo/pulls/456"
+                        }
+                      }
+                    ]
+                  : []
           }
         };
       }
@@ -72,7 +78,11 @@ describe("GitHubClient.searchOpenItemsByCommentPhraseAcrossOwner", () => {
       request: async (route: string, { q }: { q: string }) => {
         expect(route).toBe("GET /search/issues");
         seenQueries.push(q);
-        const qualifier = q.includes("is:pull-request") ? "pr" : q.includes("is:issue") ? "issue" : "unknown";
+        const qualifier = q.includes("is:pull-request")
+          ? "pr"
+          : q.includes("is:issue")
+            ? "issue"
+            : "unknown";
         return {
           data: {
             items:
@@ -90,30 +100,36 @@ describe("GitHubClient.searchOpenItemsByCommentPhraseAcrossOwner", () => {
                     }
                   ]
                 : qualifier === "pr"
-                ? [
-                    {
-                      id: 3,
-                      number: 789,
-                      title: "PR 3",
-                      body: "Body",
-                      html_url: "https://github.com/metyatech/demo/pull/789",
-                      repository_url: "https://api.github.com/repos/metyatech/demo",
-                      user: { login: "metyatech" },
-                      labels: [],
-                      pull_request: { url: "https://api.github.com/repos/metyatech/demo/pulls/789" }
-                    }
-                  ]
-                : []
+                  ? [
+                      {
+                        id: 3,
+                        number: 789,
+                        title: "PR 3",
+                        body: "Body",
+                        html_url: "https://github.com/metyatech/demo/pull/789",
+                        repository_url: "https://api.github.com/repos/metyatech/demo",
+                        user: { login: "metyatech" },
+                        labels: [],
+                        pull_request: {
+                          url: "https://api.github.com/repos/metyatech/demo/pulls/789"
+                        }
+                      }
+                    ]
+                  : []
           }
         };
       }
     };
 
-    const items = await client.searchOpenItemsByCommentPhraseAcrossOwner("metyatech", "/agent run", {
-      excludeLabels: ["agent:done"],
-      perPage: 100,
-      maxPages: 1
-    });
+    const items = await client.searchOpenItemsByCommentPhraseAcrossOwner(
+      "metyatech",
+      "/agent run",
+      {
+        excludeLabels: ["agent:done"],
+        perPage: 100,
+        maxPages: 1
+      }
+    );
 
     expect(seenQueries).toHaveLength(2);
     expect(seenQueries[0]).toContain('user:metyatech state:open in:comments "/agent run"');
@@ -165,11 +181,15 @@ describe("GitHubClient.searchOpenPullRequestsByAuthorAcrossOwner", () => {
       }
     };
 
-    const pullRequests = await client.searchOpenPullRequestsByAuthorAcrossOwner("metyatech", "agent-runner-bot", {
-      excludeLabels: ["agent:failed"],
-      perPage: 100,
-      maxPages: 1
-    });
+    const pullRequests = await client.searchOpenPullRequestsByAuthorAcrossOwner(
+      "metyatech",
+      "agent-runner-bot",
+      {
+        excludeLabels: ["agent:failed"],
+        perPage: 100,
+        maxPages: 1
+      }
+    );
 
     expect(seenQueries).toHaveLength(1);
     expect(seenQueries[0]).toContain("user:metyatech");

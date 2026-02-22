@@ -109,7 +109,9 @@ export function summarizeLatestReviews(
     okComments += 1;
   }
 
-  const pendingReviewers = Array.from(required.values()).filter((reviewer) => !byAuthor.has(reviewer)).length;
+  const pendingReviewers = Array.from(required.values()).filter(
+    (reviewer) => !byAuthor.has(reviewer)
+  ).length;
   const reviewerCount = required.size;
   const hasPositiveSignal = approvals + okComments > 0;
 

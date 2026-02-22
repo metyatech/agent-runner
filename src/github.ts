@@ -98,7 +98,8 @@ export class GitHubClient {
   private authLogin: string | null | undefined;
 
   constructor(tokenOrOctokit: string | Octokit) {
-    this.octokit = typeof tokenOrOctokit === "string" ? new Octokit({ auth: tokenOrOctokit }) : tokenOrOctokit;
+    this.octokit =
+      typeof tokenOrOctokit === "string" ? new Octokit({ auth: tokenOrOctokit }) : tokenOrOctokit;
   }
 
   private async searchIssuesAndPullRequests(options: {
@@ -211,7 +212,9 @@ export class GitHubClient {
         state: "open"
       });
       for (const issue of response.data) {
-        const isPullRequest = Boolean((issue as unknown as { pull_request?: unknown }).pull_request);
+        const isPullRequest = Boolean(
+          (issue as unknown as { pull_request?: unknown }).pull_request
+        );
         issues.push({
           id: issue.id,
           number: issue.number,
@@ -219,7 +222,7 @@ export class GitHubClient {
           body: issue.body ?? null,
           author: issue.user?.login ?? null,
           repo,
-          labels: issue.labels.map((item) => (typeof item === "string" ? item : item.name ?? "")),
+          labels: issue.labels.map((item) => (typeof item === "string" ? item : (item.name ?? ""))),
           url: issue.html_url,
           isPullRequest
         });
@@ -242,7 +245,11 @@ export class GitHubClient {
   }
 
   async addAssignees(repo: RepoInfo, issueNumber: number, assignees: string[]): Promise<void> {
-    const unique = Array.from(new Set(assignees.map((assignee) => assignee.trim()).filter((assignee) => assignee.length > 0)));
+    const unique = Array.from(
+      new Set(
+        assignees.map((assignee) => assignee.trim()).filter((assignee) => assignee.length > 0)
+      )
+    );
     if (unique.length === 0) {
       return;
     }
@@ -300,7 +307,9 @@ export class GitHubClient {
       body: match.body ?? null,
       author: match.user?.login ?? null,
       repo,
-      labels: match.labels.map((item: any) => (typeof item === "string" ? item : item.name ?? "")),
+      labels: match.labels.map((item: any) =>
+        typeof item === "string" ? item : (item.name ?? "")
+      ),
       url: match.html_url,
       isPullRequest: false
     };
@@ -356,7 +365,9 @@ export class GitHubClient {
           body: item.body ?? null,
           author: item.user?.login ?? null,
           repo,
-          labels: item.labels.map((label: any) => (typeof label === "string" ? label : label.name ?? "")),
+          labels: item.labels.map((label: any) =>
+            typeof label === "string" ? label : (label.name ?? "")
+          ),
           url: item.html_url,
           isPullRequest: false
         });
@@ -428,7 +439,9 @@ export class GitHubClient {
             body: item.body ?? null,
             author: item.user?.login ?? null,
             repo,
-            labels: item.labels.map((label: any) => (typeof label === "string" ? label : label.name ?? "")),
+            labels: item.labels.map((label: any) =>
+              typeof label === "string" ? label : (label.name ?? "")
+            ),
             url: item.html_url,
             isPullRequest: "pull_request" in item
           });
@@ -502,7 +515,9 @@ export class GitHubClient {
             body: item.body ?? null,
             author: item.user?.login ?? null,
             repo,
-            labels: item.labels.map((label: any) => (typeof label === "string" ? label : label.name ?? "")),
+            labels: item.labels.map((label: any) =>
+              typeof label === "string" ? label : (label.name ?? "")
+            ),
             url: item.html_url,
             isPullRequest: "pull_request" in item
           });
@@ -572,7 +587,9 @@ export class GitHubClient {
           body: item.body ?? null,
           author: item.user?.login ?? null,
           repo,
-          labels: item.labels.map((label: any) => (typeof label === "string" ? label : label.name ?? "")),
+          labels: item.labels.map((label: any) =>
+            typeof label === "string" ? label : (label.name ?? "")
+          ),
           url: item.html_url,
           isPullRequest: true
         });
@@ -604,7 +621,9 @@ export class GitHubClient {
       body: response.data.body ?? null,
       author: response.data.user?.login ?? null,
       repo,
-      labels: response.data.labels.map((item) => (typeof item === "string" ? item : item.name ?? "")),
+      labels: response.data.labels.map((item) =>
+        typeof item === "string" ? item : (item.name ?? "")
+      ),
       url: response.data.html_url,
       isPullRequest: false
     };
@@ -638,7 +657,10 @@ export class GitHubClient {
     return comments;
   }
 
-  async listPullRequestReviewComments(repo: RepoInfo, pullNumber: number): Promise<PullRequestReviewComment[]> {
+  async listPullRequestReviewComments(
+    repo: RepoInfo,
+    pullNumber: number
+  ): Promise<PullRequestReviewComment[]> {
     const comments: PullRequestReviewComment[] = [];
     let page = 1;
     while (true) {
@@ -655,10 +677,14 @@ export class GitHubClient {
           body: comment.body ?? "",
           createdAt: comment.created_at,
           author: comment.user?.login ?? null,
-          authorAssociation: (comment as { author_association?: string }).author_association ?? null,
+          authorAssociation:
+            (comment as { author_association?: string }).author_association ?? null,
           url: comment.html_url ?? null,
           path: comment.path ?? null,
-          line: typeof (comment as { line?: number }).line === "number" ? (comment as { line?: number }).line! : null
+          line:
+            typeof (comment as { line?: number }).line === "number"
+              ? (comment as { line?: number }).line!
+              : null
         });
       }
       if (response.data.length < 100) {
@@ -686,9 +712,13 @@ export class GitHubClient {
         body: response.data.body ?? null,
         author: response.data.user?.login ?? null,
         repo,
-        labels: response.data.labels.map((item) => (typeof item === "string" ? item : item.name ?? "")),
+        labels: response.data.labels.map((item) =>
+          typeof item === "string" ? item : (item.name ?? "")
+        ),
         url: response.data.html_url,
-        isPullRequest: Boolean((response.data as unknown as { pull_request?: unknown }).pull_request)
+        isPullRequest: Boolean(
+          (response.data as unknown as { pull_request?: unknown }).pull_request
+        )
       };
     } catch (error) {
       if (error instanceof Error && "status" in error) {
@@ -756,7 +786,10 @@ export class GitHubClient {
     return branch;
   }
 
-  async listOpenPullRequests(repo: RepoInfo, options?: { limit?: number }): Promise<OpenPullRequestInfo[]> {
+  async listOpenPullRequests(
+    repo: RepoInfo,
+    options?: { limit?: number }
+  ): Promise<OpenPullRequestInfo[]> {
     const pulls: OpenPullRequestInfo[] = [];
     const requestedLimit = options?.limit;
     if (requestedLimit !== undefined) {
@@ -768,7 +801,9 @@ export class GitHubClient {
       }
     }
     const limit =
-      requestedLimit === undefined ? DEFAULT_OPEN_PULL_REQUEST_LIMIT : Math.max(1, Math.floor(requestedLimit));
+      requestedLimit === undefined
+        ? DEFAULT_OPEN_PULL_REQUEST_LIMIT
+        : Math.max(1, Math.floor(requestedLimit));
     const perPage = Math.min(100, limit);
     let page = 1;
     while (pulls.length < limit) {
@@ -843,7 +878,10 @@ export class GitHubClient {
     return Math.floor(totalCount);
   }
 
-  async getPullRequestHead(repo: RepoInfo, pullNumber: number): Promise<{
+  async getPullRequestHead(
+    repo: RepoInfo,
+    pullNumber: number
+  ): Promise<{
     headRef: string;
     headSha: string;
     headRepoFullName: string | null;
@@ -879,9 +917,15 @@ export class GitHubClient {
     });
 
     return {
-      allowSquashMerge: Boolean((response.data as { allow_squash_merge?: boolean }).allow_squash_merge),
-      allowMergeCommit: Boolean((response.data as { allow_merge_commit?: boolean }).allow_merge_commit),
-      allowRebaseMerge: Boolean((response.data as { allow_rebase_merge?: boolean }).allow_rebase_merge)
+      allowSquashMerge: Boolean(
+        (response.data as { allow_squash_merge?: boolean }).allow_squash_merge
+      ),
+      allowMergeCommit: Boolean(
+        (response.data as { allow_merge_commit?: boolean }).allow_merge_commit
+      ),
+      allowRebaseMerge: Boolean(
+        (response.data as { allow_rebase_merge?: boolean }).allow_rebase_merge
+      )
     };
   }
 
@@ -913,13 +957,14 @@ export class GitHubClient {
         mergeable:
           typeof (response.data as { mergeable?: boolean | null }).mergeable === "boolean"
             ? (response.data as { mergeable?: boolean | null }).mergeable!
-            : (response.data as { mergeable?: boolean | null }).mergeable ?? null,
+            : ((response.data as { mergeable?: boolean | null }).mergeable ?? null),
         mergeableState,
         headRef,
         headSha,
         headRepoFullName: response.data.head.repo?.full_name ?? null,
         requestedReviewerLogins: Array.isArray(
-          (response.data as { requested_reviewers?: Array<{ login?: string | null }> | null }).requested_reviewers
+          (response.data as { requested_reviewers?: Array<{ login?: string | null }> | null })
+            .requested_reviewers
         )
           ? (
               (response.data as { requested_reviewers?: Array<{ login?: string | null }> | null })
@@ -940,7 +985,10 @@ export class GitHubClient {
     }
   }
 
-  async findOpenPullRequestByHead(repo: RepoInfo, headBranch: string): Promise<{ number: number; url: string } | null> {
+  async findOpenPullRequestByHead(
+    repo: RepoInfo,
+    headBranch: string
+  ): Promise<{ number: number; url: string } | null> {
     const response = await this.octokit.pulls.list({
       owner: repo.owner,
       repo: repo.repo,
@@ -953,8 +1001,14 @@ export class GitHubClient {
     if (!first) {
       return null;
     }
-    const number = typeof (first as { number?: unknown }).number === "number" ? (first as { number: number }).number : null;
-    const url = typeof (first as { html_url?: unknown }).html_url === "string" ? (first as { html_url: string }).html_url : "";
+    const number =
+      typeof (first as { number?: unknown }).number === "number"
+        ? (first as { number: number }).number
+        : null;
+    const url =
+      typeof (first as { html_url?: unknown }).html_url === "string"
+        ? (first as { html_url: string }).html_url
+        : "";
     if (!number || number <= 0 || url.length === 0) {
       return null;
     }
@@ -1020,7 +1074,10 @@ export class GitHubClient {
     });
   }
 
-  async listPullRequestReviewThreads(repo: RepoInfo, pullNumber: number): Promise<PullRequestReviewThread[]> {
+  async listPullRequestReviewThreads(
+    repo: RepoInfo,
+    pullNumber: number
+  ): Promise<PullRequestReviewThread[]> {
     const threads: PullRequestReviewThread[] = [];
     let cursor: string | null = null;
 
@@ -1102,9 +1159,15 @@ export class GitHubClient {
     });
   }
 
-  async requestPullRequestReviewers(repo: RepoInfo, pullNumber: number, reviewers: string[]): Promise<void> {
+  async requestPullRequestReviewers(
+    repo: RepoInfo,
+    pullNumber: number,
+    reviewers: string[]
+  ): Promise<void> {
     const unique = Array.from(
-      new Set(reviewers.map((reviewer) => reviewer.trim()).filter((reviewer) => reviewer.length > 0))
+      new Set(
+        reviewers.map((reviewer) => reviewer.trim()).filter((reviewer) => reviewer.length > 0)
+      )
     );
     if (unique.length === 0) {
       return;
@@ -1120,9 +1183,15 @@ export class GitHubClient {
     }
   }
 
-  async removeRequestedPullRequestReviewers(repo: RepoInfo, pullNumber: number, reviewers: string[]): Promise<void> {
+  async removeRequestedPullRequestReviewers(
+    repo: RepoInfo,
+    pullNumber: number,
+    reviewers: string[]
+  ): Promise<void> {
     const unique = Array.from(
-      new Set(reviewers.map((reviewer) => reviewer.trim()).filter((reviewer) => reviewer.length > 0))
+      new Set(
+        reviewers.map((reviewer) => reviewer.trim()).filter((reviewer) => reviewer.length > 0)
+      )
     );
     if (unique.length === 0) {
       return;

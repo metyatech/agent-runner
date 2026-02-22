@@ -28,7 +28,12 @@ describe("pruneLogs", () => {
       writeLatestPointers: true
     };
 
-    const result = pruneLogs({ dir, decision, dryRun: true, now: new Date(base.getTime() + 20000) });
+    const result = pruneLogs({
+      dir,
+      decision,
+      dryRun: true,
+      now: new Date(base.getTime() + 20000)
+    });
     expect(result.deleted).toBe(3);
     expect(result.kept).toBe(3);
 
@@ -60,4 +65,3 @@ describe("pruneLogs", () => {
     fs.rmSync(dir, { recursive: true, force: true });
   });
 });
-

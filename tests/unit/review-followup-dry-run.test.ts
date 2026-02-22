@@ -54,4 +54,3 @@ describe("review-followup dry-run planning", () => {
     expect(queue.map((entry) => entry.issueId)).toEqual([1, 2, 3]);
   });
 });
-

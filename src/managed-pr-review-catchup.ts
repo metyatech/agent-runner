@@ -2,9 +2,15 @@ import type { AgentRunnerConfig } from "./config.js";
 import type { GitHubClient, IssueInfo, RepoInfo } from "./github.js";
 import { ensureManagedPullRequestRecorded, isManagedPullRequestIssue } from "./managed-pr.js";
 import { summarizeLatestReviews } from "./pr-review-automation.js";
-import { labelsForReviewFollowupState, listReviewFollowupLabels } from "./review-followup-labels.js";
+import {
+  labelsForReviewFollowupState,
+  listReviewFollowupLabels
+} from "./review-followup-labels.js";
 import { enqueueReviewTask, resolveReviewQueuePath } from "./review-queue.js";
-import { listManagedPullRequests, resolveManagedPullRequestsStatePath } from "./managed-pull-requests.js";
+import {
+  listManagedPullRequests,
+  resolveManagedPullRequestsStatePath
+} from "./managed-pull-requests.js";
 
 function buildCandidateKey(repo: RepoInfo, prNumber: number): string {
   return `${repo.owner.toLowerCase()}/${repo.repo.toLowerCase()}#${prNumber}`;
@@ -23,7 +29,11 @@ async function enqueueFollowupWithLabel(options: {
     reason: "review_comment" | "review" | "approval";
     requiresEngine: boolean;
   };
-  onLog?: (level: "info" | "warn" | "error", message: string, data?: Record<string, unknown>) => void;
+  onLog?: (
+    level: "info" | "warn" | "error",
+    message: string,
+    data?: Record<string, unknown>
+  ) => void;
 }): Promise<boolean> {
   const added = await enqueueReviewTask(options.reviewQueuePath, options.entry);
   if (!added) {
@@ -51,11 +61,15 @@ async function enqueueFollowupWithLabel(options: {
       await options.client.removeLabel(options.issue, label);
       options.issue.labels = options.issue.labels.filter((row) => row !== label);
     } catch (error) {
-      options.onLog?.("warn", "Managed PR catch-up scan failed to remove stale review follow-up label.", {
-        url: options.issue.url,
-        label,
-        error: error instanceof Error ? error.message : String(error)
-      });
+      options.onLog?.(
+        "warn",
+        "Managed PR catch-up scan failed to remove stale review follow-up label.",
+        {
+          url: options.issue.url,
+          label,
+          error: error instanceof Error ? error.message : String(error)
+        }
+      );
     }
   }
   return true;
@@ -66,7 +80,11 @@ export async function enqueueManagedPullRequestReviewFollowups(options: {
   config: AgentRunnerConfig;
   maxEntries: number;
   dryRun: boolean;
-  onLog?: (level: "info" | "warn" | "error", message: string, data?: Record<string, unknown>) => void;
+  onLog?: (
+    level: "info" | "warn" | "error",
+    message: string,
+    data?: Record<string, unknown>
+  ) => void;
 }): Promise<number> {
   const limit = Math.max(0, Math.floor(options.maxEntries));
   if (limit <= 0) {
@@ -95,7 +113,12 @@ export async function enqueueManagedPullRequestReviewFollowups(options: {
     });
   }
 
-  const candidates: Array<{ repo: RepoInfo; prNumber: number; key: string; source: "state" | "search" }> = [];
+  const candidates: Array<{
+    repo: RepoInfo;
+    prNumber: number;
+    key: string;
+    source: "state" | "search";
+  }> = [];
   const seen = new Set<string>();
   for (const entry of managed.slice().reverse()) {
     const key = buildCandidateKey(entry.repo, entry.prNumber);
@@ -108,7 +131,11 @@ export async function enqueueManagedPullRequestReviewFollowups(options: {
 
   const allowedRepos =
     Array.isArray(options.config.repos) && options.config.repos.length > 0
-      ? new Set(options.config.repos.map((repo) => `${options.config.owner.toLowerCase()}/${repo.toLowerCase()}`))
+      ? new Set(
+          options.config.repos.map(
+            (repo) => `${options.config.owner.toLowerCase()}/${repo.toLowerCase()}`
+          )
+        )
       : null;
 
   const targetCandidates = Math.max(1, Math.min(50, limit * 10));
@@ -120,16 +147,24 @@ export async function enqueueManagedPullRequestReviewFollowups(options: {
     let found: IssueInfo[] = [];
     try {
       const remaining = targetCandidates - candidates.length;
-      found = await options.client.searchOpenPullRequestsByAuthorAcrossOwner(options.config.owner, login, {
-        excludeLabels,
-        perPage: remaining,
-        maxPages: 1
-      });
+      found = await options.client.searchOpenPullRequestsByAuthorAcrossOwner(
+        options.config.owner,
+        login,
+        {
+          excludeLabels,
+          perPage: remaining,
+          maxPages: 1
+        }
+      );
     } catch (error) {
-      options.onLog?.("warn", "Managed PR catch-up scan failed to search for agent-runner bot PRs.", {
-        author: login,
-        error: error instanceof Error ? error.message : String(error)
-      });
+      options.onLog?.(
+        "warn",
+        "Managed PR catch-up scan failed to search for agent-runner bot PRs.",
+        {
+          author: login,
+          error: error instanceof Error ? error.message : String(error)
+        }
+      );
       continue;
     }
     for (const item of found) {

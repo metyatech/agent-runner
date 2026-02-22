@@ -60,7 +60,10 @@ describe("webhook-handler review followup", () => {
     const pr = makePullRequestIssue(repo);
     const queuePath = path.join(root, "agent-runner", "state", "webhook-queue.json");
 
-    const calls: { addLabels: string[][]; removeLabels: string[] } = { addLabels: [], removeLabels: [] };
+    const calls: { addLabels: string[][]; removeLabels: string[] } = {
+      addLabels: [],
+      removeLabels: []
+    };
     const client = {
       addLabels: async (_issue: IssueInfo, labels: string[]) => {
         calls.addLabels.push(labels);
@@ -102,7 +105,9 @@ describe("webhook-handler review followup", () => {
   });
 
   it("enqueues review follow-up for non-Copilot bot comments too", async () => {
-    const root = fs.mkdtempSync(path.join(os.tmpdir(), "agent-runner-webhook-any-bot-review-comment-"));
+    const root = fs.mkdtempSync(
+      path.join(os.tmpdir(), "agent-runner-webhook-any-bot-review-comment-")
+    );
     const config = makeConfig(root);
     const repo = makeRepo();
     const pr = makePullRequestIssue(repo);
@@ -189,7 +194,9 @@ describe("webhook-handler review followup", () => {
   });
 
   it("enqueues engine follow-up for Copilot inline review comments", async () => {
-    const root = fs.mkdtempSync(path.join(os.tmpdir(), "agent-runner-webhook-copilot-review-comment-"));
+    const root = fs.mkdtempSync(
+      path.join(os.tmpdir(), "agent-runner-webhook-copilot-review-comment-")
+    );
     const config = makeConfig(root);
     const repo = makeRepo();
     const pr = makePullRequestIssue(repo);
@@ -232,7 +239,9 @@ describe("webhook-handler review followup", () => {
   });
 
   it("treats usage-limit review comments as approval follow-up", async () => {
-    const root = fs.mkdtempSync(path.join(os.tmpdir(), "agent-runner-webhook-usage-limit-review-comment-"));
+    const root = fs.mkdtempSync(
+      path.join(os.tmpdir(), "agent-runner-webhook-usage-limit-review-comment-")
+    );
     const config = makeConfig(root);
     const repo = makeRepo();
     const pr = makePullRequestIssue(repo);
@@ -319,7 +328,9 @@ describe("webhook-handler review followup", () => {
   });
 
   it("continues even when managed PR state is corrupted", async () => {
-    const root = fs.mkdtempSync(path.join(os.tmpdir(), "agent-runner-webhook-managed-state-corrupt-"));
+    const root = fs.mkdtempSync(
+      path.join(os.tmpdir(), "agent-runner-webhook-managed-state-corrupt-")
+    );
     const config = makeConfig(root);
     const repo = makeRepo();
     const pr = makePullRequestIssue(repo);
@@ -362,4 +373,3 @@ describe("webhook-handler review followup", () => {
     expect(loadReviewQueue(reviewQueuePath)).toHaveLength(1);
   });
 });
-

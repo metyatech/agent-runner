@@ -35,7 +35,9 @@ describe("review-followup-labels", () => {
   it("derives waiting/action-required labels from reviewFollowup by default", () => {
     const config = makeConfig();
     expect(resolveReviewFollowupWaitingLabel(config)).toBe("agent:review-followup:waiting");
-    expect(resolveReviewFollowupActionRequiredLabel(config)).toBe("agent:review-followup:action-required");
+    expect(resolveReviewFollowupActionRequiredLabel(config)).toBe(
+      "agent:review-followup:action-required"
+    );
   });
 
   it("uses explicit waiting/action-required labels when configured", () => {

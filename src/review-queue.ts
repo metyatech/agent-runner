@@ -144,7 +144,8 @@ export async function enqueueReviewTask(
         enqueuedAt: new Date().toISOString()
       }
     ];
-    const trimmed = next.length > MAX_QUEUE_LENGTH ? next.slice(next.length - MAX_QUEUE_LENGTH) : next;
+    const trimmed =
+      next.length > MAX_QUEUE_LENGTH ? next.slice(next.length - MAX_QUEUE_LENGTH) : next;
     writeQueueState(queuePath, trimmed);
     return true;
   });
@@ -162,7 +163,10 @@ export async function removeReviewTasks(queuePath: string, issueIds: number[]): 
   });
 }
 
-export async function takeReviewTasks(queuePath: string, maxEntries: number): Promise<ReviewQueueEntry[]> {
+export async function takeReviewTasks(
+  queuePath: string,
+  maxEntries: number
+): Promise<ReviewQueueEntry[]> {
   const limit = Math.max(0, Math.floor(maxEntries));
   if (limit <= 0) {
     return [];

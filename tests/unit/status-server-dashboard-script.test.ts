@@ -154,7 +154,10 @@ async function createDashboardRuntime(scenarios: FetchScenario[] = []): Promise<
     "reportsList",
     "reviewFollowupsList"
   ];
-  const elements = Object.fromEntries(ids.map((id) => [id, new FakeElement(id)])) as Record<string, FakeElement>;
+  const elements = Object.fromEntries(ids.map((id) => [id, new FakeElement(id)])) as Record<
+    string,
+    FakeElement
+  >;
   elements.staleSection.hidden = true;
   elements.staleDetails.hidden = true;
   const queue = [...scenarios];
@@ -263,7 +266,9 @@ setInterval( refresh , 5_000 );
     const firstFooter = firstCard.children[firstCard.children.length - 1];
     const firstAge = firstFooter.children[0];
     expect(
-      firstHeader.children.some((child) => child.className === "issue-badge" && child.textContent === "#10")
+      firstHeader.children.some(
+        (child) => child.className === "issue-badge" && child.textContent === "#10"
+      )
     ).toBe(true);
     expect(firstFooter.children.some((child) => child.textContent === "Open log")).toBe(true);
     expect(firstAge.textContent).toMatch(/^Low\s/);
@@ -436,9 +441,9 @@ setInterval( refresh , 5_000 );
     const top = row.children[0];
     const action = row.children[1];
     expect(top.children.some((child) => child.textContent.toLowerCase() === "waiting")).toBe(true);
-    expect(
-      top.children.some((child) => child.textContent === "Approved or no-action review")
-    ).toBe(true);
+    expect(top.children.some((child) => child.textContent === "Approved or no-action review")).toBe(
+      true
+    );
     expect(action.textContent.toLowerCase()).toContain("no action required");
     const detail = row.children[2];
     expect(detail.textContent.toLowerCase()).toContain("why:");

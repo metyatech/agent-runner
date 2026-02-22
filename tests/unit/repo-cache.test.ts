@@ -2,12 +2,7 @@ import { describe, expect, it } from "vitest";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import {
-  isBlocked,
-  isCacheFresh,
-  loadRepoCache,
-  saveRepoCache
-} from "../../src/repo-cache.js";
+import { isBlocked, isCacheFresh, loadRepoCache, saveRepoCache } from "../../src/repo-cache.js";
 import { listTargetRepos } from "../../src/queue.js";
 
 describe("repo-cache", () => {
@@ -84,4 +79,3 @@ describe("repo-cache", () => {
     expect(result.repos[0].repo).toBe("demo");
   });
 });
-

@@ -49,9 +49,7 @@ export function resolveWebhookQueuePath(
   return path.join(resolveQueueDir(workdirRoot), DEFAULT_QUEUE_FILENAME);
 }
 
-function resolveWebhookQueueLockPath(
-  queuePath: string
-): string {
+function resolveWebhookQueueLockPath(queuePath: string): string {
   return path.join(path.dirname(queuePath), DEFAULT_LOCK_FILENAME);
 }
 
@@ -135,10 +133,7 @@ export function loadWebhookQueue(queuePath: string): WebhookQueueEntry[] {
   return readQueueState(queuePath).queued;
 }
 
-export async function enqueueWebhookIssue(
-  queuePath: string,
-  issue: IssueInfo
-): Promise<boolean> {
+export async function enqueueWebhookIssue(queuePath: string, issue: IssueInfo): Promise<boolean> {
   return withQueueLock(queuePath, () => {
     const state = readQueueState(queuePath);
     if (state.queued.some((entry) => entry.issueId === issue.id)) {
@@ -157,10 +152,7 @@ export async function enqueueWebhookIssue(
   });
 }
 
-export async function removeWebhookIssues(
-  queuePath: string,
-  issueIds: number[]
-): Promise<void> {
+export async function removeWebhookIssues(queuePath: string, issueIds: number[]): Promise<void> {
   if (issueIds.length === 0) {
     return;
   }

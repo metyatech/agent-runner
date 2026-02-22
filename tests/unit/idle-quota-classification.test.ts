@@ -20,4 +20,3 @@ describe("classifyNonZeroExit", () => {
     expect(result.failureDetail).toContain("TypeError");
   });
 });
-

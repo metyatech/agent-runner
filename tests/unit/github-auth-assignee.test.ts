@@ -61,7 +61,10 @@ describe("GitHubClient.findOpenPullRequestByHead", () => {
     };
 
     await expect(
-      client.findOpenPullRequestByHead({ owner: "metyatech", repo: "demo" }, "agent-runner/idle-codex-123")
+      client.findOpenPullRequestByHead(
+        { owner: "metyatech", repo: "demo" },
+        "agent-runner/idle-codex-123"
+      )
     ).resolves.toEqual({
       number: 7,
       url: "https://github.com/metyatech/demo/pull/7"
@@ -187,7 +190,10 @@ describe("GitHubClient.listOpenPullRequests", () => {
       }
     };
 
-    const listed = await client.listOpenPullRequests({ owner: "metyatech", repo: "demo" }, { limit: 1 });
+    const listed = await client.listOpenPullRequests(
+      { owner: "metyatech", repo: "demo" },
+      { limit: 1 }
+    );
     expect(listed).toHaveLength(1);
     expect(listed[0]?.number).toBe(30);
     expect(calls).toHaveLength(1);
@@ -230,7 +236,10 @@ describe("GitHubClient.listOpenPullRequests", () => {
       }
     };
 
-    const listed = await client.listOpenPullRequests({ owner: "metyatech", repo: "demo" }, { limit: 150 });
+    const listed = await client.listOpenPullRequests(
+      { owner: "metyatech", repo: "demo" },
+      { limit: 150 }
+    );
     expect(listed).toHaveLength(150);
     expect(calls).toHaveLength(2);
     expect(calls[0]?.per_page).toBe(100);
@@ -301,7 +310,10 @@ describe("GitHubClient.listOpenPullRequests", () => {
       }
     };
 
-    const listed = await client.listOpenPullRequests({ owner: "metyatech", repo: "demo" }, { limit: 20 });
+    const listed = await client.listOpenPullRequests(
+      { owner: "metyatech", repo: "demo" },
+      { limit: 20 }
+    );
     expect(listed).toEqual([
       {
         number: 12,
@@ -334,7 +346,9 @@ describe("GitHubClient.getOpenPullRequestCount", () => {
       }
     };
 
-    await expect(client.getOpenPullRequestCount({ owner: "metyatech", repo: "demo" })).resolves.toBe(123);
+    await expect(
+      client.getOpenPullRequestCount({ owner: "metyatech", repo: "demo" })
+    ).resolves.toBe(123);
     expect(seen.route).toBe("POST /graphql");
     expect(seen.params.owner).toBe("metyatech");
     expect(seen.params.name).toBe("demo");

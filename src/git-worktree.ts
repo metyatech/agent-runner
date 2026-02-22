@@ -33,10 +33,7 @@ function repoHttpsUrl(repo: RepoInfo): string {
 
 function buildAuthEnv(): NodeJS.ProcessEnv {
   const token =
-    process.env.AGENT_GITHUB_TOKEN ||
-    process.env.GITHUB_TOKEN ||
-    process.env.GH_TOKEN ||
-    "";
+    process.env.AGENT_GITHUB_TOKEN || process.env.GITHUB_TOKEN || process.env.GH_TOKEN || "";
   return buildGitAuthEnv(process.env, token);
 }
 
@@ -52,7 +49,9 @@ async function resolveBranchStartRef(cachePath: string, branch: string): Promise
   const candidates = [`refs/remotes/origin/${branch}`, `refs/heads/${branch}`];
   for (const candidate of candidates) {
     try {
-      await runCommand("git", ["-C", cachePath, "show-ref", "--verify", "--quiet", candidate], { env });
+      await runCommand("git", ["-C", cachePath, "show-ref", "--verify", "--quiet", candidate], {
+        env
+      });
       return candidate;
     } catch {
       // continue
@@ -77,7 +76,9 @@ type GitWorktreeEntry = {
 
 function normalizePathForComparison(value: string): string {
   const normalized = path.resolve(value).replace(/\\/g, "/");
-  return normalized.endsWith("/") ? normalized.slice(0, -1).toLowerCase() : normalized.toLowerCase();
+  return normalized.endsWith("/")
+    ? normalized.slice(0, -1).toLowerCase()
+    : normalized.toLowerCase();
 }
 
 function parseGitWorktreeList(output: string): GitWorktreeEntry[] {
@@ -156,11 +157,17 @@ async function cleanupConflictingBranchWorktrees(options: {
   const targetPathKey = normalizePathForComparison(options.targetWorktreePath);
 
   const listWorktrees = async (): Promise<GitWorktreeEntry[]> => {
-    const result = await runCommand("git", ["-C", options.cachePath, "worktree", "list", "--porcelain"], { env });
+    const result = await runCommand(
+      "git",
+      ["-C", options.cachePath, "worktree", "list", "--porcelain"],
+      { env }
+    );
     return parseGitWorktreeList(result.stdout);
   };
 
-  const conflicts = (await listWorktrees()).filter((entry) => !entry.bare && entry.branchRef === desiredBranchRef);
+  const conflicts = (await listWorktrees()).filter(
+    (entry) => !entry.bare && entry.branchRef === desiredBranchRef
+  );
 
   if (conflicts.length === 0) {
     return;
@@ -188,13 +195,19 @@ async function cleanupConflictingBranchWorktrees(options: {
     }
 
     if (remove) {
-      await runCommand("git", ["-C", options.cachePath, "worktree", "remove", "--force", conflict.path], { env });
+      await runCommand(
+        "git",
+        ["-C", options.cachePath, "worktree", "remove", "--force", conflict.path],
+        { env }
+      );
     }
   }
 
   await runCommand("git", ["-C", options.cachePath, "worktree", "prune"], { env });
 
-  const remaining = (await listWorktrees()).filter((entry) => !entry.bare && entry.branchRef === desiredBranchRef);
+  const remaining = (await listWorktrees()).filter(
+    (entry) => !entry.bare && entry.branchRef === desiredBranchRef
+  );
   if (remaining.length > 0) {
     throw new Error(
       `Branch ${options.branch} is already checked out by an active worktree: ${remaining[0].path}. ` +
@@ -232,7 +245,11 @@ export async function ensureRepoCache(workdirRoot: string, repo: RepoInfo): Prom
         fs.mkdirSync(path.dirname(localPath), { recursive: true });
         const useGh = await commandExists("gh");
         if (useGh) {
-          await runCommand("gh", ["repo", "clone", `${repo.owner}/${repo.repo}`, localPath, "--", "--recursive"], { env });
+          await runCommand(
+            "gh",
+            ["repo", "clone", `${repo.owner}/${repo.repo}`, localPath, "--", "--recursive"],
+            { env }
+          );
         } else {
           await runCommand("git", ["clone", "--recursive", repoHttpsUrl(repo), localPath], { env });
         }
@@ -242,7 +259,11 @@ export async function ensureRepoCache(workdirRoot: string, repo: RepoInfo): Prom
       await runCommand("git", ["clone", "--bare", localPath, cachePath], { env });
 
       try {
-        await runCommand("git", ["-C", cachePath, "remote", "set-url", "origin", repoHttpsUrl(repo)], { env });
+        await runCommand(
+          "git",
+          ["-C", cachePath, "remote", "set-url", "origin", repoHttpsUrl(repo)],
+          { env }
+        );
       } catch {
         // ignore
       }
@@ -253,7 +274,11 @@ export async function ensureRepoCache(workdirRoot: string, repo: RepoInfo): Prom
   );
 }
 
-export async function refreshRepoCache(workdirRoot: string, repo: RepoInfo, cachePath: string): Promise<void> {
+export async function refreshRepoCache(
+  workdirRoot: string,
+  repo: RepoInfo,
+  cachePath: string
+): Promise<void> {
   await withGitCacheLock(
     workdirRoot,
     repo,
@@ -275,7 +300,9 @@ async function maybeUpdateSubmodules(worktreePath: string): Promise<void> {
     return;
   }
   const env = buildAuthEnv();
-  await runCommand("git", ["-C", worktreePath, "submodule", "update", "--init", "--recursive"], { env });
+  await runCommand("git", ["-C", worktreePath, "submodule", "update", "--init", "--recursive"], {
+    env
+  });
 }
 
 export async function createWorktreeFromDefaultBranch(options: {
@@ -332,7 +359,14 @@ export async function createWorktreeForRemoteBranch(options: {
       const env = buildAuthEnv();
       await runCommand(
         "git",
-        ["-C", options.cachePath, "fetch", "--prune", "origin", buildBranchFetchRefspec(options.branch)],
+        [
+          "-C",
+          options.cachePath,
+          "fetch",
+          "--prune",
+          "origin",
+          buildBranchFetchRefspec(options.branch)
+        ],
         { env }
       );
       await cleanupConflictingBranchWorktrees({
@@ -342,8 +376,14 @@ export async function createWorktreeForRemoteBranch(options: {
         targetWorktreePath: options.worktreePath
       });
       const startRef = await resolveBranchStartRef(options.cachePath, options.branch);
-      await runCommand("git", ["-C", options.cachePath, "branch", "-f", options.branch, startRef], { env });
-      await runCommand("git", ["-C", options.cachePath, "worktree", "add", options.worktreePath, options.branch], { env });
+      await runCommand("git", ["-C", options.cachePath, "branch", "-f", options.branch, startRef], {
+        env
+      });
+      await runCommand(
+        "git",
+        ["-C", options.cachePath, "worktree", "add", options.worktreePath, options.branch],
+        { env }
+      );
     },
     { timeoutMs: 15 * 60 * 1000 }
   );
@@ -362,7 +402,11 @@ export async function removeWorktree(options: {
       options.repo,
       async () => {
         const env = buildAuthEnv();
-        await runCommand("git", ["-C", options.cachePath, "worktree", "remove", "--force", options.worktreePath], { env });
+        await runCommand(
+          "git",
+          ["-C", options.cachePath, "worktree", "remove", "--force", options.worktreePath],
+          { env }
+        );
       },
       { timeoutMs: 15 * 60 * 1000 }
     );

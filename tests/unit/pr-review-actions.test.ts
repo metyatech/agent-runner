@@ -57,7 +57,13 @@ describe("pr-review-actions", () => {
 
     const client = {
       listPullRequestReviews: async () => [
-        { id: 1, author: "alice", state: "APPROVED", submittedAt: "2026-02-06T00:00:00Z", body: null },
+        {
+          id: 1,
+          author: "alice",
+          state: "APPROVED",
+          submittedAt: "2026-02-06T00:00:00Z",
+          body: null
+        },
         {
           id: 2,
           author: "copilot-pull-request-reviewer[bot]",
@@ -86,10 +92,18 @@ describe("pr-review-actions", () => {
         headRepoFullName: "metyatech/demo",
         requestedReviewerLogins: []
       }),
-      requestPullRequestReviewers: async (_repo: RepoInfo, _pullNumber: number, reviewers: string[]) => {
+      requestPullRequestReviewers: async (
+        _repo: RepoInfo,
+        _pullNumber: number,
+        reviewers: string[]
+      ) => {
         calls.request.push(reviewers);
       },
-      removeRequestedPullRequestReviewers: async (_repo: RepoInfo, _pullNumber: number, reviewers: string[]) => {
+      removeRequestedPullRequestReviewers: async (
+        _repo: RepoInfo,
+        _pullNumber: number,
+        reviewers: string[]
+      ) => {
         calls.remove.push(reviewers);
       },
       commentIssue: async (_repo: RepoInfo, _issueNumber: number, body: string) => {
@@ -131,7 +145,13 @@ describe("pr-review-actions", () => {
       }),
       listPullRequestReviewThreads: async () => [],
       listPullRequestReviews: async () => [
-        { id: 1, author: "alice", state: "APPROVED", submittedAt: "2026-02-06T00:00:00Z", body: null }
+        {
+          id: 1,
+          author: "alice",
+          state: "APPROVED",
+          submittedAt: "2026-02-06T00:00:00Z",
+          body: null
+        }
       ]
     };
 

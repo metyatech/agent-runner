@@ -4,8 +4,14 @@ import os from "node:os";
 import path from "node:path";
 import type { AgentRunnerConfig } from "../../src/config.js";
 import type { IssueInfo } from "../../src/github.js";
-import { ensureManagedPullRequestRecorded, isManagedPullRequestIssue } from "../../src/managed-pr.js";
-import { markManagedPullRequest, resolveManagedPullRequestsStatePath } from "../../src/managed-pull-requests.js";
+import {
+  ensureManagedPullRequestRecorded,
+  isManagedPullRequestIssue
+} from "../../src/managed-pr.js";
+import {
+  markManagedPullRequest,
+  resolveManagedPullRequestsStatePath
+} from "../../src/managed-pull-requests.js";
 
 function makeConfig(workdirRoot: string): AgentRunnerConfig {
   return {
@@ -26,7 +32,11 @@ function makeConfig(workdirRoot: string): AgentRunnerConfig {
   };
 }
 
-function makePullRequestIssue(options: { author: string | null; number?: number; id?: number }): IssueInfo {
+function makePullRequestIssue(options: {
+  author: string | null;
+  number?: number;
+  id?: number;
+}): IssueInfo {
   return {
     id: options.id ?? 101,
     number: options.number ?? 5,
@@ -51,8 +61,12 @@ describe("managed-pr", () => {
   it("treats agent-runner GitHub App bot-authored PRs as managed even when state is empty", async () => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), "agent-runner-managed-pr-app-bot-"));
     const config = makeConfig(root);
-    await expect(isManagedPullRequestIssue(makePullRequestIssue({ author: "agent-runner-bot" }), config)).resolves.toBe(true);
-    await expect(isManagedPullRequestIssue(makePullRequestIssue({ author: "app/agent-runner-bot" }), config)).resolves.toBe(true);
+    await expect(
+      isManagedPullRequestIssue(makePullRequestIssue({ author: "agent-runner-bot" }), config)
+    ).resolves.toBe(true);
+    await expect(
+      isManagedPullRequestIssue(makePullRequestIssue({ author: "app/agent-runner-bot" }), config)
+    ).resolves.toBe(true);
   });
 
   it("treats state-recorded PRs as managed even when author is not an agent-runner bot", async () => {

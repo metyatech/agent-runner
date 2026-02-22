@@ -27,11 +27,7 @@ import {
   type IdlePlanOptions
 } from "./idle.js";
 import { recordRunningIssue, removeRunningIssue, resolveRunnerStatePath } from "./runner-state.js";
-import {
-  recordActivity,
-  removeActivity,
-  resolveActivityStatePath
-} from "./activity-state.js";
+import { recordActivity, removeActivity, resolveActivityStatePath } from "./activity-state.js";
 import { AGENT_RUNNER_MARKER, findLastMarkerComment, NEEDS_USER_MARKER } from "./notifications.js";
 import { normalizeLogChunk } from "./log-normalize.js";
 import { resolveLogMaintenance, writeLatestPointer } from "./log-maintenance.js";
@@ -65,7 +61,13 @@ export type RunResult = {
   quotaResumeAt: string | null;
 };
 
-export type IdleEngine = "codex" | "copilot" | "gemini-pro" | "gemini-flash" | "amazon-q" | "claude";
+export type IdleEngine =
+  | "codex"
+  | "copilot"
+  | "gemini-pro"
+  | "gemini-flash"
+  | "amazon-q"
+  | "claude";
 
 export type IdleTaskResult = {
   success: boolean;
@@ -192,7 +194,9 @@ function selectRelevantUserComments(comments: IssueComment[]): IssueComment[] {
   const filtered =
     anchor === null
       ? userComments
-      : userComments.filter((comment) => Date.parse(comment.createdAt) > Date.parse(anchor.createdAt));
+      : userComments.filter(
+          (comment) => Date.parse(comment.createdAt) > Date.parse(anchor.createdAt)
+        );
 
   return filtered.slice(-MAX_ISSUE_COMMENTS_COUNT);
 }
@@ -389,7 +393,10 @@ export function renderIdlePrompt(
   const repoSlug = `${repo.owner}/${repo.repo}`;
   const openPrCountLabel = formatIdleOpenPrCount(options.openPrCount);
   const openPrContext = formatIdleOpenPrContextBlock(options.openPrContext);
-  const placeholders: Record<"repo" | "owner" | "repoName" | "openPrCount" | "openPrContext" | "task", string> = {
+  const placeholders: Record<
+    "repo" | "owner" | "repoName" | "openPrCount" | "openPrContext" | "task",
+    string
+  > = {
     repo: repoSlug,
     owner: repo.owner,
     repoName: repo.repo,
@@ -444,7 +451,7 @@ export function buildGeminiInvocation(
     throw new Error("Gemini command not configured.");
   }
   const resolved = resolveCodexCommand(config.gemini.command, process.env.PATH);
-  
+
   const modelArg = engine === "gemini-pro" ? "gemini-3-pro-preview" : "gemini-3-flash-preview";
   const args = [...resolved.prefixArgs, "-m", modelArg, ...config.gemini.args, prompt];
 
@@ -645,10 +652,15 @@ function readLogTail(logPath: string, maxBytes: number = 512 * 1024): string {
   }
 }
 
-export function classifyNonZeroExit(outputTail: string): { failureKind: RunFailureKind; failureDetail: string | null } {
+export function classifyNonZeroExit(outputTail: string): {
+  failureKind: RunFailureKind;
+  failureDetail: string | null;
+} {
   const cleaned = keepTail(outputTail);
   const failureDetail = extractFailureDetail(cleaned);
-  const failureKind: RunFailureKind = hasPattern(cleaned, QUOTA_ERROR_PATTERNS) ? "quota" : "execution_error";
+  const failureKind: RunFailureKind = hasPattern(cleaned, QUOTA_ERROR_PATTERNS)
+    ? "quota"
+    : "execution_error";
   return { failureKind, failureDetail };
 }
 
@@ -674,7 +686,9 @@ function isLikelyMissingSessionError(value: string): boolean {
   return hasPattern(value, MISSING_SESSION_PATTERNS);
 }
 
-function resolveQuotaRunAfter(statusRaw: ReturnType<typeof rateLimitSnapshotToStatus>): Date | null {
+function resolveQuotaRunAfter(
+  statusRaw: ReturnType<typeof rateLimitSnapshotToStatus>
+): Date | null {
   if (!statusRaw || statusRaw.windows.length === 0) {
     return null;
   }
@@ -721,25 +735,46 @@ async function runCodexAttempt(options: {
 }): Promise<IssueAttemptResult> {
   const invocation =
     options.engine === "copilot"
-      ? buildCopilotInvocation(options.config, options.primaryPath, options.prompt, options.envOverrides)
-      : options.engine === "amazon-q"
-      ? buildAmazonQInvocation(options.config, options.primaryPath, options.prompt, options.envOverrides)
-      : options.engine === "claude"
-      ? buildClaudeInvocation(options.config, options.primaryPath, options.prompt, options.envOverrides)
-      : options.engine === "gemini-pro" || options.engine === "gemini-flash"
-      ? buildGeminiInvocation(options.config, options.primaryPath, options.prompt, options.engine, options.envOverrides)
-      : options.mode === "resume" && options.resumeSessionId
-      ? buildCodexResumeInvocation(
+      ? buildCopilotInvocation(
           options.config,
           options.primaryPath,
-          options.resumeSessionId,
           options.prompt,
-          { envOverrides: options.envOverrides }
+          options.envOverrides
         )
-      : buildCodexInvocation(options.config, options.primaryPath, options.prompt, {
-          envOverrides: options.envOverrides,
-          addDir: options.workRoot
-        });
+      : options.engine === "amazon-q"
+        ? buildAmazonQInvocation(
+            options.config,
+            options.primaryPath,
+            options.prompt,
+            options.envOverrides
+          )
+        : options.engine === "claude"
+          ? buildClaudeInvocation(
+              options.config,
+              options.primaryPath,
+              options.prompt,
+              options.envOverrides
+            )
+          : options.engine === "gemini-pro" || options.engine === "gemini-flash"
+            ? buildGeminiInvocation(
+                options.config,
+                options.primaryPath,
+                options.prompt,
+                options.engine,
+                options.envOverrides
+              )
+            : options.mode === "resume" && options.resumeSessionId
+              ? buildCodexResumeInvocation(
+                  options.config,
+                  options.primaryPath,
+                  options.resumeSessionId,
+                  options.prompt,
+                  { envOverrides: options.envOverrides }
+                )
+              : buildCodexInvocation(options.config, options.primaryPath, options.prompt, {
+                  envOverrides: options.envOverrides,
+                  addDir: options.workRoot
+                });
 
   const appendLog = (value: string): void => {
     fs.appendFileSync(options.logPath, value);
@@ -811,7 +846,7 @@ async function runCodexAttempt(options: {
       resolve({
         exitCode: code ?? 1,
         outputTail,
-        sessionId: options.engine === "codex" ? sessionId ?? detectSessionId(outputTail) : null
+        sessionId: options.engine === "codex" ? (sessionId ?? detectSessionId(outputTail)) : null
       });
     });
   });
@@ -821,7 +856,11 @@ export async function runIssue(
   client: GitHubClient,
   config: AgentRunnerConfig,
   issue: IssueInfo,
-  options: { resumeSessionId?: string | null; resumePrompt?: string | null; engine?: IdleEngine } = {}
+  options: {
+    resumeSessionId?: string | null;
+    resumePrompt?: string | null;
+    engine?: IdleEngine;
+  } = {}
 ): Promise<RunResult> {
   const engine: IdleEngine = options.engine ?? "codex";
   const repos = resolveTargetRepos(issue, config.owner);
@@ -834,7 +873,9 @@ export async function runIssue(
   const workRoot = resolveRunWorkRoot(config.workdirRoot, runId);
   const prepared: Array<{ repo: RepoInfo; cachePath: string; worktreePath: string }> = [];
 
-  const prHead = isPullRequestUrl(issue.url) ? await client.getPullRequestHead(issue.repo, issue.number) : null;
+  const prHead = isPullRequestUrl(issue.url)
+    ? await client.getPullRequestHead(issue.repo, issue.number)
+    : null;
 
   const primaryRepo = repos[0];
   let primaryPath: string | null = null;
@@ -846,7 +887,8 @@ export async function runIssue(
 
       const worktreePath = path.join(workRoot, resolveWorktreeDirName(repo));
       const isPrimary =
-        repo.owner.toLowerCase() === primaryRepo.owner.toLowerCase() && repo.repo.toLowerCase() === primaryRepo.repo.toLowerCase();
+        repo.owner.toLowerCase() === primaryRepo.owner.toLowerCase() &&
+        repo.repo.toLowerCase() === primaryRepo.repo.toLowerCase();
 
       if (isPrimary && prHead) {
         const expected = `${repo.owner}/${repo.repo}`.toLowerCase();
@@ -857,7 +899,13 @@ export async function runIssue(
               "PRs from forks are not supported for /agent run because the runner cannot push to the head branch."
           );
         }
-        await createWorktreeForRemoteBranch({ workdirRoot: config.workdirRoot, repo, cachePath, worktreePath, branch: prHead.headRef });
+        await createWorktreeForRemoteBranch({
+          workdirRoot: config.workdirRoot,
+          repo,
+          cachePath,
+          worktreePath,
+          branch: prHead.headRef
+        });
       } else {
         const defaultBranch = await client.getRepoDefaultBranch(repo);
         const branchSuffix = `${Date.now()}`;
@@ -891,10 +939,7 @@ export async function runIssue(
 
     const logDir = path.resolve(config.workdirRoot, "agent-runner", "logs");
     fs.mkdirSync(logDir, { recursive: true });
-    const logPath = path.join(
-      logDir,
-      `${issue.repo.repo}-issue-${issue.number}-${Date.now()}.log`
-    );
+    const logPath = path.join(logDir, `${issue.repo.repo}-issue-${issue.number}-${Date.now()}.log`);
     if (resolveLogMaintenance(config).writeLatestPointers) {
       writeLatestPointer(logDir, "issue", logPath);
     }
@@ -912,7 +957,8 @@ export async function runIssue(
     };
 
     let mode: IssueRunMode = engine === "codex" && options.resumeSessionId ? "resume" : "new";
-    let latestSessionId: string | null = engine === "codex" ? options.resumeSessionId ?? null : null;
+    let latestSessionId: string | null =
+      engine === "codex" ? (options.resumeSessionId ?? null) : null;
     let currentPrompt = mode === "resume" ? resumePrompt : prompt;
     let attempt = 0;
 
@@ -1014,7 +1060,12 @@ export async function runIssue(
           };
         }
 
-        if (engine === "codex" && mode === "resume" && isLikelyMissingSessionError(result.outputTail) && attempt < MAX_RESUME_ATTEMPTS) {
+        if (
+          engine === "codex" &&
+          mode === "resume" &&
+          isLikelyMissingSessionError(result.outputTail) &&
+          attempt < MAX_RESUME_ATTEMPTS
+        ) {
           mode = "new";
           latestSessionId = null;
           currentPrompt = prompt;
@@ -1108,13 +1159,7 @@ export async function planIdleTasks(
   const now = options.now ?? new Date();
   const historyPath = resolveIdleHistoryPath(config.workdirRoot);
   const history = loadIdleHistory(historyPath);
-  const targets = selectIdleRepos(
-    repos,
-    history,
-    maxRuns,
-    config.idle.cooldownMinutes,
-    now
-  );
+  const targets = selectIdleRepos(repos, history, maxRuns, config.idle.cooldownMinutes, now);
 
   if (targets.length === 0) {
     return [];
@@ -1150,9 +1195,7 @@ export async function runIdleTask(
 
   try {
     const token =
-      process.env.AGENT_GITHUB_TOKEN ||
-      process.env.GITHUB_TOKEN ||
-      process.env.GH_TOKEN;
+      process.env.AGENT_GITHUB_TOKEN || process.env.GITHUB_TOKEN || process.env.GH_TOKEN;
 
     if (!token) {
       throw new Error("Missing GitHub token. Set AGENT_GITHUB_TOKEN or GITHUB_TOKEN.");
@@ -1170,12 +1213,16 @@ export async function runIdleTask(
     });
     created = true;
 
-    const { openPrContextAvailable, openPrCount, openPrContext } = await loadIdleOpenPrData(client, repo, {
-      maxOpenPullRequests: MAX_IDLE_OPEN_PULL_REQUESTS,
-      maxContextEntries: MAX_IDLE_OPEN_PR_CONTEXT_ENTRIES,
-      maxContextChars: MAX_IDLE_OPEN_PR_CONTEXT_CHARS,
-      warn: (message) => process.stderr.write(`${message}\n`)
-    });
+    const { openPrContextAvailable, openPrCount, openPrContext } = await loadIdleOpenPrData(
+      client,
+      repo,
+      {
+        maxOpenPullRequests: MAX_IDLE_OPEN_PULL_REQUESTS,
+        maxContextEntries: MAX_IDLE_OPEN_PR_CONTEXT_ENTRIES,
+        maxContextChars: MAX_IDLE_OPEN_PR_CONTEXT_CHARS,
+        warn: (message) => process.stderr.write(`${message}\n`)
+      }
+    );
 
     let prompt = renderIdlePrompt(config.idle?.promptTemplate ?? "", repo, task, {
       openPrCount,
@@ -1184,135 +1231,140 @@ export async function runIdleTask(
     });
     prompt = ensureCodexManagerPrefix(prompt, engine);
 
-  const logDir = path.resolve(config.workdirRoot, "agent-runner", "logs");
-  fs.mkdirSync(logDir, { recursive: true });
-  const logPath = path.join(logDir, `${repo.repo}-idle-${Date.now()}.log`);
-  if (resolveLogMaintenance(config).writeLatestPointers) {
-    writeLatestPointer(logDir, "idle", logPath);
-  }
+    const logDir = path.resolve(config.workdirRoot, "agent-runner", "logs");
+    fs.mkdirSync(logDir, { recursive: true });
+    const logPath = path.join(logDir, `${repo.repo}-idle-${Date.now()}.log`);
+    if (resolveLogMaintenance(config).writeLatestPointers) {
+      writeLatestPointer(logDir, "idle", logPath);
+    }
 
-  const appendLog = (value: string): void => {
-    fs.appendFileSync(logPath, value);
-  };
+    const appendLog = (value: string): void => {
+      fs.appendFileSync(logPath, value);
+    };
 
-  const notifyEnv = await buildGitHubNotifyChildEnv(config.workdirRoot);
+    const notifyEnv = await buildGitHubNotifyChildEnv(config.workdirRoot);
 
-  const envOverrides: NodeJS.ProcessEnv = {
-    AGENT_RUNNER_ENGINE: engine,
-    AGENT_RUNNER_REPO: `${repo.owner}/${repo.repo}`,
-    AGENT_RUNNER_REPO_PATH: repoPath,
-    AGENT_RUNNER_TASK: task,
-    AGENT_RUNNER_OPEN_PR_COUNT: formatIdleOpenPrCount(openPrCount),
-    AGENT_RUNNER_PROMPT: prompt,
-    AGENT_RUNNER_WORKROOT: workRoot,
-    ...notifyEnv
-  };
-  const invocation =
-    engine === "copilot"
-      ? buildCopilotInvocation(config, repoPath, prompt, envOverrides)
-      : engine === "amazon-q"
-      ? buildAmazonQInvocation(config, repoPath, prompt, envOverrides)
-      : engine === "claude"
-      ? buildClaudeInvocation(config, repoPath, prompt, envOverrides)
-      : engine === "gemini-pro" || engine === "gemini-flash"
-      ? buildGeminiInvocation(config, repoPath, prompt, engine, envOverrides)
-      : buildCodexInvocation(config, repoPath, prompt, { envOverrides, addDir: workRoot });
-  const activityPath = resolveActivityStatePath(config.workdirRoot);
-  const startedAt = new Date().toISOString();
-  const activityId = `idle:${engine}:${repo.owner}/${repo.repo}:${Date.now()}`;
-  let activityRecorded = false;
-  let exitCode: number;
-  try {
-    exitCode = await new Promise<number>((resolve, reject) => {
-      const child = spawn(invocation.command, invocation.args, invocation.options);
-      if (invocation.stdin && child.stdin) {
+    const envOverrides: NodeJS.ProcessEnv = {
+      AGENT_RUNNER_ENGINE: engine,
+      AGENT_RUNNER_REPO: `${repo.owner}/${repo.repo}`,
+      AGENT_RUNNER_REPO_PATH: repoPath,
+      AGENT_RUNNER_TASK: task,
+      AGENT_RUNNER_OPEN_PR_COUNT: formatIdleOpenPrCount(openPrCount),
+      AGENT_RUNNER_PROMPT: prompt,
+      AGENT_RUNNER_WORKROOT: workRoot,
+      ...notifyEnv
+    };
+    const invocation =
+      engine === "copilot"
+        ? buildCopilotInvocation(config, repoPath, prompt, envOverrides)
+        : engine === "amazon-q"
+          ? buildAmazonQInvocation(config, repoPath, prompt, envOverrides)
+          : engine === "claude"
+            ? buildClaudeInvocation(config, repoPath, prompt, envOverrides)
+            : engine === "gemini-pro" || engine === "gemini-flash"
+              ? buildGeminiInvocation(config, repoPath, prompt, engine, envOverrides)
+              : buildCodexInvocation(config, repoPath, prompt, { envOverrides, addDir: workRoot });
+    const activityPath = resolveActivityStatePath(config.workdirRoot);
+    const startedAt = new Date().toISOString();
+    const activityId = `idle:${engine}:${repo.owner}/${repo.repo}:${Date.now()}`;
+    let activityRecorded = false;
+    let exitCode: number;
+    try {
+      exitCode = await new Promise<number>((resolve, reject) => {
+        const child = spawn(invocation.command, invocation.args, invocation.options);
+        if (invocation.stdin && child.stdin) {
+          try {
+            child.stdin.write(invocation.stdin);
+            child.stdin.end();
+          } catch {
+            // best-effort: proceed without stdin if writing fails
+          }
+        }
+        if (typeof child.pid === "number") {
+          recordActivity(activityPath, {
+            id: activityId,
+            kind: "idle",
+            engine,
+            repo,
+            startedAt,
+            pid: child.pid,
+            logPath,
+            task
+          });
+          activityRecorded = true;
+        }
+        child.stdout.on("data", (chunk) => {
+          const normalized = normalizeLogChunk(chunk);
+          appendLog(normalized);
+          process.stdout.write(normalized);
+        });
+        child.stderr.on("data", (chunk) => {
+          const normalized = normalizeLogChunk(chunk);
+          appendLog(normalized);
+          process.stderr.write(normalized);
+        });
+        child.on("error", (error) => reject(error));
+        child.on("close", (code) => resolve(code ?? 1));
+      });
+    } catch (error) {
+      if (activityRecorded) {
+        removeActivity(activityPath, activityId);
+      }
+      throw error;
+    }
+
+    const summary = extractFinalResponseFromLog(logPath);
+    const outputTail = keepTail(readLogTail(logPath));
+    const failure = exitCode === 0 ? null : classifyNonZeroExit(outputTail);
+    const failureKind = failure?.failureKind ?? null;
+    const failureDetail = failure?.failureDetail ?? null;
+    let quotaResumeAt: string | null = null;
+    if (failureKind === "quota" && engine === "codex") {
+      try {
+        quotaResumeAt = await resolveQuotaResumeAt(config);
+      } catch {
+        quotaResumeAt = null;
+      }
+    }
+    if (engine === "amazon-q") {
+      const shouldRecordUsage = exitCode === 0 || summary !== null;
+      if (shouldRecordUsage) {
         try {
-          child.stdin.write(invocation.stdin);
-          child.stdin.end();
-        } catch {
-          // best-effort: proceed without stdin if writing fails
+          recordAmazonQUsage(resolveAmazonQUsageStatePath(config.workdirRoot), 1, new Date());
+        } catch (error) {
+          const message = error instanceof Error ? error.message : String(error);
+          process.stderr.write(`[WARN] Failed to record Amazon Q usage: ${message}\n`);
         }
       }
-      if (typeof child.pid === "number") {
-        recordActivity(activityPath, {
-          id: activityId,
-          kind: "idle",
-          engine,
-          repo,
-          startedAt,
-          pid: child.pid,
-          logPath,
-          task
-        });
-        activityRecorded = true;
-      }
-      child.stdout.on("data", (chunk) => {
-        const normalized = normalizeLogChunk(chunk);
-        appendLog(normalized);
-        process.stdout.write(normalized);
-      });
-      child.stderr.on("data", (chunk) => {
-        const normalized = normalizeLogChunk(chunk);
-        appendLog(normalized);
-        process.stderr.write(normalized);
-      });
-      child.on("error", (error) => reject(error));
-      child.on("close", (code) => resolve(code ?? 1));
-    });
-  } catch (error) {
+    }
+
+    const reportPath = resolveIdleReportPath(config.workdirRoot, repo);
+    writeIdleReport(reportPath, repo, task, engine, exitCode === 0, summary, logPath);
     if (activityRecorded) {
       removeActivity(activityPath, activityId);
     }
-    throw error;
-  }
 
-  const summary = extractFinalResponseFromLog(logPath);
-  const outputTail = keepTail(readLogTail(logPath));
-  const failure = exitCode === 0 ? null : classifyNonZeroExit(outputTail);
-  const failureKind = failure?.failureKind ?? null;
-  const failureDetail = failure?.failureDetail ?? null;
-  let quotaResumeAt: string | null = null;
-  if (failureKind === "quota" && engine === "codex") {
-    try {
-      quotaResumeAt = await resolveQuotaResumeAt(config);
-    } catch {
-      quotaResumeAt = null;
-    }
-  }
-  if (engine === "amazon-q") {
-    const shouldRecordUsage = exitCode === 0 || summary !== null;
-    if (shouldRecordUsage) {
-      try {
-        recordAmazonQUsage(resolveAmazonQUsageStatePath(config.workdirRoot), 1, new Date());
-      } catch (error) {
-        const message = error instanceof Error ? error.message : String(error);
-        process.stderr.write(`[WARN] Failed to record Amazon Q usage: ${message}\n`);
-      }
-    }
-  }
-
-  const reportPath = resolveIdleReportPath(config.workdirRoot, repo);
-  writeIdleReport(reportPath, repo, task, engine, exitCode === 0, summary, logPath);
-  if (activityRecorded) {
-    removeActivity(activityPath, activityId);
-  }
-
-  return {
-    success: exitCode === 0,
-    logPath,
-    repo,
-    task,
-    engine,
-    summary,
-    reportPath,
-    headBranch: newBranch,
-    failureKind,
-    failureDetail,
-    quotaResumeAt
-  };
+    return {
+      success: exitCode === 0,
+      logPath,
+      repo,
+      task,
+      engine,
+      summary,
+      reportPath,
+      headBranch: newBranch,
+      failureKind,
+      failureDetail,
+      quotaResumeAt
+    };
   } finally {
     if (created) {
-      await removeWorktree({ workdirRoot: config.workdirRoot, repo, cachePath, worktreePath: repoPath });
+      await removeWorktree({
+        workdirRoot: config.workdirRoot,
+        repo,
+        cachePath,
+        worktreePath: repoPath
+      });
     }
     try {
       await fs.promises.rm(workRoot, { recursive: true, force: true });
@@ -1357,7 +1409,10 @@ export function parseAgentRunResult(finalResponse: string | null): {
   const lines = trimmed.split(/\r?\n/);
   const statusCandidates = lines
     .map((line, index) => ({ line: line.trim(), index }))
-    .filter((entry) => entry.line.length > 0 && entry.line.toUpperCase().startsWith(AGENT_RUNNER_STATUS_PREFIX));
+    .filter(
+      (entry) =>
+        entry.line.length > 0 && entry.line.toUpperCase().startsWith(AGENT_RUNNER_STATUS_PREFIX)
+    );
 
   if (statusCandidates.length === 0) {
     return { status: null, response: trimmed };

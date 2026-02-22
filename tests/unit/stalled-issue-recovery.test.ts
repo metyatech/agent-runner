@@ -57,7 +57,11 @@ describe("recoverStalledIssue", () => {
     expect(removeActivity).not.toHaveBeenCalled();
     expect(clearRetry).not.toHaveBeenCalled();
     expect(postRecoveryComment).not.toHaveBeenCalled();
-    expect(log).toHaveBeenCalledWith("info", expect.stringContaining("Dry-run"), expect.any(Object));
+    expect(log).toHaveBeenCalledWith(
+      "info",
+      expect.stringContaining("Dry-run"),
+      expect.any(Object)
+    );
   });
 
   it("cleans local state, re-queues, and posts a recovery context comment", async () => {
@@ -105,6 +109,10 @@ describe("recoverStalledIssue", () => {
     expect(typeof recoveryMessage).toBe("string");
     expect(recoveryMessage).toContain("Situation:");
     expect(recoveryMessage).toContain("Action taken:");
-    expect(log).toHaveBeenCalledWith("info", "Recovered stalled running issue and re-queued.", expect.any(Object));
+    expect(log).toHaveBeenCalledWith(
+      "info",
+      "Recovered stalled running issue and re-queued.",
+      expect.any(Object)
+    );
   });
 });

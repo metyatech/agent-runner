@@ -1,7 +1,13 @@
 import fs from "node:fs";
 import type { RepoInfo } from "./github.js";
 import { isProcessAlive } from "./runner-state.js";
-import { getStateMeta, resolveStateDbPath, setStateMeta, upsertRepo, withStateDb } from "./state-db.js";
+import {
+  getStateMeta,
+  resolveStateDbPath,
+  setStateMeta,
+  upsertRepo,
+  withStateDb
+} from "./state-db.js";
 
 export type ActivityKind = "issue" | "idle";
 
@@ -33,7 +39,8 @@ export function loadActivityState(statePath: string): ActivityState {
   }
   return withStateDb(statePath, (db) => {
     const rows = db
-      .prepare(`
+      .prepare(
+        `
         SELECT
           a.id,
           a.kind,
@@ -48,7 +55,8 @@ export function loadActivityState(statePath: string): ActivityState {
           a.task
         FROM activities a
         JOIN repos r ON r.id = a.repo_id
-      `)
+      `
+      )
       .all() as Array<{
       id: string;
       kind: ActivityKind;
@@ -93,7 +101,10 @@ export function saveActivityState(statePath: string, state: ActivityState): void
     for (const record of state.running) {
       const repoId = upsertRepo(db, record.repo);
       if (record.issueId !== undefined) {
-        db.prepare("DELETE FROM activities WHERE issue_id = ? AND id <> ?").run(record.issueId, record.id);
+        db.prepare("DELETE FROM activities WHERE issue_id = ? AND id <> ?").run(
+          record.issueId,
+          record.id
+        );
       }
       insert.run(
         record.id,
@@ -117,9 +128,13 @@ export function recordActivity(statePath: string, record: ActivityRecord): void 
   withStateDb(statePath, (db) => {
     const repoId = upsertRepo(db, record.repo);
     if (record.issueId !== undefined) {
-      db.prepare("DELETE FROM activities WHERE issue_id = ? AND id <> ?").run(record.issueId, record.id);
+      db.prepare("DELETE FROM activities WHERE issue_id = ? AND id <> ?").run(
+        record.issueId,
+        record.id
+      );
     }
-    db.prepare(`
+    db.prepare(
+      `
       INSERT INTO activities (
         id, kind, engine, repo_id, started_at, pid, log_path, issue_id, issue_number, task
       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
@@ -133,7 +148,8 @@ export function recordActivity(statePath: string, record: ActivityRecord): void 
         issue_id = excluded.issue_id,
         issue_number = excluded.issue_number,
         task = excluded.task
-    `).run(
+    `
+    ).run(
       record.id,
       record.kind,
       record.engine ?? null,
@@ -165,9 +181,11 @@ export function pruneDeadActivityRecords(
     return 0;
   }
   return withStateDb(statePath, (db) => {
-    const rows = db
-      .prepare("SELECT id, kind, pid FROM activities")
-      .all() as Array<{ id: string; kind: ActivityKind; pid: number }>;
+    const rows = db.prepare("SELECT id, kind, pid FROM activities").all() as Array<{
+      id: string;
+      kind: ActivityKind;
+      pid: number;
+    }>;
     const removable = rows.filter((row) => kinds.includes(row.kind) && !aliveCheck(row.pid));
     if (removable.length === 0) {
       return 0;

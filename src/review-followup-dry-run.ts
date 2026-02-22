@@ -24,4 +24,3 @@ export function planDryRunReviewFollowupQueue(options: {
 
   return [...mergeOnly, ...options.engineBacklog.slice(0, remaining)];
 }
-

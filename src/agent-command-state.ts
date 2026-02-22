@@ -38,7 +38,9 @@ function readState(statePath: string): AgentCommandState {
   const raw = fs.readFileSync(statePath, "utf8");
   const parsed = JSON.parse(raw) as Partial<AgentCommandState>;
   const ids = Array.isArray(parsed.processedCommentIds)
-    ? parsed.processedCommentIds.filter((value): value is number => typeof value === "number" && value > 0)
+    ? parsed.processedCommentIds.filter(
+        (value): value is number => typeof value === "number" && value > 0
+      )
     : [];
   return {
     processedCommentIds: ids,
@@ -107,7 +109,10 @@ async function withLock<T>(statePath: string, action: () => T | Promise<T>): Pro
   }
 }
 
-export async function hasProcessedAgentCommandComment(statePath: string, commentId: number): Promise<boolean> {
+export async function hasProcessedAgentCommandComment(
+  statePath: string,
+  commentId: number
+): Promise<boolean> {
   if (!commentId || commentId <= 0) {
     return false;
   }
@@ -117,7 +122,10 @@ export async function hasProcessedAgentCommandComment(statePath: string, comment
   });
 }
 
-export async function markAgentCommandCommentProcessed(statePath: string, commentId: number): Promise<void> {
+export async function markAgentCommandCommentProcessed(
+  statePath: string,
+  commentId: number
+): Promise<void> {
   if (!commentId || commentId <= 0) {
     return;
   }
@@ -131,4 +139,3 @@ export async function markAgentCommandCommentProcessed(statePath: string, commen
     writeState(statePath, trimmed);
   });
 }
-

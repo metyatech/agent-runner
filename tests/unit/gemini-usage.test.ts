@@ -1,5 +1,9 @@
 import { describe, it, expect } from "vitest";
-import { evaluateGeminiUsageGate, type GeminiUsage, type GeminiUsageGateConfig } from "../../src/gemini-usage.js";
+import {
+  evaluateGeminiUsageGate,
+  type GeminiUsage,
+  type GeminiUsageGateConfig
+} from "../../src/gemini-usage.js";
 
 describe("evaluateGeminiUsageGate", () => {
   const gate: GeminiUsageGateConfig = {

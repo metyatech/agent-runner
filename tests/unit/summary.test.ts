@@ -25,7 +25,9 @@ describe("extractFinalResponseFromLog", () => {
     fs.writeFileSync(logPath, content, "utf8");
 
     const summary = extractFinalResponseFromLog(logPath);
-    expect(summary).toBe("AGENT_RUNNER_STATUS: done\n- Change A\nTests: npm run test\nCommits: abc1234");
+    expect(summary).toBe(
+      "AGENT_RUNNER_STATUS: done\n- Change A\nTests: npm run test\nCommits: abc1234"
+    );
 
     fs.rmSync(tempDir, { recursive: true, force: true });
   });
@@ -50,7 +52,9 @@ describe("parseAgentRunResult", () => {
   });
 
   it("parses needs_user_reply status and strips status line from response", () => {
-    const parsed = parseAgentRunResult("AGENT_RUNNER_STATUS: needs_user_reply\nPlease answer question A.");
+    const parsed = parseAgentRunResult(
+      "AGENT_RUNNER_STATUS: needs_user_reply\nPlease answer question A."
+    );
     expect(parsed.status).toBe("needs_user_reply");
     expect(parsed.response).toBe("Please answer question A.");
   });

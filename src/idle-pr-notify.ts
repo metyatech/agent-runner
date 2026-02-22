@@ -30,7 +30,8 @@ export async function notifyIdlePullRequest(options: {
 }): Promise<IdlePullRequestNotification | null> {
   const expectedRepo = options.result.repo;
   const isSameRepo = (left: RepoInfo, right: RepoInfo): boolean =>
-    left.owner.toLowerCase() === right.owner.toLowerCase() && left.repo.toLowerCase() === right.repo.toLowerCase();
+    left.owner.toLowerCase() === right.owner.toLowerCase() &&
+    left.repo.toLowerCase() === right.repo.toLowerCase();
 
   const truncate = (value: string, limit: number): string => {
     const suffix = "\n…(truncated)…";
@@ -77,19 +78,28 @@ export async function notifyIdlePullRequest(options: {
     if (isSameRepo(match.repo, expectedRepo)) {
       return match;
     }
-    options.log("warn", "Idle PR URL repo mismatch; ignoring.", options.json, {
-      expectedRepo: `${expectedRepo.owner}/${expectedRepo.repo}`,
-      parsedRepo: `${match.repo.owner}/${match.repo.repo}`,
-      source,
-      url: match.url
-    }, "idle");
+    options.log(
+      "warn",
+      "Idle PR URL repo mismatch; ignoring.",
+      options.json,
+      {
+        expectedRepo: `${expectedRepo.owner}/${expectedRepo.repo}`,
+        parsedRepo: `${match.repo.owner}/${match.repo.repo}`,
+        source,
+        url: match.url
+      },
+      "idle"
+    );
     return null;
   };
 
   const prFromSummary = validateRepo(parseLastPullRequestUrl(summaryText), "summary");
   const prFromLog = prFromSummary
     ? null
-    : validateRepo(parseLastPullRequestUrl(readLogTail(options.result.logPath, 512 * 1024) ?? ""), "log");
+    : validateRepo(
+        parseLastPullRequestUrl(readLogTail(options.result.logPath, 512 * 1024) ?? ""),
+        "log"
+      );
 
   let pr: IdlePullRequestNotification | null = null;
   if (prFromSummary) {
@@ -98,7 +108,10 @@ export async function notifyIdlePullRequest(options: {
     pr = { ...prFromLog, source: "log" };
   } else if (options.result.headBranch) {
     try {
-      const found = await options.client.findOpenPullRequestByHead(options.result.repo, options.result.headBranch);
+      const found = await options.client.findOpenPullRequestByHead(
+        options.result.repo,
+        options.result.headBranch
+      );
       if (found) {
         pr = {
           repo: options.result.repo,
@@ -108,11 +121,17 @@ export async function notifyIdlePullRequest(options: {
         };
       }
     } catch (error) {
-      options.log("warn", "Failed to locate idle PR by head branch; skipping.", options.json, {
-        repo: `${options.result.repo.owner}/${options.result.repo.repo}`,
-        headBranch: options.result.headBranch,
-        error: error instanceof Error ? error.message : String(error)
-      }, "idle");
+      options.log(
+        "warn",
+        "Failed to locate idle PR by head branch; skipping.",
+        options.json,
+        {
+          repo: `${options.result.repo.owner}/${options.result.repo.repo}`,
+          headBranch: options.result.headBranch,
+          error: error instanceof Error ? error.message : String(error)
+        },
+        "idle"
+      );
     }
   }
 
@@ -126,10 +145,16 @@ export async function notifyIdlePullRequest(options: {
       await ensureManagedPullRequestRecorded(prIssue, options.config);
     }
   } catch (error) {
-    options.log("warn", "Failed to record managed PR from idle PR notification.", options.json, {
-      pr: pr.url,
-      error: error instanceof Error ? error.message : String(error)
-    }, "idle");
+    options.log(
+      "warn",
+      "Failed to record managed PR from idle PR notification.",
+      options.json,
+      {
+        pr: pr.url,
+        error: error instanceof Error ? error.message : String(error)
+      },
+      "idle"
+    );
   }
 
   const authLogin = await options.client.getAuthenticatedLogin();
@@ -137,11 +162,17 @@ export async function notifyIdlePullRequest(options: {
     try {
       await options.client.addAssignees(pr.repo, pr.number, [authLogin]);
     } catch (error) {
-      options.log("warn", "Failed to assign idle PR to authenticated user.", options.json, {
-        pr: pr.url,
-        assignee: authLogin,
-        error: error instanceof Error ? error.message : String(error)
-      }, "idle");
+      options.log(
+        "warn",
+        "Failed to assign idle PR to authenticated user.",
+        options.json,
+        {
+          pr: pr.url,
+          assignee: authLogin,
+          error: error instanceof Error ? error.message : String(error)
+        },
+        "idle"
+      );
     }
   }
 
@@ -163,20 +194,32 @@ export async function notifyIdlePullRequest(options: {
       await postComment(options.notifyClient);
       return pr;
     } catch (error) {
-      options.log("warn", "Failed to post idle completion comment with notify client; falling back.", options.json, {
-        pr: pr.url,
-        error: error instanceof Error ? error.message : String(error)
-      }, "idle");
+      options.log(
+        "warn",
+        "Failed to post idle completion comment with notify client; falling back.",
+        options.json,
+        {
+          pr: pr.url,
+          error: error instanceof Error ? error.message : String(error)
+        },
+        "idle"
+      );
     }
   }
 
   try {
     await postComment(options.client);
   } catch (error) {
-    options.log("warn", "Failed to post idle completion comment to PR.", options.json, {
-      pr: pr.url,
-      error: error instanceof Error ? error.message : String(error)
-    }, "idle");
+    options.log(
+      "warn",
+      "Failed to post idle completion comment to PR.",
+      options.json,
+      {
+        pr: pr.url,
+        error: error instanceof Error ? error.message : String(error)
+      },
+      "idle"
+    );
   }
 
   return pr;

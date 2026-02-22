@@ -102,7 +102,10 @@ function listLogFiles(dir: string): LogFileInfo[] {
   return files;
 }
 
-function deleteFiles(files: LogFileInfo[], dryRun: boolean): Omit<PruneLogsResult, "dir" | "scanned" | "dryRun"> {
+function deleteFiles(
+  files: LogFileInfo[],
+  dryRun: boolean
+): Omit<PruneLogsResult, "dir" | "scanned" | "dryRun"> {
   let deleted = 0;
   let deletedBytes = 0;
   let skipped = 0;
@@ -220,12 +223,22 @@ export function pruneLogs(options: {
     selected.add(filePath);
   }
 
-  for (const filePath of selectByMaxAge(sorted, options.decision.maxAgeDays, options.decision.keepLatest, nowMs)) {
+  for (const filePath of selectByMaxAge(
+    sorted,
+    options.decision.maxAgeDays,
+    options.decision.keepLatest,
+    nowMs
+  )) {
     selected.add(filePath);
   }
 
   if (options.decision.maxTotalBytes !== null) {
-    selectByTotalSize(sorted, options.decision.keepLatest, options.decision.maxTotalBytes, selected);
+    selectByTotalSize(
+      sorted,
+      options.decision.keepLatest,
+      options.decision.maxTotalBytes,
+      selected
+    );
   }
 
   const toDelete = sorted.filter((file) => selected.has(file.fullPath));
@@ -252,4 +265,3 @@ export function writeLatestPointer(logDir: string, name: string, logPath: string
     // best-effort
   }
 }
-

@@ -3,10 +3,7 @@
  * Gate/ramp evaluation stays here.
  */
 export type { CopilotUsage } from "@metyatech/ai-quota";
-export {
-  parseCopilotUserInfo,
-  parseCopilotQuotaHeader
-} from "@metyatech/ai-quota";
+export { parseCopilotUserInfo, parseCopilotQuotaHeader } from "@metyatech/ai-quota";
 import { fetchCopilotRateLimits } from "@metyatech/ai-quota";
 
 import { evaluateUsageRamp } from "./usage-gate-common.js";

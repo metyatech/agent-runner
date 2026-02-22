@@ -2,7 +2,8 @@ import type { IssueComment } from "./github.js";
 import { buildAgentComment, findLastMarkerComment, hasUserReplySince } from "./notifications.js";
 
 export const REVIEW_FOLLOWUP_WAITING_MARKER = "<!-- agent-runner:review-followup:waiting -->";
-export const REVIEW_FOLLOWUP_ACTION_REQUIRED_MARKER = "<!-- agent-runner:review-followup:action-required -->";
+export const REVIEW_FOLLOWUP_ACTION_REQUIRED_MARKER =
+  "<!-- agent-runner:review-followup:action-required -->";
 
 function normalizeReason(reason: string): string {
   return reason.trim().toLowerCase();

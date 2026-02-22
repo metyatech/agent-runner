@@ -94,14 +94,14 @@ describe("buildCodexInvocation", () => {
       const invocation = buildCodexInvocation(
         {
           workdirRoot: "D:\\ghws",
-        labels: {
-          queued: "agent:queued",
-          reviewFollowup: "agent:review-followup",
-          running: "agent:running",
-          done: "agent:done",
-          failed: "agent:failed",
-          needsUserReply: "agent:needs-user"
-        },
+          labels: {
+            queued: "agent:queued",
+            reviewFollowup: "agent:review-followup",
+            running: "agent:running",
+            done: "agent:done",
+            failed: "agent:failed",
+            needsUserReply: "agent:needs-user"
+          },
           owner: "metyatech",
           repos: "all",
           pollIntervalSeconds: 60,
@@ -428,7 +428,9 @@ describe("buildGeminiInvocation", () => {
       if (!defaultsPath) {
         throw new Error("Expected GEMINI_CLI_SYSTEM_DEFAULTS_PATH to be set.");
       }
-      expect(defaultsPath).toBe(path.join(tempDir, "agent-runner", "state", "gemini-system-defaults.json"));
+      expect(defaultsPath).toBe(
+        path.join(tempDir, "agent-runner", "state", "gemini-system-defaults.json")
+      );
       expect(fs.existsSync(defaultsPath)).toBe(true);
 
       const parsed = JSON.parse(fs.readFileSync(defaultsPath, "utf8")) as any;
@@ -559,11 +561,16 @@ describe("renderIdlePrompt", () => {
   });
 
   it("renders unknown open PR count when context lookup fails", () => {
-    const prompt = renderIdlePrompt("Repo {{repo}}\nOpen PRs {{openPrCount}}", repo, "Improve retries", {
-      openPrCount: null,
-      openPrContext: "Open PR context unavailable due to GitHub API error.",
-      openPrContextAvailable: false
-    });
+    const prompt = renderIdlePrompt(
+      "Repo {{repo}}\nOpen PRs {{openPrCount}}",
+      repo,
+      "Improve retries",
+      {
+        openPrCount: null,
+        openPrContext: "Open PR context unavailable due to GitHub API error.",
+        openPrContextAvailable: false
+      }
+    );
 
     expect(prompt).toContain("Open PRs unknown");
     expect(prompt).toContain("count in this repository: unknown");
@@ -661,4 +668,3 @@ describe("loadIdleOpenPrData", () => {
     expect(warnings.join("\n")).toContain("Failed to load open PR context");
   });
 });
-

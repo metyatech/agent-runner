@@ -21,12 +21,18 @@ describe("log", () => {
 
     expect(writes).toHaveLength(1);
     expect(writes[0]).toContain("[idle] runner message");
-    expect(writes[0]).not.toContain("\"idle\"");
+    expect(writes[0]).not.toContain('"idle"');
   });
 
   it("keeps explicit tag when data also includes tag in json mode", () => {
     const { writes } = captureStdout();
-    (log as (...args: unknown[]) => void)("info", "runner message", true, { tag: "from-data", step: "x" }, "idle");
+    (log as (...args: unknown[]) => void)(
+      "info",
+      "runner message",
+      true,
+      { tag: "from-data", step: "x" },
+      "idle"
+    );
 
     expect(writes).toHaveLength(1);
     const payload = JSON.parse(writes[0]) as Record<string, unknown>;

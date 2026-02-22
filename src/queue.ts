@@ -28,9 +28,7 @@ function parseRateLimit(error: unknown): RateLimitInfo {
   const headers = response?.headers ?? {};
   const remaining = headers["x-ratelimit-remaining"]?.toString();
   const reset = headers["x-ratelimit-reset"]?.toString();
-  const isRateLimit =
-    remaining === "0" ||
-    message.toLowerCase().includes("rate limit");
+  const isRateLimit = remaining === "0" || message.toLowerCase().includes("rate limit");
   if (!isRateLimit) {
     return { resetAt: null };
   }
@@ -67,8 +65,7 @@ export async function listTargetRepos(
     };
   }
 
-  const listLocalReposForOwner = (): RepoInfo[] =>
-    listLocalRepos(workdirRoot, config.owner);
+  const listLocalReposForOwner = (): RepoInfo[] => listLocalRepos(workdirRoot, config.owner);
 
   let cache: RepoCache | null = null;
   try {
@@ -128,4 +125,3 @@ export function pickNextIssues(issues: IssueInfo[], limit: number): IssueInfo[] 
     .sort((a, b) => a.number - b.number)
     .slice(0, limit);
 }
-

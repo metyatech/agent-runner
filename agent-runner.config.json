@@ -128,12 +128,7 @@
   },
   "copilot": {
     "command": "copilot",
-    "args": [
-      "--allow-all",
-      "--model",
-      "gemini-3-pro-preview",
-      "-p"
-    ]
+    "args": ["--allow-all", "--model", "gemini-3-pro-preview", "-p"]
   },
   "gemini": {
     "command": "gemini",
@@ -148,10 +143,7 @@
   "claude": {
     "enabled": true,
     "command": "claude",
-    "args": [
-      "--dangerously-skip-permissions",
-      "-p"
-    ],
+    "args": ["--dangerously-skip-permissions", "-p"],
     "promptMode": "arg"
   }
 }

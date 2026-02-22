@@ -23,7 +23,8 @@ export function resolveIssueSessionStatePath(workdirRoot: string): string {
 function loadState(statePath: string): IssueSessionState {
   return withStateDb(statePath, (db) => {
     const rows = db
-      .prepare(`
+      .prepare(
+        `
         SELECT
           s.issue_id AS issueId,
           s.issue_number AS issueNumber,
@@ -33,7 +34,8 @@ function loadState(statePath: string): IssueSessionState {
           s.updated_at AS updatedAt
         FROM issue_sessions s
         JOIN repos r ON r.id = s.repo_id
-      `)
+      `
+      )
       .all() as Array<{
       issueId: number;
       issueNumber: number;
@@ -59,14 +61,11 @@ function sameIssue(a: IssueSessionRecord, issue: Pick<IssueInfo, "id">): boolean
   return a.issueId === issue.id;
 }
 
-export function setIssueSession(
-  statePath: string,
-  issue: IssueInfo,
-  sessionId: string
-): void {
+export function setIssueSession(statePath: string, issue: IssueInfo, sessionId: string): void {
   withStateDb(statePath, (db) => {
     const repoId = upsertRepo(db, issue.repo);
-    db.prepare(`
+    db.prepare(
+      `
       INSERT INTO issue_sessions (issue_id, repo_id, issue_number, session_id, updated_at)
       VALUES (?, ?, ?, ?, ?)
       ON CONFLICT(issue_id) DO UPDATE SET
@@ -74,7 +73,8 @@ export function setIssueSession(
         issue_number = excluded.issue_number,
         session_id = excluded.session_id,
         updated_at = excluded.updated_at
-    `).run(issue.id, repoId, issue.number, sessionId, new Date().toISOString());
+    `
+    ).run(issue.id, repoId, issue.number, sessionId, new Date().toISOString());
   });
 }
 

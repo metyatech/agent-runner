@@ -38,7 +38,9 @@ describe("agent-runner logs dashboard query", () => {
     expect(targets.length).toBe(2);
     expect(targets.every((target) => (target.expr ?? "").includes(" or "))).toBe(false);
 
-    const runnerOutTarget = targets.find((target) => (target.expr ?? "").includes('kind="runner-out"'));
+    const runnerOutTarget = targets.find((target) =>
+      (target.expr ?? "").includes('kind="runner-out"')
+    );
     const nonRunnerOutTarget = targets.find((target) =>
       (target.expr ?? "").includes('kind!="runner-out"')
     );

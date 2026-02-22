@@ -28,10 +28,7 @@ export function findLastMarkerComment(
   return latest;
 }
 
-export function hasUserReplySince(
-  comments: IssueComment[],
-  marker: string
-): boolean {
+export function hasUserReplySince(comments: IssueComment[], marker: string): boolean {
   const anchor = findLastMarkerComment(comments, marker);
   if (!anchor) {
     return false;
@@ -39,7 +36,6 @@ export function hasUserReplySince(
   const anchorTime = Date.parse(anchor.createdAt);
   return comments.some(
     (comment) =>
-      !comment.body.includes(AGENT_RUNNER_MARKER) &&
-      Date.parse(comment.createdAt) > anchorTime
+      !comment.body.includes(AGENT_RUNNER_MARKER) && Date.parse(comment.createdAt) > anchorTime
   );
 }

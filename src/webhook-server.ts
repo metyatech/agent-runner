@@ -14,7 +14,11 @@ export type WebhookServerOptions = {
   secret: string;
   maxPayloadBytes?: number;
   onEvent: (event: WebhookEvent) => Promise<void>;
-  onLog?: (level: "info" | "warn" | "error", message: string, data?: Record<string, unknown>) => void;
+  onLog?: (
+    level: "info" | "warn" | "error",
+    message: string,
+    data?: Record<string, unknown>
+  ) => void;
 };
 
 const DEFAULT_MAX_PAYLOAD_BYTES = 1024 * 1024;
@@ -56,7 +60,13 @@ export function startWebhookServer(options: WebhookServerOptions): Promise<http.
     req.on("end", async () => {
       const body = Buffer.concat(chunks);
       const signature = req.headers["x-hub-signature-256"];
-      if (!verifyGitHubSignature(options.secret, body, Array.isArray(signature) ? signature[0] : signature)) {
+      if (
+        !verifyGitHubSignature(
+          options.secret,
+          body,
+          Array.isArray(signature) ? signature[0] : signature
+        )
+      ) {
         options.onLog?.("warn", "Webhook signature verification failed.");
         respond(res, 401, "Invalid signature.");
         return;
@@ -72,10 +82,10 @@ export function startWebhookServer(options: WebhookServerOptions): Promise<http.
 
       const event = Array.isArray(req.headers["x-github-event"])
         ? req.headers["x-github-event"][0]
-        : req.headers["x-github-event"] ?? "";
+        : (req.headers["x-github-event"] ?? "");
       const delivery = Array.isArray(req.headers["x-github-delivery"])
         ? req.headers["x-github-delivery"][0]
-        : req.headers["x-github-delivery"] ?? null;
+        : (req.headers["x-github-delivery"] ?? null);
 
       if (!event) {
         respond(res, 400, "Missing event header.");

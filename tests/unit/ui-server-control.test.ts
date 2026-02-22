@@ -34,7 +34,7 @@ describe("ui-server-control", () => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), "agent-runner-ui-state-"));
     const statePath = resolveUiServerStatePath(root);
     fs.mkdirSync(path.dirname(statePath), { recursive: true });
-    fs.writeFileSync(statePath, "{\"invalid\":true}", "utf8");
+    fs.writeFileSync(statePath, '{"invalid":true}', "utf8");
     expect(loadUiServerState(statePath)).toBeNull();
   });
 

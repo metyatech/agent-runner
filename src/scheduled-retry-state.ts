@@ -22,7 +22,8 @@ export function resolveScheduledRetryStatePath(workdirRoot: string): string {
 function loadState(statePath: string): ScheduledRetryState {
   return withStateDb(statePath, (db) => {
     const rows = db
-      .prepare(`
+      .prepare(
+        `
         SELECT
           s.issue_id AS issueId,
           s.issue_number AS issueNumber,
@@ -34,7 +35,8 @@ function loadState(statePath: string): ScheduledRetryState {
           s.updated_at AS updatedAt
         FROM scheduled_retries s
         JOIN repos r ON r.id = s.repo_id
-      `)
+      `
+      )
       .all() as Array<{
       issueId: number;
       issueNumber: number;
@@ -68,7 +70,8 @@ export function scheduleRetry(
 ): void {
   withStateDb(statePath, (db) => {
     const repoId = upsertRepo(db, issue.repo);
-    db.prepare(`
+    db.prepare(
+      `
       INSERT INTO scheduled_retries (
         issue_id, repo_id, issue_number, run_after, reason, session_id, updated_at
       ) VALUES (?, ?, ?, ?, 'codex_quota', ?, ?)
@@ -79,7 +82,8 @@ export function scheduleRetry(
         reason = excluded.reason,
         session_id = excluded.session_id,
         updated_at = excluded.updated_at
-    `).run(issue.id, repoId, issue.number, runAfter, sessionId, new Date().toISOString());
+    `
+    ).run(issue.id, repoId, issue.number, runAfter, sessionId, new Date().toISOString());
   });
 }
 
@@ -89,13 +93,11 @@ export function clearRetry(statePath: string, issueId: number): void {
   });
 }
 
-export function takeDueRetries(
-  statePath: string,
-  now: Date
-): ScheduledRetryRecord[] {
+export function takeDueRetries(statePath: string, now: Date): ScheduledRetryRecord[] {
   return withStateDb(statePath, (db) => {
     const rows = db
-      .prepare(`
+      .prepare(
+        `
         SELECT
           s.issue_id AS issueId,
           s.issue_number AS issueNumber,
@@ -107,7 +109,8 @@ export function takeDueRetries(
           s.updated_at AS updatedAt
         FROM scheduled_retries s
         JOIN repos r ON r.id = s.repo_id
-      `)
+      `
+      )
       .all() as Array<{
       issueId: number;
       issueNumber: number;

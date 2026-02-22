@@ -74,7 +74,7 @@ function parseLabels(labels: IssuePayload["labels"]): string[] {
     return [];
   }
   return labels
-    .map((label) => (typeof label === "string" ? label : label?.name ?? ""))
+    .map((label) => (typeof label === "string" ? label : (label?.name ?? "")))
     .filter((label) => Boolean(label));
 }
 
@@ -108,7 +108,10 @@ function parseIssue(payload: WebhookPayload, repo: RepoInfo): IssueInfo | null {
   };
 }
 
-function isBusyOrTerminal(issue: IssueInfo, config: AgentRunnerConfig): "running" | "queued" | "terminal" | null {
+function isBusyOrTerminal(
+  issue: IssueInfo,
+  config: AgentRunnerConfig
+): "running" | "queued" | "terminal" | null {
   const queuedReviewLabels = new Set([
     ...labelsForReviewFollowupState(config, "queued"),
     ...labelsForReviewFollowupState(config, "waiting")
@@ -118,7 +121,10 @@ function isBusyOrTerminal(issue: IssueInfo, config: AgentRunnerConfig): "running
   if (issue.labels.includes(config.labels.running)) {
     return "running";
   }
-  if (issue.labels.includes(config.labels.queued) || issue.labels.some((label) => queuedReviewLabels.has(label))) {
+  if (
+    issue.labels.includes(config.labels.queued) ||
+    issue.labels.some((label) => queuedReviewLabels.has(label))
+  ) {
     return "queued";
   }
   if (issue.labels.some((label) => actionRequiredLabels.has(label))) {
@@ -152,7 +158,11 @@ async function safeRemoveLabel(
   client: GitHubClient,
   issue: IssueInfo,
   label: string,
-  onLog?: (level: "info" | "warn" | "error", message: string, data?: Record<string, unknown>) => void
+  onLog?: (
+    level: "info" | "warn" | "error",
+    message: string,
+    data?: Record<string, unknown>
+  ) => void
 ): Promise<void> {
   try {
     await client.removeLabel(issue, label);
@@ -167,7 +177,11 @@ async function safeRemoveReviewFollowupLabels(
   client: GitHubClient,
   issue: IssueInfo,
   config: AgentRunnerConfig,
-  onLog?: (level: "info" | "warn" | "error", message: string, data?: Record<string, unknown>) => void
+  onLog?: (
+    level: "info" | "warn" | "error",
+    message: string,
+    data?: Record<string, unknown>
+  ) => void
 ): Promise<void> {
   for (const label of listReviewFollowupLabels(config)) {
     await safeRemoveLabel(client, issue, label, onLog);
@@ -179,7 +193,11 @@ async function safeApplyReviewFollowupLabelState(options: {
   issue: IssueInfo;
   config: AgentRunnerConfig;
   state: "queued" | "waiting" | "action-required" | "none";
-  onLog?: (level: "info" | "warn" | "error", message: string, data?: Record<string, unknown>) => void;
+  onLog?: (
+    level: "info" | "warn" | "error",
+    message: string,
+    data?: Record<string, unknown>
+  ) => void;
 }): Promise<void> {
   const allLabels = listReviewFollowupLabels(options.config);
   const desired = new Set(labelsForReviewFollowupState(options.config, options.state));
@@ -208,7 +226,11 @@ async function handleAgentRunCommand(options: {
   queuePath: string;
   issue: IssueInfo;
   comment: CommentPayload;
-  onLog?: (level: "info" | "warn" | "error", message: string, data?: Record<string, unknown>) => void;
+  onLog?: (
+    level: "info" | "warn" | "error",
+    message: string,
+    data?: Record<string, unknown>
+  ) => void;
 }): Promise<void> {
   const { client, config, queuePath, issue, comment, onLog } = options;
   const commentId = comment.id ?? 0;
@@ -235,18 +257,12 @@ async function handleAgentRunCommand(options: {
   const status = isBusyOrTerminal(issue, config);
   if (status === "running") {
     await markAgentCommandCommentProcessed(statePath, commentId);
-    await client.comment(
-      issue,
-      buildAgentComment("Ignored `/agent run`: already running.")
-    );
+    await client.comment(issue, buildAgentComment("Ignored `/agent run`: already running."));
     return;
   }
   if (status === "queued") {
     await markAgentCommandCommentProcessed(statePath, commentId);
-    await client.comment(
-      issue,
-      buildAgentComment("Ignored `/agent run`: already queued.")
-    );
+    await client.comment(issue, buildAgentComment("Ignored `/agent run`: already queued."));
     return;
   }
 
@@ -264,7 +280,9 @@ async function handleAgentRunCommand(options: {
   await ensureQueued(client, config, queuePath, issue);
   await markAgentCommandCommentProcessed(statePath, commentId);
 
-  const requester = comment.user?.login ? `Requested by ${comment.user.login}.` : "Request received.";
+  const requester = comment.user?.login
+    ? `Requested by ${comment.user.login}.`
+    : "Request received.";
   await client.comment(issue, buildAgentComment(`${requester} Queued via \`/agent run\`.`));
 }
 
@@ -275,7 +293,11 @@ async function handleReviewFollowup(options: {
   prNumber: number;
   reason: "review_comment" | "review" | "approval";
   requiresEngine: boolean;
-  onLog?: (level: "info" | "warn" | "error", message: string, data?: Record<string, unknown>) => void;
+  onLog?: (
+    level: "info" | "warn" | "error",
+    message: string,
+    data?: Record<string, unknown>
+  ) => void;
 }): Promise<void> {
   const { client, config, repo, prNumber, reason, requiresEngine, onLog } = options;
 
@@ -330,7 +352,11 @@ export async function handleWebhookEvent(options: {
   client: GitHubClient;
   config: AgentRunnerConfig;
   queuePath: string;
-  onLog?: (level: "info" | "warn" | "error", message: string, data?: Record<string, unknown>) => void;
+  onLog?: (
+    level: "info" | "warn" | "error",
+    message: string,
+    data?: Record<string, unknown>
+  ) => void;
 }): Promise<void> {
   const { event, client, config, queuePath, onLog } = options;
   const payload = event.payload as WebhookPayload;
@@ -397,13 +423,7 @@ export async function handleWebhookEvent(options: {
     await safeRemoveLabel(client, issue, config.labels.running, onLog);
     await safeRemoveLabel(client, issue, config.labels.queued, onLog);
     await safeRemoveReviewFollowupLabels(client, issue, config, onLog);
-    await client.comment(
-      issue,
-      buildAgentComment(
-        `Reply received. Re-queued for execution.`,
-        []
-      )
-    );
+    await client.comment(issue, buildAgentComment(`Reply received. Re-queued for execution.`, []));
     await ensureQueued(client, config, queuePath, issue);
     onLog?.("info", "Webhook re-queued issue after comment.", {
       issue: issue.url
@@ -420,7 +440,9 @@ export async function handleWebhookEvent(options: {
 
     const prNumber = payload.pull_request?.number ?? 0;
     if (!prNumber || prNumber <= 0) {
-      onLog?.("warn", "Ignoring PR review comment due to missing PR number.", { repo: `${repo.owner}/${repo.repo}` });
+      onLog?.("warn", "Ignoring PR review comment due to missing PR number.", {
+        repo: `${repo.owner}/${repo.repo}`
+      });
       return;
     }
 
@@ -428,7 +450,9 @@ export async function handleWebhookEvent(options: {
     if (command?.kind === "run") {
       const commentId = comment.id ?? 0;
       if (!commentId || commentId <= 0) {
-        onLog?.("warn", "Ignoring /agent run review comment due to missing id.", { repo: `${repo.owner}/${repo.repo}` });
+        onLog?.("warn", "Ignoring /agent run review comment due to missing id.", {
+          repo: `${repo.owner}/${repo.repo}`
+        });
         return;
       }
 
@@ -479,7 +503,9 @@ export async function handleWebhookEvent(options: {
 
     const prNumber = payload.pull_request?.number ?? 0;
     if (!prNumber || prNumber <= 0) {
-      onLog?.("warn", "Ignoring PR review due to missing PR number.", { repo: `${repo.owner}/${repo.repo}` });
+      onLog?.("warn", "Ignoring PR review due to missing PR number.", {
+        repo: `${repo.owner}/${repo.repo}`
+      });
       return;
     }
 
@@ -525,4 +551,3 @@ export async function handleWebhookEvent(options: {
     }
   }
 }
-

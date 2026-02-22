@@ -13,7 +13,10 @@ export function isCopilotReviewerLogin(login: string | null): boolean {
   const normalized = login.trim().toLowerCase();
   if (!normalized) return false;
   if (COPILOT_REVIEWER_LOGINS.has(normalized)) return true;
-  return normalized.includes("copilot") && (normalized.endsWith("[bot]") || normalized.includes("pull-request-reviewer"));
+  return (
+    normalized.includes("copilot") &&
+    (normalized.endsWith("[bot]") || normalized.includes("pull-request-reviewer"))
+  );
 }
 
 export function copilotReviewIndicatesNoNewComments(body: string | null): boolean {

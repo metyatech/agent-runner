@@ -155,7 +155,10 @@ export function formatIdleOpenPrContextBlock(openPrContext: string): string {
   return `${OPEN_PR_CONTEXT_START_MARKER}\n${body}\n${OPEN_PR_CONTEXT_END_MARKER}`;
 }
 
-export function buildIdleDuplicateWorkGuard(openPrCount: number | null, openPrContextAvailable: boolean): string {
+export function buildIdleDuplicateWorkGuard(
+  openPrCount: number | null,
+  openPrContextAvailable: boolean
+): string {
   const countLabel = formatIdleOpenPrCount(openPrCount);
   const lines = [
     "Duplicate-work guard (required):",

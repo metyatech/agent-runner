@@ -94,13 +94,25 @@ function isEffectivelyFull(percentRemaining: number): boolean {
   return percentRemaining >= 99.999;
 }
 
-function isBlockedByResetWindow(modelUsage: GeminiModelUsage, gate: GeminiUsageGateConfig, now: Date): boolean {
+function isBlockedByResetWindow(
+  modelUsage: GeminiModelUsage,
+  gate: GeminiUsageGateConfig,
+  now: Date
+): boolean {
   const percentRemaining = getPercentRemaining(modelUsage);
   const decision = evaluateUsageRamp(percentRemaining, modelUsage.resetAt, gate, now);
-  return !decision.allow && typeof decision.minutesToReset === "number" && decision.minutesToReset > gate.startMinutes;
+  return (
+    !decision.allow &&
+    typeof decision.minutesToReset === "number" &&
+    decision.minutesToReset > gate.startMinutes
+  );
 }
 
-function isCooldownActive(lastAttemptAt: string | null, cooldownMinutes: number, now: Date): boolean {
+function isCooldownActive(
+  lastAttemptAt: string | null,
+  cooldownMinutes: number,
+  now: Date
+): boolean {
   if (!lastAttemptAt || cooldownMinutes <= 0) return false;
   const parsed = Date.parse(lastAttemptAt);
   if (!Number.isFinite(parsed)) return false;

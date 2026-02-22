@@ -12,4 +12,3 @@ export function resolveTargetRepos(issue: IssueInfo, owner: string): RepoInfo[] 
   }
   return Array.from(unique.values());
 }
-

@@ -44,7 +44,11 @@ describe("github-notify-app", () => {
         JSON.stringify({ appId: "from-state", installationId: 999 }, null, 2),
         "utf8"
       );
-      fs.writeFileSync(path.join(stateDir, "github-notify-app-private-key.pem"), "STATEKEY\n", "utf8");
+      fs.writeFileSync(
+        path.join(stateDir, "github-notify-app-private-key.pem"),
+        "STATEKEY\n",
+        "utf8"
+      );
 
       process.env.AGENT_GITHUB_NOTIFY_APP_ID = "from-env";
       process.env.AGENT_GITHUB_NOTIFY_APP_INSTALLATION_ID = "321";
@@ -60,13 +64,15 @@ describe("github-notify-app", () => {
     } finally {
       if (typeof prior.appId === "string") process.env.AGENT_GITHUB_NOTIFY_APP_ID = prior.appId;
       else delete process.env.AGENT_GITHUB_NOTIFY_APP_ID;
-      if (typeof prior.installationId === "string") process.env.AGENT_GITHUB_NOTIFY_APP_INSTALLATION_ID = prior.installationId;
+      if (typeof prior.installationId === "string")
+        process.env.AGENT_GITHUB_NOTIFY_APP_INSTALLATION_ID = prior.installationId;
       else delete process.env.AGENT_GITHUB_NOTIFY_APP_INSTALLATION_ID;
-      if (typeof prior.privateKey === "string") process.env.AGENT_GITHUB_NOTIFY_APP_PRIVATE_KEY = prior.privateKey;
+      if (typeof prior.privateKey === "string")
+        process.env.AGENT_GITHUB_NOTIFY_APP_PRIVATE_KEY = prior.privateKey;
       else delete process.env.AGENT_GITHUB_NOTIFY_APP_PRIVATE_KEY;
-      if (typeof prior.apiBaseUrl === "string") process.env.AGENT_GITHUB_NOTIFY_APP_API_BASE_URL = prior.apiBaseUrl;
+      if (typeof prior.apiBaseUrl === "string")
+        process.env.AGENT_GITHUB_NOTIFY_APP_API_BASE_URL = prior.apiBaseUrl;
       else delete process.env.AGENT_GITHUB_NOTIFY_APP_API_BASE_URL;
     }
   });
 });
-

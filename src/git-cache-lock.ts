@@ -1,7 +1,12 @@
 import fs from "node:fs";
 import path from "node:path";
 import type { RepoInfo } from "./github.js";
-import { acquireLockWithRetry, releaseLock, type AcquireLockRetryOptions, type LockHandle } from "./lock.js";
+import {
+  acquireLockWithRetry,
+  releaseLock,
+  type AcquireLockRetryOptions,
+  type LockHandle
+} from "./lock.js";
 
 function resolveLocksDir(workdirRoot: string): string {
   return path.resolve(workdirRoot, "agent-runner", "state", "git-cache-locks");
@@ -46,4 +51,3 @@ export async function withGitCacheLock<T>(
     }
   }
 }
-

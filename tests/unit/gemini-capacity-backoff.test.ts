@@ -20,8 +20,9 @@ describe("gemini-capacity-backoff", () => {
 
     const loaded = loadGeminiCapacityBackoffState(statePath);
     expect(isGeminiModelBlockedByCapacity(loaded, "gemini-3-flash-preview", now)).toBe(true);
-    expect(isGeminiModelBlockedByCapacity(loaded, "gemini-3-flash-preview", blockedUntil)).toBe(false);
+    expect(isGeminiModelBlockedByCapacity(loaded, "gemini-3-flash-preview", blockedUntil)).toBe(
+      false
+    );
     expect(isGeminiModelBlockedByCapacity(loaded, "gemini-3-pro-preview", now)).toBe(false);
   });
 });
-

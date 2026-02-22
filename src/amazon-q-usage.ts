@@ -120,8 +120,7 @@ export function recordAmazonQUsage(
 ): AmazonQUsageState {
   const periodKey = toPeriodKey(now);
   const existing = loadAmazonQUsageState(statePath);
-  const used =
-    existing && existing.periodKey === periodKey ? existing.used + increment : increment;
+  const used = existing && existing.periodKey === periodKey ? existing.used + increment : increment;
   const nextState: AmazonQUsageState = { periodKey, used };
   saveAmazonQUsageState(statePath, nextState);
   return nextState;

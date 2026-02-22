@@ -26,4 +26,3 @@ export function reviewFeedbackIndicatesOk(body: string | null): boolean {
   }
   return OK_REVIEW_PATTERNS.some((pattern) => pattern.test(text));
 }
-

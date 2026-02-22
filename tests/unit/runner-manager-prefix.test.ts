@@ -22,4 +22,3 @@ describe("ensureCodexManagerPrefix", () => {
     expect(ensureCodexManagerPrefix(prompt, "codex")).toBe(prompt);
   });
 });
-

@@ -30,8 +30,14 @@ describe("setup-git-hooks script", () => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), "agent-runner-hooks-set-"));
     runGit(dir, ["init"]);
 
-    spawnSync("git", ["config", "--local", "--unset-all", "core.hooksPath"], { cwd: dir, encoding: "utf8" });
-    const before = spawnSync("git", ["config", "--local", "--get", "core.hooksPath"], { cwd: dir, encoding: "utf8" });
+    spawnSync("git", ["config", "--local", "--unset-all", "core.hooksPath"], {
+      cwd: dir,
+      encoding: "utf8"
+    });
+    const before = spawnSync("git", ["config", "--local", "--get", "core.hooksPath"], {
+      cwd: dir,
+      encoding: "utf8"
+    });
     expect(before.status).not.toBe(0);
 
     const result = runNode(dir);

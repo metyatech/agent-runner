@@ -56,18 +56,22 @@ describe("evaluateUsageGate", () => {
 
     expect(status).not.toBeNull();
 
-    const decision = evaluateUsageGate(status!, {
-      enabled: true,
-      timeoutSeconds: 20,
-      minRemainingPercent: {
-        fiveHour: 5
+    const decision = evaluateUsageGate(
+      status!,
+      {
+        enabled: true,
+        timeoutSeconds: 20,
+        minRemainingPercent: {
+          fiveHour: 5
+        },
+        weeklySchedule: {
+          startMinutes: 60,
+          minRemainingPercentAtStart: 20,
+          minRemainingPercentAtEnd: 0
+        }
       },
-      weeklySchedule: {
-        startMinutes: 60,
-        minRemainingPercentAtStart: 20,
-        minRemainingPercentAtEnd: 0
-      }
-    }, now);
+      now
+    );
 
     expect(decision.allow).toBe(true);
   });
@@ -91,18 +95,22 @@ describe("evaluateUsageGate", () => {
 
     expect(status).not.toBeNull();
 
-    const decision = evaluateUsageGate(status!, {
-      enabled: true,
-      timeoutSeconds: 20,
-      minRemainingPercent: {
-        fiveHour: 1
+    const decision = evaluateUsageGate(
+      status!,
+      {
+        enabled: true,
+        timeoutSeconds: 20,
+        minRemainingPercent: {
+          fiveHour: 1
+        },
+        weeklySchedule: {
+          startMinutes: 60,
+          minRemainingPercentAtStart: 20,
+          minRemainingPercentAtEnd: 0
+        }
       },
-      weeklySchedule: {
-        startMinutes: 60,
-        minRemainingPercentAtStart: 20,
-        minRemainingPercentAtEnd: 0
-      }
-    }, now);
+      now
+    );
 
     expect(decision.allow).toBe(false);
   });
@@ -120,7 +128,10 @@ describe("readCodexRateLimitsFromSessions (via fetchCodexRateLimits)", () => {
   });
 
   it("returns null when sessions directory does not exist", async () => {
-    const result = await fetchCodexRateLimits({ codexHome: join(tmpDir, "nonexistent"), timeoutSeconds: 1 });
+    const result = await fetchCodexRateLimits({
+      codexHome: join(tmpDir, "nonexistent"),
+      timeoutSeconds: 1
+    });
     expect(result).toBeNull();
   });
 
@@ -283,10 +294,13 @@ describe("fetchCodexRateLimitsFromApi (via fetchCodexRateLimits)", () => {
       }
     };
 
-    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({
-      ok: true,
-      json: async () => mockResponse
-    }));
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => mockResponse
+      })
+    );
 
     const result = await fetchCodexRateLimits({ codexHome: tmpDir, timeoutSeconds: 5 });
     expect(result).not.toBeNull();
@@ -329,11 +343,14 @@ describe("fetchCodexRateLimitsFromApi (via fetchCodexRateLimits)", () => {
       JSON.stringify({ tokens: { access_token: "test-token" } })
     );
 
-    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({
-      ok: false,
-      status: 401,
-      json: async () => ({})
-    }));
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: false,
+        status: 401,
+        json: async () => ({})
+      })
+    );
 
     const result = await fetchCodexRateLimits({ codexHome: tmpDir, timeoutSeconds: 5 });
     expect(result).toBeNull();

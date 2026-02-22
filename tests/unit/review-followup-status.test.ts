@@ -58,7 +58,9 @@ describe("review-followup-status", () => {
       const comments: IssueComment[] = [
         { id: 1, body: "hello", createdAt: "2026-02-16T03:00:00.000Z" }
       ];
-      expect(shouldPostReviewFollowupMarkerComment(comments, REVIEW_FOLLOWUP_WAITING_MARKER)).toBe(true);
+      expect(shouldPostReviewFollowupMarkerComment(comments, REVIEW_FOLLOWUP_WAITING_MARKER)).toBe(
+        true
+      );
     });
 
     it("returns false when marker exists and no user reply after marker", () => {
@@ -69,7 +71,9 @@ describe("review-followup-status", () => {
           createdAt: "2026-02-16T03:00:00.000Z"
         }
       ];
-      expect(shouldPostReviewFollowupMarkerComment(comments, REVIEW_FOLLOWUP_WAITING_MARKER)).toBe(false);
+      expect(shouldPostReviewFollowupMarkerComment(comments, REVIEW_FOLLOWUP_WAITING_MARKER)).toBe(
+        false
+      );
     });
 
     it("returns true when user replied after marker", () => {
@@ -85,7 +89,9 @@ describe("review-followup-status", () => {
           createdAt: "2026-02-16T03:01:00.000Z"
         }
       ];
-      expect(shouldPostReviewFollowupMarkerComment(comments, REVIEW_FOLLOWUP_WAITING_MARKER)).toBe(true);
+      expect(shouldPostReviewFollowupMarkerComment(comments, REVIEW_FOLLOWUP_WAITING_MARKER)).toBe(
+        true
+      );
     });
   });
 });

@@ -21,7 +21,8 @@ describe("fetchGeminiUsage (OAuth client discovery)", () => {
     vi.resetModules();
     if (typeof originalAppData === "string") process.env.APPDATA = originalAppData;
     else delete process.env.APPDATA;
-    if (typeof originalClientId === "string") process.env.AGENT_RUNNER_GEMINI_OAUTH_CLIENT_ID = originalClientId;
+    if (typeof originalClientId === "string")
+      process.env.AGENT_RUNNER_GEMINI_OAUTH_CLIENT_ID = originalClientId;
     else delete process.env.AGENT_RUNNER_GEMINI_OAUTH_CLIENT_ID;
     if (typeof originalClientSecret === "string")
       process.env.AGENT_RUNNER_GEMINI_OAUTH_CLIENT_SECRET = originalClientSecret;
@@ -129,4 +130,3 @@ describe("fetchGeminiUsage (OAuth client discovery)", () => {
     fs.rmSync(appData, { recursive: true, force: true });
   });
 });
-

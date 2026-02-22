@@ -4,7 +4,10 @@ import os from "node:os";
 import path from "node:path";
 import type { AgentRunnerConfig } from "../../src/config.js";
 import type { IssueInfo, PullRequestDetails, RepoInfo } from "../../src/github.js";
-import { markManagedPullRequest, resolveManagedPullRequestsStatePath } from "../../src/managed-pull-requests.js";
+import {
+  markManagedPullRequest,
+  resolveManagedPullRequestsStatePath
+} from "../../src/managed-pull-requests.js";
 import { enqueueManagedPullRequestReviewFollowups } from "../../src/managed-pr-review-catchup.js";
 import { loadReviewQueue, resolveReviewQueuePath } from "../../src/review-queue.js";
 
@@ -70,7 +73,11 @@ describe("managed-pr-review-catchup", () => {
     const issue = makeIssue(repo);
 
     const managedStatePath = resolveManagedPullRequestsStatePath(config.workdirRoot);
-    await markManagedPullRequest(managedStatePath, { owner: "MeTyATech", repo: "DeMo" }, issue.number);
+    await markManagedPullRequest(
+      managedStatePath,
+      { owner: "MeTyATech", repo: "DeMo" },
+      issue.number
+    );
 
     let getIssueCalls = 0;
     const client = {
@@ -79,7 +86,9 @@ describe("managed-pr-review-catchup", () => {
         return issue;
       },
       getPullRequest: async () => makePullRequestDetails(),
-      listPullRequestReviewThreads: async () => [{ id: "t1", isResolved: false, isOutdated: false }],
+      listPullRequestReviewThreads: async () => [
+        { id: "t1", isResolved: false, isOutdated: false }
+      ],
       listPullRequestReviews: async () => [],
       addLabels: async () => {},
       searchOpenPullRequestsByAuthorAcrossOwner: async (_owner: string, author: string) =>
@@ -114,7 +123,9 @@ describe("managed-pr-review-catchup", () => {
     const client = {
       getIssue: async () => issue,
       getPullRequest: async () => makePullRequestDetails(),
-      listPullRequestReviewThreads: async () => [{ id: "t1", isResolved: false, isOutdated: false }],
+      listPullRequestReviewThreads: async () => [
+        { id: "t1", isResolved: false, isOutdated: false }
+      ],
       listPullRequestReviews: async () => [],
       addLabels: async () => {},
       searchOpenPullRequestsByAuthorAcrossOwner: async (_owner: string, author: string) =>
@@ -147,7 +158,9 @@ describe("managed-pr-review-catchup", () => {
     const client = {
       getIssue: async () => issue,
       getPullRequest: async () => makePullRequestDetails(),
-      listPullRequestReviewThreads: async () => [{ id: "t1", isResolved: false, isOutdated: false }],
+      listPullRequestReviewThreads: async () => [
+        { id: "t1", isResolved: false, isOutdated: false }
+      ],
       listPullRequestReviews: async () => [],
       addLabels: async (_issue: IssueInfo, labels: string[]) => {
         addLabelCalls.push(labels);
@@ -212,7 +225,9 @@ describe("managed-pr-review-catchup", () => {
   });
 
   it("enqueues approval follow-up when the latest reviews are approved", async () => {
-    const root = fs.mkdtempSync(path.join(os.tmpdir(), "agent-runner-managed-pr-catchup-approval-"));
+    const root = fs.mkdtempSync(
+      path.join(os.tmpdir(), "agent-runner-managed-pr-catchup-approval-")
+    );
     const config = makeConfig(root);
     const repo = makeRepo();
     const issue = makeIssue(repo);
@@ -260,7 +275,9 @@ describe("managed-pr-review-catchup", () => {
     const client = {
       getIssue: async () => issue,
       getPullRequest: async () => makePullRequestDetails(),
-      listPullRequestReviewThreads: async () => [{ id: "t1", isResolved: false, isOutdated: false }],
+      listPullRequestReviewThreads: async () => [
+        { id: "t1", isResolved: false, isOutdated: false }
+      ],
       listPullRequestReviews: async () => [],
       addLabels: async () => {},
       searchOpenPullRequestsByAuthorAcrossOwner: async (_owner: string, author: string) =>
@@ -283,7 +300,9 @@ describe("managed-pr-review-catchup", () => {
   });
 
   it("searches managed app PRs with the GitHub App login format", async () => {
-    const root = fs.mkdtempSync(path.join(os.tmpdir(), "agent-runner-managed-pr-catchup-app-login-"));
+    const root = fs.mkdtempSync(
+      path.join(os.tmpdir(), "agent-runner-managed-pr-catchup-app-login-")
+    );
     const config = makeConfig(root);
     const repo = makeRepo();
     const issue: IssueInfo = { ...makeIssue(repo), author: "app/agent-runner-bot" };
@@ -292,7 +311,9 @@ describe("managed-pr-review-catchup", () => {
     const client = {
       getIssue: async () => issue,
       getPullRequest: async () => makePullRequestDetails(),
-      listPullRequestReviewThreads: async () => [{ id: "t1", isResolved: false, isOutdated: false }],
+      listPullRequestReviewThreads: async () => [
+        { id: "t1", isResolved: false, isOutdated: false }
+      ],
       listPullRequestReviews: async () => [],
       addLabels: async () => {},
       searchOpenPullRequestsByAuthorAcrossOwner: async (_owner: string, author: string) => {

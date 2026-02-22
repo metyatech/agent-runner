@@ -189,19 +189,14 @@ function detectRecentReviewIdleGateBlock(taskRunLogPath: string | null, nowMs: n
   return false;
 }
 
-function mergeRunnerState(
-  records: ActivityRecord[],
-  workdirRoot: string
-): ActivityRecord[] {
+function mergeRunnerState(records: ActivityRecord[], workdirRoot: string): ActivityRecord[] {
   const statePath = resolveRunnerStatePath(workdirRoot);
   if (!fs.existsSync(statePath)) {
     return records;
   }
   const state = loadRunnerState(statePath);
   const existingIssueIds = new Set(
-    records
-      .filter((record) => record.issueId !== undefined)
-      .map((record) => record.issueId)
+    records.filter((record) => record.issueId !== undefined).map((record) => record.issueId)
   );
   const additions = state.running
     .filter((record) => !existingIssueIds.has(record.issueId))
