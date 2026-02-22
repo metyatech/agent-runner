@@ -305,6 +305,41 @@ async function maybeUpdateSubmodules(worktreePath: string): Promise<void> {
   });
 }
 
+const IDLE_PRE_PUSH_HOOK = `#!/bin/sh
+# Installed by agent-runner: prevents pushing to the default branch from idle task worktrees.
+while IFS= read -r line; do
+  remote_ref=$(printf '%s' "$line" | awk '{print $3}')
+  if [ "$remote_ref" = "refs/heads/main" ] || [ "$remote_ref" = "refs/heads/master" ]; then
+    echo "error: direct push to $remote_ref is not allowed from an idle task worktree." >&2
+    echo "error: push to a feature branch and open a pull request instead." >&2
+    exit 1
+  fi
+done
+`;
+
+export function resolveWorktreeGitDir(worktreePath: string): string {
+  const gitEntry = path.join(worktreePath, ".git");
+  const stat = fs.statSync(gitEntry);
+  if (stat.isDirectory()) {
+    return gitEntry;
+  }
+  // Linked worktree: .git is a file containing "gitdir: <path>"
+  const contents = fs.readFileSync(gitEntry, "utf8").trim();
+  const match = /^gitdir:\s*(.+)$/.exec(contents);
+  if (!match) {
+    throw new Error(`Unexpected .git file format in worktree ${worktreePath}: ${contents}`);
+  }
+  return path.resolve(worktreePath, match[1].trim());
+}
+
+export function installWorktreePrePushHook(worktreePath: string): void {
+  const gitDir = resolveWorktreeGitDir(worktreePath);
+  const hooksDir = path.join(gitDir, "hooks");
+  fs.mkdirSync(hooksDir, { recursive: true });
+  const hookPath = path.join(hooksDir, "pre-push");
+  fs.writeFileSync(hookPath, IDLE_PRE_PUSH_HOOK, { encoding: "utf8", mode: 0o755 });
+}
+
 export async function createWorktreeFromDefaultBranch(options: {
   workdirRoot: string;
   repo: RepoInfo;
@@ -340,6 +375,7 @@ export async function createWorktreeFromDefaultBranch(options: {
     { timeoutMs: 15 * 60 * 1000 }
   );
   await maybeUpdateSubmodules(options.worktreePath);
+  installWorktreePrePushHook(options.worktreePath);
 }
 
 export async function createWorktreeForRemoteBranch(options: {

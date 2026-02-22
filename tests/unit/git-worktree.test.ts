@@ -3,6 +3,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import type { RepoInfo } from "../../src/github.js";
+import { installWorktreePrePushHook, resolveWorktreeGitDir } from "../../src/git-worktree.js";
 
 describe("git-worktree", () => {
   beforeEach(() => {
@@ -148,6 +149,118 @@ describe("git-worktree", () => {
       fs.rmSync(root, { recursive: true, force: true });
       vi.doUnmock("../../src/git.js");
       vi.doUnmock("../../src/runner-state.js");
+    }
+  });
+
+  it("installs a pre-push hook that blocks pushes to main/master", async () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "agent-runner-hook-test-"));
+    try {
+      // Simulate a linked worktree: .git is a file pointing to a gitdir
+      const fakeGitDir = path.join(root, "fake-gitdir");
+      fs.mkdirSync(fakeGitDir, { recursive: true });
+      const worktreePath = path.join(root, "worktree");
+      fs.mkdirSync(worktreePath, { recursive: true });
+      // Write the .git file as a linked worktree would have
+      fs.writeFileSync(path.join(worktreePath, ".git"), `gitdir: ${fakeGitDir}\n`);
+
+      installWorktreePrePushHook(worktreePath);
+
+      const hookPath = path.join(fakeGitDir, "hooks", "pre-push");
+      expect(fs.existsSync(hookPath)).toBe(true);
+
+      const hookContent = fs.readFileSync(hookPath, "utf8");
+      expect(hookContent).toContain("#!/bin/sh");
+      expect(hookContent).toContain("refs/heads/main");
+      expect(hookContent).toContain("refs/heads/master");
+      expect(hookContent).toContain("exit 1");
+
+      // On POSIX, verify the hook is executable; skip on Windows where mode bits are not enforced
+      if (process.platform !== "win32") {
+        const stat = fs.statSync(hookPath);
+        expect(stat.mode & 0o100).toBeTruthy();
+      }
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it("resolveWorktreeGitDir returns the directory for a real .git directory", () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "agent-runner-hook-dir-"));
+    try {
+      const gitDir = path.join(root, ".git");
+      fs.mkdirSync(gitDir, { recursive: true });
+
+      const resolved = resolveWorktreeGitDir(root);
+      expect(resolved).toBe(gitDir);
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it("resolveWorktreeGitDir parses the gitdir path from a linked worktree .git file", () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "agent-runner-hook-link-"));
+    try {
+      const fakeGitDir = path.join(root, "main.git", "worktrees", "my-branch");
+      fs.mkdirSync(fakeGitDir, { recursive: true });
+      const worktreePath = path.join(root, "worktree");
+      fs.mkdirSync(worktreePath, { recursive: true });
+      fs.writeFileSync(path.join(worktreePath, ".git"), `gitdir: ${fakeGitDir}\n`);
+
+      const resolved = resolveWorktreeGitDir(worktreePath);
+      expect(path.resolve(resolved)).toBe(path.resolve(fakeGitDir));
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it("installs pre-push hook after createWorktreeFromDefaultBranch", async () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "agent-runner-hook-create-"));
+    const repo: RepoInfo = { owner: "metyatech", repo: "demo" };
+    const worktreePath = path.join(root, "agent-runner", "work", "idle-run", "metyatech--demo");
+    const cachePath = path.join(root, "agent-runner", "git-cache", repo.owner, `${repo.repo}.git`);
+    fs.mkdirSync(cachePath, { recursive: true });
+
+    // Simulate git worktree add creating a linked worktree .git file
+    const fakeGitDir = path.join(
+      root,
+      "agent-runner",
+      "git-cache",
+      repo.owner,
+      `${repo.repo}.git`,
+      "worktrees",
+      "idle"
+    );
+    const runCommandMock = vi.fn(async (_command: string, args: string[]) => {
+      // Intercept "worktree add" and create the worktree structure ourselves
+      if (args[2] === "worktree" && args[3] === "add") {
+        const wt = args[4];
+        fs.mkdirSync(wt, { recursive: true });
+        fs.mkdirSync(fakeGitDir, { recursive: true });
+        fs.writeFileSync(path.join(wt, ".git"), `gitdir: ${fakeGitDir}\n`);
+      }
+      return { stdout: "", stderr: "" };
+    });
+    vi.doMock("../../src/git.js", () => ({ runCommand: runCommandMock }));
+
+    const { createWorktreeFromDefaultBranch } = await import("../../src/git-worktree.js");
+
+    try {
+      await createWorktreeFromDefaultBranch({
+        workdirRoot: root,
+        repo,
+        cachePath,
+        worktreePath,
+        defaultBranch: "main",
+        newBranch: "agent-runner/idle-codex-1234"
+      });
+
+      const hookPath = path.join(fakeGitDir, "hooks", "pre-push");
+      expect(fs.existsSync(hookPath)).toBe(true);
+      const hookContent = fs.readFileSync(hookPath, "utf8");
+      expect(hookContent).toContain("refs/heads/main");
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true });
+      vi.doUnmock("../../src/git.js");
     }
   });
 
