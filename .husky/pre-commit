@@ -1,1 +1,3 @@
 npm run verify
+compose-agentsmd --compose || true
+git add AGENTS.md || true
