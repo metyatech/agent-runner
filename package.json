@@ -19,7 +19,7 @@
     "test:unit": "vitest run ./tests/unit",
     "test:e2e": "vitest run ./tests/e2e",
     "dev": "tsx src/cli.ts",
-    "prepare": "simple-git-hooks"
+    "prepare": "husky"
   },
   "dependencies": {
     "@metyatech/ai-quota": "^1.0.1",
@@ -37,6 +37,7 @@
     "@typescript-eslint/eslint-plugin": "^8.17.0",
     "@typescript-eslint/parser": "^8.17.0",
     "eslint": "^9.13.0",
+    "husky": "^9.1.7",
     "prettier": "^3.0.0",
     "simple-git-hooks": "^2.11.1",
     "tsup": "^8.3.0",
