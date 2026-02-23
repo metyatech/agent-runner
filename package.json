@@ -22,7 +22,7 @@
     "prepare": "husky"
   },
   "dependencies": {
-    "@metyatech/ai-quota": "^1.0.1",
+    "@metyatech/ai-quota": "^1.1.2",
     "@octokit/auth-app": "^7.2.2",
     "@octokit/rest": "^21.0.0",
     "ajv": "^8.18.0",
