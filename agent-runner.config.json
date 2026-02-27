@@ -3,7 +3,7 @@
   "repos": "all",
   "workdirRoot": "D:\\ghws",
   "pollIntervalSeconds": 60,
-  "concurrency": 8,
+  "concurrency": 5,
   "logMaintenance": {
     "enabled": true,
     "maxAgeDays": 30,
@@ -19,7 +19,7 @@
     "maxTotalMB": 256
   },
   "amazonQ": {
-    "enabled": false,
+    "enabled": true,
     "command": "wsl.exe",
     "args": [
       "-d",
@@ -44,7 +44,7 @@
       "enabled": true,
       "timeoutSeconds": 20,
       "minRemainingPercent": {
-        "fiveHour": 50
+        "fiveHour": 70
       },
       "weeklySchedule": {
         "startMinutes": 1440,
@@ -82,7 +82,7 @@
     "claudeUsageGate": {
       "enabled": true,
       "minRemainingPercent": {
-        "fiveHour": 50
+        "fiveHour": 70
       },
       "weeklySchedule": {
         "startMinutes": 1440,
@@ -110,7 +110,7 @@
       "-c",
       "model_reasoning_effort=\"medium\"",
       "--model",
-      "gpt-5.2"
+      "gpt-5.1-codex-mini"
     ],
     "promptTemplate": "You are running an autonomous task. Follow AGENTS.md rules. Use repo(s): {{repos}}. Task:\n{{task}}\n\nRequirements:\n- GitHub operations (issues, PRs, commits, pushes) are allowed and are NOT considered external sending.\n- Do not send or post anything outside GitHub (email, LMS, Slack, web forms, etc.) unless the user explicitly approves in the issue. If external communication is required, prepare a draft message + attachments list + checklist and ask the user for explicit approval before any send/post.\n- Commit and push any code changes.\n- Reference the issue number in commit messages (e.g., 'Refs #<issue-number>').\n- End your final response with:\nAGENT_RUNNER_STATUS: done\n<message to post to GitHub>\n- If blocked and you need user input, use:\nAGENT_RUNNER_STATUS: needs_user_reply\n<message asking the user what is needed>\nInclude: changes made, tests run (or 'Not run'), and commit hashes."
   },
@@ -128,7 +128,7 @@
   },
   "copilot": {
     "command": "copilot",
-    "args": ["--allow-all", "--model", "gemini-3-pro-preview", "-p"]
+    "args": ["--allow-all", "--model", "gpt-4.1", "-p"]
   },
   "gemini": {
     "command": "gemini",

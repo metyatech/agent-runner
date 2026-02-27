@@ -26,6 +26,8 @@ Source: github:metyatech/agent-rules@HEAD/rules/global/agent-rules-composition.m
 - Persistent user instructions → encode in appropriate module (global vs local) in the same change set.
 - New repos must meet all global rules (AGENTS.md, CI, linting, community health, docs, scanning) before reporting complete.
 - Update rulesets for missing domain rules before proceeding. Omit AGENTS.md diffs unless asked.
+- Treat AGENTS.md diffs produced by compose-agentsmd as intentional updates: do not discard/revert them unless the requester explicitly asks to drop them.
+- When the repository is git-managed, stage those intentional AGENTS.md updates normally (git add) unless the requester explicitly says to exclude them.
 - Infer core intent; prefer global over project-local. Keep rules MECE, concise, non-redundant, action-oriented ("do X", "never Z"). No hedging or numeric filename prefixes.
 - Placement: based on where needed. Any-workspace → global; domain only for opt-in repos.
 
@@ -41,8 +43,10 @@ Source: github:metyatech/agent-rules@HEAD/rules/global/autonomous-operations.md
 - Optimize for minimal human effort; default to automation over manual steps.
 - Drive work from the desired outcome: choose the highest-quality safe path and execute end-to-end.
 - Correctness, safety, robustness, verifiability > speed unless requester explicitly approves the tradeoff.
+- Default to long-term maintainability and operational cost over short-term local optimization.
 - End-to-end repo autonomy (issues, PRs, pushes, merges, releases, admin) within user-controlled repos; third-party repos require explicit request.
 - No backward compatibility unless requested; no legacy aliases or shims.
+- Do not introduce temporary compatibility/fallback behavior unless explicitly requested; if unavoidable, require an explicit removal condition and deadline.
 - Proactively fix rule gaps, redundancy, or misplacement; regenerate AGENTS.md without waiting.
 - Self-evaluate continuously; fix rule/skill gaps immediately on discovery. In delegated mode, include improvement suggestions in the task result.
 - On user-reported failures: treat as systemic — fix, update rules, check for same pattern elsewhere, in one action.
@@ -81,6 +85,11 @@ Source: github:metyatech/agent-rules@HEAD/rules/global/command-execution.md
 - Keep changes scoped to affected repositories; when shared modules change, update consumers and verify at least one.
 - If no branch is specified, work on the current branch; direct commits to main/master are allowed.
 - Do not assume agent platform capabilities beyond what is available; fail explicitly when unavailable.
+
+## Codex-only: Commands blocked by policy (PowerShell)
+
+- Blocked by policy under Codex: `Remove-Item` (aliases: `rm`, `ri`, `del`, `erase`) -> Use: `if ([IO.File]::Exists($p)) { [IO.File]::SetAttributes($p,[IO.FileAttributes]::Normal); [IO.File]::Delete($p) }`
+- Blocked by policy under Codex: `Remove-Item -Recurse` (aliases: `rmdir`, `rd`) -> Use: `if ([IO.Directory]::Exists($d)) { [IO.File]::SetAttributes($d,[IO.FileAttributes]::Normal); foreach ($e in [IO.Directory]::EnumerateFileSystemEntries($d,'*',[IO.SearchOption]::AllDirectories)) { [IO.File]::SetAttributes($e,[IO.FileAttributes]::Normal) }; [IO.Directory]::Delete($d,$true) }`
 
 Source: github:metyatech/agent-rules@HEAD/rules/global/delivery-hard-gates.md
 
@@ -139,6 +148,7 @@ Source: github:metyatech/agent-rules@HEAD/rules/global/implementation-and-coding
 - Do not assume machine-specific environments; use repo-relative paths and explicit configuration.
 - Agent temp files MUST stay under OS temp unless requester approves.
 - For agent-facing tools/services, design for cross-agent compatibility via standard interfaces (CLI, HTTP, stdin/stdout, MCP).
+- Lifecycle install hooks (`prepare`/`preinstall`/`postinstall`) must succeed on a clean machine with no global tool assumptions; invoke required CLIs through project-local dependencies or package-manager executors (for npm, prefer `npm exec`).
 - After manifest changes, regenerate and commit corresponding lock files in the same commit.
 
 Source: github:metyatech/agent-rules@HEAD/rules/global/linting-formatting-and-static-analysis.md
@@ -185,6 +195,11 @@ Source: github:metyatech/agent-rules@HEAD/rules/global/multi-agent-delegation.md
 
 - Do not run concurrent agents that modify the same repository/files; different repositories may run in parallel.
 - When conflict risk is unclear, run sequentially.
+
+## Execution patience and switching discipline
+
+- Do not rapidly switch or respawn sub-agents for the same task while one is actively running without errors.
+- Status checks should prioritize non-blocking monitoring and user responsiveness, but must not be used as justification for premature agent replacement.
 
 Source: github:metyatech/agent-rules@HEAD/rules/global/planning-and-approval-gate.md
 
