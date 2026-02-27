@@ -3,7 +3,7 @@
   "repos": "all",
   "workdirRoot": "D:\\ghws",
   "pollIntervalSeconds": 60,
-  "concurrency": 5,
+  "concurrency": 8,
   "logMaintenance": {
     "enabled": true,
     "maxAgeDays": 30,
@@ -44,7 +44,7 @@
       "enabled": true,
       "timeoutSeconds": 20,
       "minRemainingPercent": {
-        "fiveHour": 70
+        "fiveHour": 50
       },
       "weeklySchedule": {
         "startMinutes": 1440,
@@ -82,7 +82,7 @@
     "claudeUsageGate": {
       "enabled": true,
       "minRemainingPercent": {
-        "fiveHour": 70
+        "fiveHour": 50
       },
       "weeklySchedule": {
         "startMinutes": 1440,
