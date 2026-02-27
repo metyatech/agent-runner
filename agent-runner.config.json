@@ -128,7 +128,7 @@
   },
   "copilot": {
     "command": "copilot",
-    "args": ["--allow-all", "--model", "gpt-4.1", "-p"]
+    "args": ["--allow-all", "--model", "gemini-3-pro-preview", "-p"]
   },
   "gemini": {
     "command": "gemini",
