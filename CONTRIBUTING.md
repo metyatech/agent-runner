@@ -23,3 +23,8 @@ npm run verify   # lint + format:check + test + build
 - TypeScript strict mode is required.
 - Format with Prettier (`npm run format`).
 - Lint with ESLint (`npm run lint`).
+
+## Code of conduct
+
+This project is governed by the [Code of Conduct](CODE_OF_CONDUCT.md). By participating,
+you are expected to uphold it in all project spaces.
