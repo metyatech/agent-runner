@@ -673,3 +673,11 @@ is running in the background.
 Not applicable. This repository is intended to run locally.
 
 
+
+## Project governance
+
+- [Changelog](CHANGELOG.md)
+- [Code of Conduct](CODE_OF_CONDUCT.md)
+- [Contributing](CONTRIBUTING.md)
+- [License](LICENSE)
+- [Security](SECURITY.md)
