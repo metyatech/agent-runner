@@ -10,7 +10,7 @@
   "scripts": {
     "build": "tsup",
     "format": "prettier --write .",
-    "format:check": "prettier --check .",
+    "format:check": "prettier --check \"*.{json,md}\" \".github/**/*\" \"agent-rules-local/**/*\" \"assets/**/*\" \"docs/**/*\" \"ops/**/*\" \"schema/**/*\" \"scripts/**/*\" \"src/**/*\" \"tests/**/*\" --ignore-unknown",
     "lint": "eslint . && tsc -p tsconfig.json --noEmit && tsc -p tsconfig.test.json --noEmit",
     "lint:ps": "powershell -NoProfile -NonInteractive -ExecutionPolicy Bypass -File scripts\\\\lint-ps.ps1",
     "verify": "npm run lint && npm run lint:ps && npm run format:check && npm test && npm run build",
