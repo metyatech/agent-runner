@@ -667,4 +667,47 @@ describe("loadIdleOpenPrData", () => {
     expect(loaded.openPrContext).toContain("Open PR context unavailable due to GitHub API error.");
     expect(warnings.join("\n")).toContain("Failed to load open PR context");
   });
+
+  it("suppresses expected open PR count errors", async () => {
+    const warnings: string[] = [];
+    const client = {
+      listOpenPullRequests: async () => [],
+      getOpenPullRequestCount: async () => {
+        throw {
+          status: 404,
+          message: "Could not resolve to a Repository with the name 'demo'."
+        };
+      }
+    } as any;
+
+    const loaded = await loadIdleOpenPrData(client, repo, {
+      maxOpenPullRequests: 50,
+      maxContextEntries: 50,
+      maxContextChars: 12_000,
+      warn: (message) => warnings.push(message)
+    });
+
+    expect(loaded.openPrContextAvailable).toBe(true);
+    expect(loaded.openPrCount).toBeNull();
+    expect(warnings.join("\n")).not.toContain("Failed to load open PR count");
+  });
+
+  it("warns on unexpected open PR count errors", async () => {
+    const warnings: string[] = [];
+    const client = {
+      listOpenPullRequests: async () => [],
+      getOpenPullRequestCount: async () => {
+        throw new Error("malformed response");
+      }
+    } as any;
+
+    await loadIdleOpenPrData(client, repo, {
+      maxOpenPullRequests: 50,
+      maxContextEntries: 50,
+      maxContextChars: 12_000,
+      warn: (message) => warnings.push(message)
+    });
+
+    expect(warnings.join("\n")).toContain("Failed to load open PR count");
+  });
 });

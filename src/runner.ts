@@ -4,6 +4,7 @@ import { spawn } from "node:child_process";
 import type { AgentRunnerConfig } from "./config.js";
 import {
   GitHubClient,
+  isExpectedOpenPrCountError,
   type IssueComment,
   type IssueInfo,
   type PullRequestReviewComment,
@@ -176,6 +177,17 @@ export type IdleOpenPrData = {
   openPrContext: string;
 };
 
+function isExpectedMissingRemoteRepositoryError(error: unknown): boolean {
+  const message = stripAnsi(extractErrorMessage(error)).toLowerCase();
+  if (!message) {
+    return false;
+  }
+  return (
+    /remote:\s*repository not found\./i.test(message) ||
+    /fatal:\s*repository\s+'https:\/\/github\.com\/[^']+\.git\/?'\s+not found/i.test(message)
+  );
+}
+
 function truncateForPrompt(value: string, maxChars: number): string {
   if (value.length <= maxChars) {
     return value;
@@ -330,11 +342,13 @@ export async function loadIdleOpenPrData(
   if (openPrCountResult.status === "fulfilled") {
     openPrCount = openPrCountResult.value;
   } else {
-    const message =
-      openPrCountResult.reason instanceof Error
-        ? openPrCountResult.reason.message
-        : String(openPrCountResult.reason);
-    warn(`[WARN] Failed to load open PR count for ${repo.owner}/${repo.repo}: ${message}`);
+    if (!isExpectedOpenPrCountError(openPrCountResult.reason)) {
+      const message =
+        openPrCountResult.reason instanceof Error
+          ? openPrCountResult.reason.message
+          : String(openPrCountResult.reason);
+      warn(`[WARN] Failed to load open PR count for ${repo.owner}/${repo.repo}: ${message}`);
+    }
   }
 
   if (openPrContextAvailable) {
@@ -1187,13 +1201,19 @@ export async function runIdleTask(
 ): Promise<IdleTaskResult> {
   const runId = `idle-${engine}-${repo.repo}-${Date.now()}`;
   const workRoot = resolveRunWorkRoot(config.workdirRoot, runId);
-  const cachePath = await ensureRepoCache(config.workdirRoot, repo);
-  await refreshRepoCache(config.workdirRoot, repo, cachePath);
-
   const repoPath = path.join(workRoot, resolveWorktreeDirName(repo));
+  const logDir = path.resolve(config.workdirRoot, "agent-runner", "logs");
+  fs.mkdirSync(logDir, { recursive: true });
+  const logPath = path.join(logDir, `${repo.repo}-idle-${Date.now()}.log`);
+  const reportPath = resolveIdleReportPath(config.workdirRoot, repo);
+  const newBranch = `agent-runner/idle-${engine}-${Date.now()}`;
+  let cachePath: string | null = null;
   let created = false;
 
   try {
+    cachePath = await ensureRepoCache(config.workdirRoot, repo);
+    await refreshRepoCache(config.workdirRoot, repo, cachePath);
+
     const token =
       process.env.AGENT_GITHUB_TOKEN || process.env.GITHUB_TOKEN || process.env.GH_TOKEN;
 
@@ -1202,7 +1222,6 @@ export async function runIdleTask(
     }
     const client = new GitHubClient(token);
     const defaultBranch = await client.getRepoDefaultBranch(repo);
-    const newBranch = `agent-runner/idle-${engine}-${Date.now()}`;
     await createWorktreeFromDefaultBranch({
       workdirRoot: config.workdirRoot,
       repo,
@@ -1231,9 +1250,6 @@ export async function runIdleTask(
     });
     prompt = ensureCodexManagerPrefix(prompt, engine);
 
-    const logDir = path.resolve(config.workdirRoot, "agent-runner", "logs");
-    fs.mkdirSync(logDir, { recursive: true });
-    const logPath = path.join(logDir, `${repo.repo}-idle-${Date.now()}.log`);
     if (resolveLogMaintenance(config).writeLatestPointers) {
       writeLatestPointer(logDir, "idle", logPath);
     }
@@ -1338,7 +1354,6 @@ export async function runIdleTask(
       }
     }
 
-    const reportPath = resolveIdleReportPath(config.workdirRoot, repo);
     writeIdleReport(reportPath, repo, task, engine, exitCode === 0, summary, logPath);
     if (activityRecorded) {
       removeActivity(activityPath, activityId);
@@ -1357,8 +1372,32 @@ export async function runIdleTask(
       failureDetail,
       quotaResumeAt
     };
+  } catch (error) {
+    if (!isExpectedMissingRemoteRepositoryError(error)) {
+      throw error;
+    }
+
+    const shortFailure =
+      `Remote repository is unavailable for ${repo.owner}/${repo.repo} ` +
+      "(not found or no access). Skipping idle task.";
+    fs.appendFileSync(logPath, `[WARN] ${shortFailure}\n`);
+    writeIdleReport(reportPath, repo, task, engine, false, shortFailure, logPath);
+
+    return {
+      success: false,
+      logPath,
+      repo,
+      task,
+      engine,
+      summary: shortFailure,
+      reportPath,
+      headBranch: newBranch,
+      failureKind: "execution_error",
+      failureDetail: shortFailure,
+      quotaResumeAt: null
+    };
   } finally {
-    if (created) {
+    if (created && cachePath) {
       await removeWorktree({
         workdirRoot: config.workdirRoot,
         repo,

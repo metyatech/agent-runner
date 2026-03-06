@@ -93,6 +93,64 @@ export type LabelInfo = {
 
 const DEFAULT_OPEN_PULL_REQUEST_LIMIT = 100;
 
+type OpenPrCountErrorShape = {
+  status?: number;
+  message?: string;
+  errors?: Array<{
+    type?: string;
+    message?: string;
+    extensions?: {
+      code?: string;
+    };
+  }>;
+};
+
+function stringifyOpenPrCountError(error: OpenPrCountErrorShape): string {
+  const pieces: string[] = [];
+  if (typeof error.message === "string" && error.message.trim().length > 0) {
+    pieces.push(error.message.trim());
+  }
+  if (Array.isArray(error.errors)) {
+    for (const entry of error.errors) {
+      if (typeof entry.message === "string" && entry.message.trim().length > 0) {
+        pieces.push(entry.message.trim());
+      }
+      if (typeof entry.type === "string" && entry.type.trim().length > 0) {
+        pieces.push(entry.type.trim());
+      }
+      if (typeof entry.extensions?.code === "string" && entry.extensions.code.trim().length > 0) {
+        pieces.push(entry.extensions.code.trim());
+      }
+    }
+  }
+  return pieces.join(" ").toLowerCase();
+}
+
+export function isExpectedOpenPrCountError(error: unknown): boolean {
+  const candidate = (error ?? {}) as OpenPrCountErrorShape;
+  const status = candidate.status;
+  if (status === 404 || status === 429) {
+    return true;
+  }
+
+  const combined = stringifyOpenPrCountError(candidate);
+  if (!combined) {
+    return false;
+  }
+
+  if (/rate limit|secondary rate|abuse detection/.test(combined)) {
+    return true;
+  }
+  if (/could not resolve to a repository|repository not found|not_found/.test(combined)) {
+    return true;
+  }
+  if (status === 403 && /resource not accessible|not accessible/.test(combined)) {
+    return true;
+  }
+
+  return false;
+}
+
 export class GitHubClient {
   private octokit: Octokit;
   private authLogin: string | null | undefined;
