@@ -116,6 +116,7 @@ export type AgentRunnerConfig = {
     reviewFollowupWaiting?: string;
     reviewFollowupActionRequired?: string;
   };
+  managedAuthors?: string[];
   codex: {
     command: string;
     args: string[];

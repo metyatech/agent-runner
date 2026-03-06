@@ -139,7 +139,7 @@ export async function enqueueManagedPullRequestReviewFollowups(options: {
       : null;
 
   const targetCandidates = Math.max(1, Math.min(50, limit * 10));
-  const botAuthorLogins = ["app/agent-runner-bot"];
+  const botAuthorLogins = options.config.managedAuthors ?? ["app/agent-runner-bot"];
   for (const login of botAuthorLogins) {
     if (candidates.length >= targetCandidates) {
       break;
@@ -152,19 +152,15 @@ export async function enqueueManagedPullRequestReviewFollowups(options: {
         login,
         {
           excludeLabels,
-          perPage: remaining,
+          perPage: Math.min(remaining, 50),
           maxPages: 1
         }
       );
     } catch (error) {
-      options.onLog?.(
-        "warn",
-        "Managed PR catch-up scan failed to search for agent-runner bot PRs.",
-        {
-          author: login,
-          error: error instanceof Error ? error.message : String(error)
-        }
-      );
+      options.onLog?.("warn", "Managed PR catch-up scan failed to search for managed author PRs.", {
+        author: login,
+        error: error instanceof Error ? error.message : String(error)
+      });
       continue;
     }
     for (const item of found) {

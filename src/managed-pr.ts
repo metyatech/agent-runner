@@ -6,6 +6,8 @@ import {
   resolveManagedPullRequestsStatePath
 } from "./managed-pull-requests.js";
 
+export const AGENT_RUNNER_PR_MARKER = "<!-- agent-runner -->";
+
 export function isAgentRunnerBotLogin(login: string | null): boolean {
   if (!login) return false;
   const trimmed = login.trim().toLowerCase();
@@ -27,6 +29,9 @@ export async function isManagedPullRequestIssue(
   if (isAgentRunnerBotLogin(issue.author ?? null)) {
     return true;
   }
+  if ((issue.body ?? "").includes(AGENT_RUNNER_PR_MARKER)) {
+    return true;
+  }
   const statePath = resolveManagedPullRequestsStatePath(config.workdirRoot);
   return isManagedPullRequestState(statePath, issue.repo, issue.number);
 }
@@ -44,7 +49,10 @@ export async function ensureManagedPullRequestRecorded(
     return true;
   }
 
-  if (!isAgentRunnerBotLogin(issue.author ?? null)) {
+  if (
+    !isAgentRunnerBotLogin(issue.author ?? null) &&
+    !(issue.body ?? "").includes(AGENT_RUNNER_PR_MARKER)
+  ) {
     return false;
   }
 

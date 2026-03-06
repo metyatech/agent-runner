@@ -257,6 +257,11 @@
       },
       "additionalProperties": false
     },
+    "managedAuthors": {
+      "type": "array",
+      "items": { "type": "string", "minLength": 1 },
+      "uniqueItems": true
+    },
     "codex": {
       "type": "object",
       "required": ["command", "args", "promptTemplate"],
