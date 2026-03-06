@@ -592,8 +592,13 @@ program
       lock = acquireLock(path.resolve(config.workdirRoot, "agent-runner", "state", "runner.lock"));
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
-      if (options.once && message.startsWith("Runner already active")) {
+      if (message.startsWith("Runner already active")) {
         log("info", message, json, "init");
+        if (!options.once) {
+          // Exit with 75 (EX_TEMPFAIL) so the daemon loop knows another
+          // instance is active and should stop restarting.
+          process.exit(75);
+        }
         return;
       }
       throw error;

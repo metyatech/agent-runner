@@ -1,1 +1,2 @@
 {"id":"jNYoBkSI","description":"Address review comments in PR #16 (email placeholder and OS example)","stage":"pending","createdAt":"2026-03-06T02:28:29.617Z","updatedAt":"2026-03-06T02:28:29.617Z"}
+{"id":"Ud0f_UGB","description":"Fix agent-runner root issue: lock-conflict restart loop causing repeated RunnerExitCode 1","stage":"in-progress","createdAt":"2026-03-06T10:28:01.369Z","updatedAt":"2026-03-06T10:33:04.030Z"}

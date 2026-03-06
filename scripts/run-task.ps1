@@ -166,5 +166,13 @@ while ($true) {
   }
 
   Append-MetaLog "=== AgentRunner runner end: $(Get-Date -Format o) ==="
+
+  # Exit code 75 (EX_TEMPFAIL) means another daemon instance already holds
+  # the lock. Stop looping to avoid a tight restart/error churn.
+  if ($exitCode -eq 75) {
+    Append-MetaLog "Runner already active (lock conflict, exit 75). Exiting daemon loop."
+    break
+  }
+
   Start-Sleep -Seconds 5
 }
