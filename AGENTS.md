@@ -166,6 +166,7 @@ Source: github:metyatech/agent-rules@HEAD/rules/global/planning-and-approval-gat
 - If state-changing work starts without required "yes", stop immediately, report the gate miss, and restart from the approval gate.
 - No bypass exceptions: "skip planning/just do it" means move quickly through the gate, not around it.
 - **Blanket approval**: broad directives (e.g., "fix everything") cover all in-scope follow-up; re-request only for out-of-scope expansion.
+- For user-owned publishable packages, explicit requests such as "commit & push" or "complete this fix" include approval for the release/publish chain when release is the normal completion path, unless the user explicitly limits scope.
 
 Reviewer proxy approval procedures are in the `autonomous-orchestrator` skill.
 
@@ -207,6 +208,7 @@ Source: github:metyatech/agent-rules@HEAD/rules/global/release-and-publication.m
 - Verify published packages resolve and run correctly before reporting done.
 - For public repos, set GitHub Description, Topics, and Homepage. Assign topics from the standard set defined in the `release-publish` skill.
 - Before reporting a publishable-package change as complete, verify the full delivery chain (commit → push → version bump → release → publish → install verify). Procedures in the `release-publish` skill.
+- For user-owned publishable packages, when the user asks to commit/push or finalize a fix, treat release/publish as in-scope follow-up by default and execute the full delivery chain unless the user explicitly opts out.
 
 Source: github:metyatech/agent-rules@HEAD/rules/global/skill-authoring.md
 
