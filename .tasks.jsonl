@@ -1,0 +1,3 @@
+{"id":"jNYoBkSI","description":"Address review comments in PR #16 (email placeholder and OS example)","stage":"done","createdAt":"2026-03-06T02:28:29.617Z","updatedAt":"2026-03-06T11:12:18.133Z"}
+{"id":"Ud0f_UGB","description":"Fix agent-runner root issue: lock-conflict restart loop causing repeated RunnerExitCode 1","stage":"done","createdAt":"2026-03-06T10:28:01.369Z","updatedAt":"2026-03-06T10:41:12.342Z"}
+{"id":"IZ6QTzqX","description":"Investigate and mitigate recurring external log errors: open PR count load failures and repository not found in agent-runner logs","stage":"in-progress","createdAt":"2026-03-06T11:09:08.772Z","updatedAt":"2026-03-06T11:13:42.295Z"}
