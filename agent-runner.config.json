@@ -102,6 +102,7 @@
     "failed": "agent:failed",
     "needsUserReply": "agent:needs-user-reply"
   },
+  "managedAuthors": ["metyatech"],
   "codex": {
     "command": "codex",
     "args": [
