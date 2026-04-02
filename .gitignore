@@ -10,3 +10,4 @@ work/
 .custom-hooks/
 .env
 .DS_Store
+.threads.jsonl
