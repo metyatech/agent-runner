@@ -2,4 +2,4 @@
 {"id":"Ud0f_UGB","description":"Fix agent-runner root issue: lock-conflict restart loop causing repeated RunnerExitCode 1","stage":"done","createdAt":"2026-03-06T10:28:01.369Z","updatedAt":"2026-03-06T10:41:12.342Z"}
 {"id":"hjKWsTSX","description":"Reduce command-execution.md rules module to line budget and regenerate AGENTS.md","stage":"done","createdAt":"2026-03-06T12:20:06.601Z","updatedAt":"2026-03-06T12:37:24.732Z"}
 {"id":"nRiIxFUC","description":"Commit and push latest AGENTS.md sync update","stage":"done","createdAt":"2026-03-06T12:53:00.897Z","updatedAt":"2026-03-06T12:53:45.712Z"}
-{"id":"0xgDx7bq","description":"Rescue governance docs from stale remote branch docs/add-governance-files","stage":"in-progress","createdAt":"2026-04-12T14:47:45.011Z","updatedAt":"2026-04-12T14:47:50.688Z"}
+{"id":"0xgDx7bq","description":"Rescue governance docs from stale remote branch docs/add-governance-files","stage":"committed","createdAt":"2026-04-12T14:47:45.011Z","updatedAt":"2026-04-12T14:51:17.486Z","committedEventId":"zOYzKWpwe8C7q4Ex"}
