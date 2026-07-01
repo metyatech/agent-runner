@@ -1,6 +1,5 @@
 {
-  "source": "github:metyatech/agent-rules",
-  "domains": ["node"],
-  "extra": ["agent-rules-local/operations.md"],
+  "sources": ["github:metyatech/agent-rules"],
+  "profile": "agent-runner",
   "output": "AGENTS.md"
 }
